@@ -10,7 +10,6 @@ import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
-import Snackbar from "@mui/material/Snackbar";
 import Alert from "@mui/material/Alert";
 import Radio from "@mui/material/Radio";
 import TextField from "@mui/material/TextField";
@@ -40,6 +39,8 @@ import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
+import { useToast } from "@/components/feedback/ToastProvider";
+import { useConfirm } from "@/components/feedback/ConfirmProvider";
 
 interface TestRow {
   id: string;
@@ -129,10 +130,13 @@ export default function FacultyMcqPage() {
   const [tests, setTests] = React.useState<TestRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [showCreate, setShowCreate] = React.useState(false);
-  const [toast, setToast] = React.useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = React.useState<TestRow | null>(null);
+  const showToast = useToast();
+  const confirm = useConfirm();
 
-  const flash = (m: string) => setToast(m);
+  const flash = React.useCallback(
+    (m: string, severity: "success" | "error" | "warning" = "error") => showToast(m, { severity }),
+    [showToast],
+  );
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -175,13 +179,13 @@ export default function FacultyMcqPage() {
 
   const saveQuestions = async () => {
     for (const [i, q] of questions.entries()) {
-      if (!q.question_text.trim()) return flash(`Q${i + 1}: question text required`);
-      if (q.options.length < 2 || q.options.some((o) => !o.trim())) return flash(`Q${i + 1}: fill all options`);
+      if (!q.question_text.trim()) return flash(`Q${i + 1}: question text required`, "warning");
+      if (q.options.length < 2 || q.options.some((o) => !o.trim())) return flash(`Q${i + 1}: fill all options`, "warning");
     }
     setSaving(true);
     try {
       await api.put(`/api/mcq/tests/${buildId}/questions`, { questions });
-      flash("Questions saved");
+      flash("Questions saved", "success");
       load();
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };
@@ -216,9 +220,15 @@ export default function FacultyMcqPage() {
     }
   };
   const doDelete = async (t: TestRow) => {
+    const ok = await confirm({
+      title: "Delete test?",
+      description: `Delete "${t.title}"? This removes all its questions and attempts.`,
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/api/mcq/tests/${t.id}`);
-      setDeleteTarget(null);
       load();
     } catch {
       flash("Delete failed");
@@ -226,10 +236,6 @@ export default function FacultyMcqPage() {
   };
 
   const setQ = (qi: number, patch: Partial<QForm>) => setQuestions((qs) => qs.map((x, i) => (i === qi ? { ...x, ...patch } : x)));
-
-  const snackbar = (
-    <Snackbar open={toast != null} autoHideDuration={2500} onClose={() => setToast(null)} message={toast ?? ""} anchorOrigin={{ vertical: "bottom", horizontal: "right" }} />
-  );
 
   // ── BUILD MODE ──
   if (mode === "build") {
@@ -281,7 +287,6 @@ export default function FacultyMcqPage() {
             <Button variant="outlined" startIcon={<AddIcon />} onClick={() => setQuestions((qs) => [...qs, blankQ()])} sx={{ borderStyle: "dashed" }}>Add question</Button>
           </Stack>
         )}
-        {snackbar}
       </Box>
     );
   }
@@ -349,7 +354,6 @@ export default function FacultyMcqPage() {
             </Card>
           </Stack>
         )}
-        {snackbar}
       </Box>
     );
   }
@@ -392,7 +396,7 @@ export default function FacultyMcqPage() {
                     {t.is_published ? "Unpublish" : "Publish"}
                   </Button>
                   <Button size="small" variant="outlined" startIcon={<BarChartOutlinedIcon />} onClick={() => openResults(t)}>Results</Button>
-                  <IconButton size="small" color="error" onClick={() => setDeleteTarget(t)} aria-label="Delete test"><DeleteOutlineIcon fontSize="small" /></IconButton>
+                  <IconButton size="small" color="error" onClick={() => doDelete(t)} aria-label="Delete test"><DeleteOutlineIcon fontSize="small" /></IconButton>
                 </Stack>
               </CardContent>
             </Card>
@@ -401,19 +405,6 @@ export default function FacultyMcqPage() {
       )}
 
       <CreateTestDialog open={showCreate} onClose={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); load(); openBuilder(id); }} />
-
-      <Dialog open={deleteTarget != null} onClose={() => setDeleteTarget(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Delete test?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary">Delete &quot;{deleteTarget?.title}&quot;? This removes all its questions and attempts.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteTarget(null)}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={() => deleteTarget && doDelete(deleteTarget)}>Delete</Button>
-        </DialogActions>
-      </Dialog>
-
-      {snackbar}
     </Box>
   );
 }

@@ -9,8 +9,6 @@ import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
-import Snackbar from "@mui/material/Snackbar";
-import Alert from "@mui/material/Alert";
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
@@ -19,6 +17,7 @@ import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState } from "@/components/ui/States";
+import { useToast } from "@/components/feedback/ToastProvider";
 
 interface Faculty {
   id: string;
@@ -44,7 +43,7 @@ export default function FacultyPermissionsPage() {
   const [search, setSearch] = React.useState("");
   const [savingId, setSavingId] = React.useState<string | null>(null);
   const [dirty, setDirty] = React.useState<Record<string, boolean>>({});
-  const [toast, setToast] = React.useState<{ text: string; ok: boolean } | null>(null);
+  const showToast = useToast();
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -56,11 +55,11 @@ export default function FacultyPermissionsPage() {
       }
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };
-      setToast({ text: err?.response?.data?.error || "Failed to load faculty", ok: false });
+      showToast(err?.response?.data?.error || "Failed to load faculty", { severity: "error" });
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [showToast]);
 
   React.useEffect(() => {
     load();
@@ -80,10 +79,10 @@ export default function FacultyPermissionsPage() {
         delete n[f.id];
         return n;
       });
-      setToast({ text: `Saved permissions for ${f.name}`, ok: true });
+      showToast(`Saved permissions for ${f.name}`);
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };
-      setToast({ text: err?.response?.data?.error || "Save failed", ok: false });
+      showToast(err?.response?.data?.error || "Save failed", { severity: "error" });
     } finally {
       setSavingId(null);
     }
@@ -154,10 +153,6 @@ export default function FacultyPermissionsPage() {
           ))}
         </Stack>
       )}
-
-      <Snackbar open={toast != null} autoHideDuration={3000} onClose={() => setToast(null)} anchorOrigin={{ vertical: "bottom", horizontal: "right" }}>
-        {toast ? <Alert severity={toast.ok ? "success" : "error"} variant="filled" onClose={() => setToast(null)}>{toast.text}</Alert> : undefined}
-      </Snackbar>
     </Box>
   );
 }

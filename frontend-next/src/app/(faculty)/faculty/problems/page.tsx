@@ -10,8 +10,6 @@ import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
-import Snackbar from "@mui/material/Snackbar";
-import Alert from "@mui/material/Alert";
 import Checkbox from "@mui/material/Checkbox";
 import Collapse from "@mui/material/Collapse";
 import Table from "@mui/material/Table";
@@ -41,6 +39,8 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
+import { useToast } from "@/components/feedback/ToastProvider";
+import { useConfirm } from "@/components/feedback/ConfirmProvider";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 const STUB_LANGUAGES = [
@@ -327,8 +327,8 @@ export default function FacultyProblemsPage() {
   const [loading, setLoading] = React.useState(true);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Problem | null>(null);
-  const [deleteId, setDeleteId] = React.useState<string | null>(null);
-  const [toast, setToast] = React.useState<{ message: string; type: "success" | "error" } | null>(null);
+  const toast = useToast();
+  const confirm = useConfirm();
 
   // Question-paper builder
   const [paperMode, setPaperMode] = React.useState(false);
@@ -338,7 +338,10 @@ export default function FacultyProblemsPage() {
 
   const fileRef = React.useRef<HTMLInputElement>(null);
 
-  const showToast = React.useCallback((message: string, type: "success" | "error" = "success") => setToast({ message, type }), []);
+  const showToast = React.useCallback(
+    (message: string, type: "success" | "error" = "success") => toast(message, { severity: type }),
+    [toast],
+  );
 
   const fetchProblems = React.useCallback(() => {
     setLoading(true);
@@ -356,10 +359,16 @@ export default function FacultyProblemsPage() {
   }, [fetchProblems]);
 
   const handleDelete = async (id: string) => {
+    const ok = await confirm({
+      title: "Delete problem?",
+      description: "This permanently removes the problem and its test cases. This can't be undone.",
+      confirmLabel: "Delete",
+      destructive: true,
+    });
+    if (!ok) return;
     try {
       await api.delete(`/api/faculty/problems/${id}`);
       showToast("Problem deleted");
-      setDeleteId(null);
       fetchProblems();
     } catch {
       showToast("Failed to delete", "error");
@@ -512,7 +521,7 @@ export default function FacultyProblemsPage() {
                             <IconButton size="small" onClick={() => { setEditing(p); setDialogOpen(true); }} aria-label="Edit problem"><EditOutlinedIcon fontSize="small" /></IconButton>
                           </Tooltip>
                           <Tooltip title="Delete">
-                            <IconButton size="small" color="error" onClick={() => setDeleteId(p.id)} aria-label="Delete problem"><DeleteOutlineIcon fontSize="small" /></IconButton>
+                            <IconButton size="small" color="error" onClick={() => handleDelete(p.id)} aria-label="Delete problem"><DeleteOutlineIcon fontSize="small" /></IconButton>
                           </Tooltip>
                         </TableCell>
                       )}
@@ -526,31 +535,6 @@ export default function FacultyProblemsPage() {
       </Card>
 
       <ProblemDialog open={dialogOpen} editing={editing} onClose={() => setDialogOpen(false)} onSaved={fetchProblems} toast={showToast} />
-
-      {/* Delete confirm */}
-      <Dialog open={deleteId != null} onClose={() => setDeleteId(null)} maxWidth="xs" fullWidth>
-        <DialogTitle>Delete problem?</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary">This permanently removes the problem and its test cases. This can&apos;t be undone.</Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setDeleteId(null)}>Cancel</Button>
-          <Button color="error" variant="contained" onClick={() => deleteId && handleDelete(deleteId)}>Delete</Button>
-        </DialogActions>
-      </Dialog>
-
-      <Snackbar
-        open={toast != null}
-        autoHideDuration={3500}
-        onClose={() => setToast(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      >
-        {toast ? (
-          <Alert severity={toast.type} onClose={() => setToast(null)} variant="filled">
-            {toast.message}
-          </Alert>
-        ) : undefined}
-      </Snackbar>
     </Box>
   );
 }

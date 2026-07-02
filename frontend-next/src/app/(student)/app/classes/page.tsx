@@ -8,7 +8,6 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
-import Alert from "@mui/material/Alert";
 import Skeleton from "@mui/material/Skeleton";
 import Avatar from "@mui/material/Avatar";
 import LoginIcon from "@mui/icons-material/Login";
@@ -16,6 +15,7 @@ import SchoolOutlinedIcon from "@mui/icons-material/SchoolOutlined";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
+import { useToast } from "@/components/feedback/ToastProvider";
 
 interface JoinedClass {
   id: string;
@@ -40,7 +40,7 @@ export default function ClassesPage() {
   const [loading, setLoading] = React.useState(true);
   const [code, setCode] = React.useState("");
   const [joining, setJoining] = React.useState(false);
-  const [msg, setMsg] = React.useState<{ text: string; ok: boolean } | null>(null);
+  const showToast = useToast();
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -61,20 +61,16 @@ export default function ClassesPage() {
     e.preventDefault();
     if (!code.trim()) return;
     setJoining(true);
-    setMsg(null);
     try {
       const r = await api.post("/api/classrooms/join", { code: code.trim() });
       if (r.data?.success) {
-        setMsg({ text: `Joined "${r.data.data.name}"`, ok: true });
+        showToast(`Joined "${r.data.data.name}"`);
         setCode("");
         load();
       }
     } catch (err) {
       const error = err as { response?: { data?: { error?: string } } };
-      setMsg({
-        text: error?.response?.data?.error || "Could not join class",
-        ok: false,
-      });
+      showToast(error?.response?.data?.error || "Could not join class", { severity: "error" });
     } finally {
       setJoining(false);
     }
@@ -99,10 +95,7 @@ export default function ClassesPage() {
           >
             <TextField
               value={code}
-              onChange={(e) => {
-                setCode(e.target.value.toUpperCase());
-                setMsg(null);
-              }}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
               label="Join code"
               placeholder="e.g. 7KQ9PX"
               size="small"
@@ -119,11 +112,6 @@ export default function ClassesPage() {
               {joining ? "Joining…" : "Join"}
             </Button>
           </Stack>
-          {msg && (
-            <Alert severity={msg.ok ? "success" : "error"} sx={{ mt: 2 }}>
-              {msg.text}
-            </Alert>
-          )}
         </CardContent>
       </Card>
 

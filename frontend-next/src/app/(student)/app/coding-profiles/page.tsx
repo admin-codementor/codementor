@@ -9,7 +9,6 @@ import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
-import Snackbar from "@mui/material/Snackbar";
 import Tooltip from "@mui/material/Tooltip";
 import Skeleton from "@mui/material/Skeleton";
 import Chip from "@mui/material/Chip";
@@ -27,6 +26,7 @@ import LinkOutlinedIcon from "@mui/icons-material/LinkOutlined";
 import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import { useToast } from "@/components/feedback/ToastProvider";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
 
@@ -74,7 +74,7 @@ export default function CodingProfilesPage() {
   const [loading, setLoading] = React.useState(true);
   const [syncing, setSyncing] = React.useState(false);
   const [savingP, setSavingP] = React.useState<string | null>(null);
-  const [toast, setToast] = React.useState<string | null>(null);
+  const showToast = useToast();
 
   const [lb, setLb] = React.useState<LbRow[]>([]);
   const [dept, setDept] = React.useState("");
@@ -128,9 +128,9 @@ export default function CodingProfilesPage() {
     try {
       await api.put("/api/profiles/me", { platform, handle: drafts[platform] || "" });
       await loadMine();
-      setToast((drafts[platform] || "").trim() ? "Saved" : "Removed");
+      showToast((drafts[platform] || "").trim() ? "Saved" : "Removed");
     } catch {
-      setToast("Save failed");
+      showToast("Save failed", { severity: "error" });
     } finally {
       setSavingP(null);
     }
@@ -141,12 +141,15 @@ export default function CodingProfilesPage() {
     try {
       const r = await api.post("/api/profiles/me/sync");
       const errs = ((r.data?.data as { status: string }[]) || []).filter((x) => x.status === "error");
-      setToast(errs.length ? `Synced — ${errs.length} failed (check handles)` : "Synced successfully");
+      showToast(
+        errs.length ? `Synced — ${errs.length} failed (check handles)` : "Synced successfully",
+        errs.length ? { severity: "warning" } : undefined,
+      );
       await loadMine();
       loadLeaderboard();
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };
-      setToast(err?.response?.data?.error || "Sync failed");
+      showToast(err?.response?.data?.error || "Sync failed", { severity: "error" });
     } finally {
       setSyncing(false);
     }
@@ -308,14 +311,6 @@ export default function CodingProfilesPage() {
           )}
         </CardContent>
       </Card>
-
-      <Snackbar
-        open={toast != null}
-        autoHideDuration={2500}
-        onClose={() => setToast(null)}
-        message={toast ?? ""}
-        anchorOrigin={{ vertical: "bottom", horizontal: "right" }}
-      />
     </Box>
   );
 }
