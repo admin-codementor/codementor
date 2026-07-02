@@ -47,6 +47,7 @@ import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import api from "@/lib/api";
 import { createSocket, joinRoom, leaveRoom } from "@/lib/socket";
 import { useProctor } from "@/hooks/useProctor";
+import { fireConfetti } from "@/components/feedback/confetti";
 import { clearSession, getUser } from "@/lib/auth";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
@@ -527,6 +528,10 @@ export default function ProblemSolvingPage() {
   const [showAI, setShowAI] = React.useState(false);
   const [tutorContext, setTutorContext] = React.useState<string | undefined>(undefined);
 
+  // ── Solved state (stops the timer, celebrates) + mobile panel toggle ──
+  const [solved, setSolved] = React.useState(false);
+  const [mobilePane, setMobilePane] = React.useState<"problem" | "code">("problem");
+
   // ── Timer ──
   const [timerSecs, setTimerSecs] = React.useState(() => {
     if (typeof window === "undefined") return 0;
@@ -535,6 +540,7 @@ export default function ProblemSolvingPage() {
   const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
 
   React.useEffect(() => {
+    if (solved) return; // pause once the problem is accepted
     timerRef.current = setInterval(() => {
       setTimerSecs((s) => {
         const next = s + 1;
@@ -545,13 +551,19 @@ export default function ProblemSolvingPage() {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [problemId]);
+  }, [problemId, solved]);
 
   // ── Load problem + adjacent ──
   React.useEffect(() => {
     let active = true;
     setLoading(true);
     setError(false);
+    // Reset per-problem state when navigating between problems (the page
+    // component is reused across param changes, so state would otherwise leak).
+    setSolved(false);
+    setVerdict(null);
+    setMobilePane("problem");
+    setTimerSecs(parseInt(localStorage.getItem(lsTimer(problemId)) ?? "0", 10));
     Promise.allSettled([
       api.get<{ success: boolean; data: ProblemDetail }>(`/api/problems/${problemId}`),
       api.get<{ success: boolean; data: AdjacentProblems }>(`/api/problems/${problemId}/adjacent`),
@@ -618,9 +630,13 @@ export default function ProblemSolvingPage() {
     setOutputTab("testcases");
     // Refresh history if on submissions tab
     if (panelTab === "submissions") loadHistory();
-    // Nudge the AI tutor toward debugging when a real submission fails.
     const r = payload.result;
-    if (r && !r.custom_run && r.verdict?.description && r.verdict.description !== "Accepted") {
+    if (r && !r.custom_run && r.verdict?.description === "Accepted") {
+      // Celebrate + stop the timer (Peak-End Rule).
+      setSolved(true);
+      fireConfetti();
+    } else if (r && !r.custom_run && r.verdict?.description && r.verdict.description !== "Accepted") {
+      // Nudge the AI tutor toward debugging when a real submission fails.
       setTutorContext(`${r.submission_id}:${r.verdict.id}`);
     }
   }, [panelTab, loadHistory]);
@@ -868,13 +884,26 @@ export default function ProblemSolvingPage() {
         onToggleAI={() => setShowAI((v) => !v)}
       />
 
+      {/* ── Mobile Problem | Code toggle (swaps full-height panels) ── */}
+      {isMobile && (
+        <Tabs
+          value={mobilePane}
+          onChange={(_, v: "problem" | "code") => setMobilePane(v)}
+          variant="fullWidth"
+          sx={{ borderBottom: "1px solid", borderColor: "outlineVariant", flexShrink: 0, minHeight: 44 }}
+        >
+          <Tab value="problem" label="Problem" sx={{ minHeight: 44 }} />
+          <Tab value="code" label="Code" sx={{ minHeight: 44 }} />
+        </Tabs>
+      )}
+
       {/* ── Workspace: split pane + optional AI Tutor sidebar ── */}
       <Box sx={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
       <Box
         sx={{
           display: "grid",
           gridTemplateColumns: { xs: "1fr", lg: "45fr 55fr" },
-          gridTemplateRows: { xs: "1fr 1fr", lg: "1fr" },
+          gridTemplateRows: "1fr",
           flex: 1,
           minWidth: 0,
           overflow: "hidden",
@@ -883,11 +912,10 @@ export default function ProblemSolvingPage() {
         {/* ── Left panel: description / submissions ── */}
         <Box
           sx={{
-            display: "flex",
+            display: isMobile && mobilePane !== "problem" ? "none" : "flex",
             flexDirection: "column",
             borderRight: { lg: "1px solid" },
             borderColor: { lg: "outlineVariant" },
-            borderBottom: { xs: "1px solid", lg: "none" },
             overflow: "hidden",
           }}
         >
@@ -1035,7 +1063,7 @@ export default function ProblemSolvingPage() {
         </Box>
 
         {/* ── Right panel: editor + output ── */}
-        <Box sx={{ display: "flex", flexDirection: "column", overflow: "hidden" }}>
+        <Box sx={{ display: isMobile && mobilePane !== "code" ? "none" : "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Editor toolbar */}
           <Box
             sx={{
