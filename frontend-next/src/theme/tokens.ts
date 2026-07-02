@@ -36,6 +36,11 @@ export interface M3ColorScheme {
   onWarning: string;
   warningContainer: string;
   onWarningContainer: string;
+  // AI accent (tutor / assistant surfaces) — distinct from the primary palette
+  ai: string;
+  onAi: string;
+  aiContainer: string;
+  onAiContainer: string;
   // Surfaces & background
   background: string;
   onBackground: string;
@@ -90,6 +95,11 @@ export const lightScheme: M3ColorScheme = {
   warningContainer: "#FFDEA8",
   onWarningContainer: "#271900",
 
+  ai: "#6E4EE7",
+  onAi: "#FFFFFF",
+  aiContainer: "#E7DEFF",
+  onAiContainer: "#21005D",
+
   background: "#FBF8FF",
   onBackground: "#1A1B21",
   surface: "#FBF8FF",
@@ -142,6 +152,11 @@ export const darkScheme: M3ColorScheme = {
   onWarning: "#422C00",
   warningContainer: "#5F4100",
   onWarningContainer: "#FFDEA8",
+
+  ai: "#CFBCFF",
+  onAi: "#381E72",
+  aiContainer: "#4F378B",
+  onAiContainer: "#E9DDFF",
 
   background: "#121318",
   onBackground: "#E3E1E9",

@@ -24,7 +24,7 @@ import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import CheckIcon from "@mui/icons-material/Check";
 import api from "@/lib/api";
 
-const AI = "#7C5CFF";
+const AI = "var(--mui-palette-ai)";
 
 type Mode = "tutor" | "explain" | "review";
 interface Message {

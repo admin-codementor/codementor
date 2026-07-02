@@ -32,6 +32,10 @@ declare module "@mui/material/styles" {
     onSuccessContainer: string;
     warningContainer: string;
     onWarningContainer: string;
+    ai: string;
+    onAi: string;
+    aiContainer: string;
+    onAiContainer: string;
     surface: string;
     onSurface: string;
     surfaceVariant: string;
@@ -62,6 +66,10 @@ declare module "@mui/material/styles" {
     onSuccessContainer?: string;
     warningContainer?: string;
     onWarningContainer?: string;
+    ai?: string;
+    onAi?: string;
+    aiContainer?: string;
+    onAiContainer?: string;
     surface?: string;
     onSurface?: string;
     surfaceVariant?: string;
@@ -106,6 +114,10 @@ function buildPalette(s: M3ColorScheme, mode: PaletteMode): PaletteOptions {
     onSuccessContainer: s.onSuccessContainer,
     warningContainer: s.warningContainer,
     onWarningContainer: s.onWarningContainer,
+    ai: s.ai,
+    onAi: s.onAi,
+    aiContainer: s.aiContainer,
+    onAiContainer: s.onAiContainer,
     surface: s.surface,
     onSurface: s.onSurface,
     surfaceVariant: s.surfaceVariant,

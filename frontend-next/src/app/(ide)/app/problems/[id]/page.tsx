@@ -424,8 +424,8 @@ function IDEHeader({
           aria-label="Toggle AI Tutor"
           aria-pressed={showAI}
           sx={{
-            color: showAI ? "#7C5CFF" : "text.secondary",
-            bgcolor: showAI ? "color-mix(in srgb, #7C5CFF 14%, transparent)" : "transparent",
+            color: showAI ? "var(--mui-palette-ai)" : "text.secondary",
+            bgcolor: showAI ? "color-mix(in srgb, var(--mui-palette-ai) 14%, transparent)" : "transparent",
           }}
         >
           <SmartToyOutlinedIcon fontSize="small" />

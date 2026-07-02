@@ -15,9 +15,9 @@ import CloseIcon from "@mui/icons-material/Close";
 import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
 import api from "@/lib/api";
 
-// AI accent — kept distinct from the primary palette so the tutor reads as a
-// separate assistant surface. Tonal pair derived via color-mix at use sites.
-const AI = "#7C5CFF";
+// AI accent — theme token (scheme-aware), kept distinct from the primary palette
+// so the tutor reads as a separate assistant surface. Tonal pairs via color-mix.
+const AI = "var(--mui-palette-ai)";
 
 interface Message {
   role: "user" | "ai";

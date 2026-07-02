@@ -8,6 +8,8 @@ import { useServerInsertedHTML } from "next/navigation";
 import CssBaseline from "@mui/material/CssBaseline";
 import { ThemeProvider } from "@mui/material/styles";
 import { theme } from "./theme";
+import { ToastProvider } from "@/components/feedback/ToastProvider";
+import { ConfirmProvider } from "@/components/feedback/ConfirmProvider";
 
 /**
  * SSR-safe Emotion cache for the App Router (the standard
@@ -56,7 +58,9 @@ export default function ThemeRegistry({ children }: { children: React.ReactNode 
     <CacheProvider value={cache}>
       <ThemeProvider theme={theme} defaultMode="system">
         <CssBaseline enableColorScheme />
-        {children}
+        <ToastProvider>
+          <ConfirmProvider>{children}</ConfirmProvider>
+        </ToastProvider>
       </ThemeProvider>
     </CacheProvider>
   );
