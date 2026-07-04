@@ -41,12 +41,6 @@ const PER_PAGE = 50;
 
 const pidOf = (p: Problem) =>
   String((p as { _id?: string })._id || p.id || "");
-const acceptanceOf = (p: Problem) =>
-  typeof p.acceptance_rate === "number"
-    ? p.acceptance_rate
-    : typeof p.acceptance === "number"
-      ? p.acceptance
-      : null;
 
 function ProblemsInner() {
   const router = useRouter();
@@ -143,9 +137,42 @@ function ProblemsInner() {
           accent="primary"
           loading={loading && total === 0}
         />
-        <StatCard icon={<span aria-hidden>E</span>} label="Easy" value={countBy("easy")} helper={`of ${total}`} accent="success" />
-        <StatCard icon={<span aria-hidden>M</span>} label="Medium" value={countBy("medium")} helper={`of ${total}`} accent="warning" />
-        <StatCard icon={<span aria-hidden>H</span>} label="Hard" value={countBy("hard")} helper={`of ${total}`} accent="error" />
+        {([
+          { label: "Easy", icon: "E", accent: "success", count: countBy("easy") },
+          { label: "Medium", icon: "M", accent: "warning", count: countBy("medium") },
+          { label: "Hard", icon: "H", accent: "error", count: countBy("hard") },
+        ] as const).map((d) => {
+          const active = difficulty === d.label;
+          const apply = () => {
+            setDifficulty(active ? "All" : d.label);
+            setPage(1);
+          };
+          return (
+            <Box
+              key={d.label}
+              role="button"
+              tabIndex={0}
+              aria-pressed={active}
+              aria-label={`Filter by ${d.label}`}
+              onClick={apply}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  apply();
+                }
+              }}
+              sx={{
+                cursor: "pointer",
+                borderRadius: 3,
+                transition: "box-shadow 150ms",
+                boxShadow: active ? (t) => `0 0 0 2px ${t.palette.primary.main}` : "none",
+                "&:hover": { boxShadow: (t) => `0 0 0 2px ${t.palette.outlineVariant}` },
+              }}
+            >
+              <StatCard icon={<span aria-hidden>{d.icon}</span>} label={d.label} value={d.count} helper={`of ${total}`} accent={d.accent} />
+            </Box>
+          );
+        })}
       </Box>
 
       {/* Filters */}
@@ -198,7 +225,6 @@ function ProblemsInner() {
               <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600, borderColor: "outlineVariant" } }}>
                 <TableCell sx={{ width: 72 }}>Status</TableCell>
                 <TableCell>Title</TableCell>
-                <TableCell sx={{ width: 140 }}>Acceptance</TableCell>
                 <TableCell sx={{ width: 140 }}>Difficulty</TableCell>
               </TableRow>
             </TableHead>
@@ -208,13 +234,12 @@ function ProblemsInner() {
                   <TableRow key={i}>
                     <TableCell><Skeleton variant="circular" width={20} height={20} /></TableCell>
                     <TableCell><Skeleton width="60%" /></TableCell>
-                    <TableCell><Skeleton width={48} /></TableCell>
                     <TableCell><Skeleton width={64} height={28} /></TableCell>
                   </TableRow>
                 ))
               ) : problems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} sx={{ border: 0 }}>
+                  <TableCell colSpan={3} sx={{ border: 0 }}>
                     <EmptyState
                       icon={<CodeOffOutlinedIcon />}
                       title="No problems match your filters"
@@ -240,7 +265,6 @@ function ProblemsInner() {
                 problems.map((problem) => {
                   const pid = pidOf(problem);
                   const isSolved = solved.includes(pid);
-                  const acc = acceptanceOf(problem);
                   return (
                     <TableRow
                       key={pid}
@@ -281,9 +305,6 @@ function ProblemsInner() {
                             ))}
                           </Stack>
                         )}
-                      </TableCell>
-                      <TableCell sx={{ fontFamily: "ui-monospace, monospace" }}>
-                        {acc != null ? `${acc.toFixed(1)}%` : "—"}
                       </TableCell>
                       <TableCell>
                         <DifficultyChip difficulty={problem.difficulty} />
