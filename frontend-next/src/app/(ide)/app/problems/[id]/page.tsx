@@ -66,6 +66,56 @@ import type {
 type MonacoEditorInstance = Parameters<
   import("@monaco-editor/react").OnMount
 >[0];
+type MonacoNamespace = Parameters<import("@monaco-editor/react").OnMount>[1];
+
+interface MarkerRange {
+  startLineNumber: number;
+  endLineNumber: number;
+  startColumn: number;
+  endColumn: number;
+  message: string;
+}
+
+// Parse Judge0 compile/runtime output into editor marker ranges (line-level),
+// per language, so failures show as inline squiggles on the offending line.
+function parseJudge0Markers(output: string, langName: string): MarkerRange[] {
+  const markers: MarkerRange[] = [];
+  if (!output) return markers;
+
+  if (langName.startsWith("Python")) {
+    const lineM = output.match(/line (\d+)/);
+    const errM = output.match(
+      /(SyntaxError|IndentationError|NameError|TypeError|ValueError|AttributeError|ImportError|ZeroDivisionError|RuntimeError)[:\s]*(.*)/,
+    );
+    if (lineM) {
+      markers.push({
+        startLineNumber: +lineM[1],
+        endLineNumber: +lineM[1],
+        startColumn: 1,
+        endColumn: 1000,
+        message: errM ? `${errM[1]}: ${errM[2].trim()}` : output.split("\n").slice(-2)[0]?.trim() || "Python error",
+      });
+    }
+  } else if (langName === "C++") {
+    const re = /[^\n:]*:(\d+):(\d+):\s*(?:fatal\s+)?error:\s*(.+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(output)) !== null) {
+      markers.push({ startLineNumber: +m[1], endLineNumber: +m[1], startColumn: +m[2], endColumn: +m[2] + 1, message: m[3].trim() });
+    }
+  } else if (langName === "Java") {
+    const re = /[^\n:]*:(\d+):\s*error:\s*(.+)/g;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(output)) !== null) {
+      markers.push({ startLineNumber: +m[1], endLineNumber: +m[1], startColumn: 1, endColumn: 1000, message: m[2].trim() });
+    }
+  } else if (langName === "JavaScript") {
+    const m = output.match(/:(\d+)/);
+    if (m) {
+      markers.push({ startLineNumber: +m[1], endLineNumber: +m[1], startColumn: 1, endColumn: 1000, message: output.split("\n")[0]?.trim() || "Runtime Error" });
+    }
+  }
+  return markers;
+}
 
 // Serve Monaco from our own origin (public/monaco/vs, copied from node_modules by
 // scripts/copy-monaco.mjs) instead of the default jsdelivr CDN — so the code editor
@@ -510,6 +560,7 @@ export default function ProblemSolvingPage() {
   const [code, setCode] = React.useState<string>("");
   const [fontSize, setFontSize] = React.useState(14);
   const editorRef = React.useRef<MonacoEditorInstance | null>(null);
+  const monacoRef = React.useRef<MonacoNamespace | null>(null);
 
   // ── Submission state ──
   const [submitting,  setSubmitting]  = React.useState(false);
@@ -645,6 +696,7 @@ export default function ProblemSolvingPage() {
   const execute = React.useCallback(
     async (isSubmit: boolean) => {
       if (!problem) return;
+      if (pendingRef.current) return; // guard against concurrent run/submit (avoids 429)
       const currentCode = code;
       if (!currentCode.trim()) return;
 
@@ -747,6 +799,26 @@ export default function ProblemSolvingPage() {
     problemId,
     onAutoSubmit: () => autoSubmitRef.current(),
   });
+
+  // Reflect Judge0 compile/runtime errors as inline editor markers (cleared on
+  // the next run when `verdict` resets to null).
+  React.useEffect(() => {
+    const editor = editorRef.current;
+    const monaco = monacoRef.current;
+    if (!editor || !monaco) return;
+    const model = editor.getModel();
+    if (!model) return;
+    const r = verdict?.result;
+    const firstFail = r && !r.custom_run ? r.test_case_results.find((t) => !t.passed) : undefined;
+    const errOut = firstFail ? firstFail.compile_output || firstFail.stderr || "" : "";
+    const langName = LANGUAGES.find((l) => l.id === langId)?.name ?? "";
+    const ranges = errOut ? parseJudge0Markers(errOut, langName) : [];
+    monaco.editor.setModelMarkers(
+      model,
+      "judge0",
+      ranges.map((rg) => ({ ...rg, severity: monaco.MarkerSeverity.Error })),
+    );
+  }, [verdict, langId]);
 
   // ── Reset code ──
   const resetCode = () => {
@@ -1137,7 +1209,7 @@ export default function ProblemSolvingPage() {
                 automaticLayout: true,
                 tabSize: lang.monaco === "python" ? 4 : 2,
               }}
-              onMount={(editor) => { editorRef.current = editor; }}
+              onMount={(editor, monaco) => { editorRef.current = editor; monacoRef.current = monaco; }}
             />
           </Box>
 
