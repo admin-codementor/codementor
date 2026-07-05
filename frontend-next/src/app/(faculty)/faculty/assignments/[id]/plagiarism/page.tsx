@@ -22,6 +22,7 @@ import { BarChart } from "@mui/x-charts/BarChart";
 import api from "@/lib/api";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
+import { PlagiarismDiffModal } from "@/components/problem/PlagiarismDiffModal";
 
 interface PlagiarismPair {
   id: string;
@@ -60,6 +61,7 @@ export default function PlagiarismDetailPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [notConfigured, setNotConfigured] = React.useState(false);
   const [lastRan, setLastRan] = React.useState<string | null>(null);
+  const [diffPairId, setDiffPairId] = React.useState<string | null>(null);
 
   const fetchResults = React.useCallback(async () => {
     setLoading(true);
@@ -255,6 +257,9 @@ export default function PlagiarismDetailPage() {
                       </Box>
                     </Box>
                     <Chip label={pair.language} size="small" sx={{ fontFamily: "ui-monospace, monospace", flexShrink: 0, bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }} />
+                    <Button size="small" variant="outlined" color="warning" onClick={() => setDiffPairId(pair.id)} sx={{ flexShrink: 0, whiteSpace: "nowrap" }}>
+                      Compare code
+                    </Button>
                   </CardContent>
                 </Card>
               ))}
@@ -262,6 +267,8 @@ export default function PlagiarismDetailPage() {
           </Box>
         </Stack>
       )}
+
+      <PlagiarismDiffModal assignmentId={assignmentId} pairId={diffPairId} onClose={() => setDiffPairId(null)} />
     </Box>
   );
 }
