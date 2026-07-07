@@ -13,12 +13,9 @@ import IconButton from "@mui/material/IconButton";
 import Chip from "@mui/material/Chip";
 import Alert from "@mui/material/Alert";
 import Skeleton from "@mui/material/Skeleton";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import RefreshIcon from "@mui/icons-material/Refresh";
-import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
-import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
-import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
-import { BarChart } from "@mui/x-charts/BarChart";
+import { ChevronLeftIcon, RefreshIcon, PolicyOutlinedIcon, LocalFireDepartmentIcon, PeopleOutlineIcon } from "@/components/ui/icons";
+import { ResponsiveBar } from "@nivo/bar";
+import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import api from "@/lib/api";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
@@ -52,6 +49,8 @@ function severityBg(sim: number) {
 }
 
 export default function PlagiarismDetailPage() {
+  const nivoTheme = useNivoTheme();
+  const chartColors = useChartColors();
   const params = useParams<{ id: string }>();
   const assignmentId = params.id;
 
@@ -191,24 +190,42 @@ export default function PlagiarismDetailPage() {
                   <LocalFireDepartmentIcon sx={{ color: "error.main", fontSize: 20 }} />
                   <Typography variant="subtitle2" fontWeight={600}>Most-flagged students</Typography>
                 </Stack>
-                <BarChart
-                  height={Math.max(200, topStudents.length * 40)}
-                  layout="horizontal"
-                  yAxis={[{ scaleType: "band", data: topStudents.map((s) => (s.name.length > 14 ? s.name.slice(0, 13) + "…" : s.name)) }]}
-                  series={[{ data: topStudents.map((s) => s.pairs), label: "Flagged pairs" }]}
-                  margin={{ top: 10, bottom: 24, left: 100, right: 10 }}
-                />
+                <Box sx={{ height: Math.max(220, topStudents.length * 42) }}>
+                  <ResponsiveBar
+                    data={topStudents.map((s) => ({ name: s.name.length > 14 ? s.name.slice(0, 13) + "…" : s.name, "Flagged pairs": s.pairs }))}
+                    keys={["Flagged pairs"]}
+                    indexBy="name"
+                    layout="horizontal"
+                    margin={{ top: 8, right: 16, bottom: 28, left: 108 }}
+                    padding={0.3}
+                    borderRadius={5}
+                    colors={[chartColors[4]]}
+                    theme={nivoTheme}
+                    enableLabel={false}
+                    axisBottom={{ tickSize: 0, tickPadding: 8 }}
+                    axisLeft={{ tickSize: 0, tickPadding: 8 }}
+                  />
+                </Box>
               </CardContent>
             </Card>
             <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
               <CardContent>
                 <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>Similarity distribution</Typography>
-                <BarChart
-                  height={220}
-                  xAxis={[{ scaleType: "band", data: distribution.map((d) => d.range) }]}
-                  series={[{ data: distribution.map((d) => d.count), label: "Pairs" }]}
-                  margin={{ top: 10, bottom: 24, left: 40, right: 10 }}
-                />
+                <Box sx={{ height: 240 }}>
+                  <ResponsiveBar
+                    data={distribution.map((d) => ({ range: d.range, Pairs: d.count }))}
+                    keys={["Pairs"]}
+                    indexBy="range"
+                    margin={{ top: 16, right: 16, bottom: 40, left: 44 }}
+                    padding={0.35}
+                    borderRadius={5}
+                    colors={[chartColors[0]]}
+                    theme={nivoTheme}
+                    enableLabel={false}
+                    axisLeft={{ tickSize: 0, tickPadding: 8 }}
+                    axisBottom={{ tickSize: 0, tickPadding: 8 }}
+                  />
+                </Box>
               </CardContent>
             </Card>
           </Box>

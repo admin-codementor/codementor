@@ -40,10 +40,100 @@ scheme-aware (light/dark) via CSS variables (`var(--mui-palette-*)`).
 
 ## Shared primitives (reuse these)
 
-`PageHeader`, `StatCard`, `SearchField`, `SegmentedButtons`, `DifficultyChip`,
-`VerdictChip`, `RatingBadge`, `EmptyState`/`ErrorState`, `AITutorSidebar`,
-`ToastProvider`/`useToast`, `ConfirmProvider`/`useConfirm`, `lib/languages`
-(`languageName`).
+`PageHeader`, `StatCard`, `SectionCard`, `SearchField`, `SegmentedButtons`,
+`DifficultyChip`, `VerdictChip`, `RatingBadge`, `EmptyState`/`ErrorState`,
+`AITutorSidebar`, `ToastProvider`/`useToast`, `ConfirmProvider`/`useConfirm`,
+`interactiveSurfaceSx`, `lib/languages` (`languageName`).
+
+## Icons
+
+All icons come from **`@/components/ui/icons`** (never `@mui/icons-material` directly) — a central
+module wrapping **Lucide** (`lucide-react`) in a MUI-compatible adapter. Icons keep the familiar API:
+`fontSize` ("small"|"medium"|"large"|"inherit" or a number), `color` (palette word or path), `sx`, and
+are `aria-hidden` by default (pass `aria-label`/`titleAccess` for meaningful icons). Sizing is
+`width/height: 1em` scaled by `font-size`, and strokes use `currentColor`, so `sx={{ color:
+"success.main" }}` just works. To swap the icon set later, edit only `icons.tsx`. Names match the old
+Material names (`CheckCircleOutlineIcon`, `MenuIcon`, …) so call sites stay stable.
+
+## Charts & motion
+
+Rich charts use **Nivo** (`@nivo/bar|line|pie`) themed via `useNivoTheme()` +
+`useChartColors()` (`components/ui/nivo.tsx`) so they stay on the M3 palette in
+light/dark. Wrap each chart in a fixed-height `Box`. (A tiny `@mui/x-charts`
+`SparkLineChart` remains only in the IDE results panel.) Motion uses **Framer Motion**
+via `components/ui/motion.tsx` — `Reveal` (fade-rise on mount), `RevealGroup`/`RevealItem`
+(stagger), `SwapFade` (cross-fade between drill-down levels). All are
+`prefers-reduced-motion`-aware (render static when reduced). Keep animations subtle.
+
+## Icons — no text-as-icon
+
+Never use bare letters/emoji where an icon belongs (e.g. difficulty uses Signal
+tiers, not "E/M/H"). Vary icons by meaning — course module subcategories map topic →
+icon (`moduleIcon()` in the course page), never a single repeated icon.
+
+## Interactive surfaces (hover/press)
+
+Any clickable card/tile/row uses **one** shared affordance so hover feels the same
+everywhere. Spread `interactiveSurfaceSx` (from `components/ui/interactive.ts`) onto
+the surface `sx` and make the element itself actionable (`CardActionArea`, button, or
+`role="button"`): it lifts (`translateY(-2px)`), strengthens the border to `outline`,
+tints to `surfaceContainer`, and adds a soft shadow. `StatCard` takes `href`/`onClick`
+(+ `selected` for filter-style pressed state) to become interactive without ad-hoc
+wrappers. List rows (`MuiListItemButton`) and table rows (`hover`) get a consistent
+tokenized hover via theme overrides — don't hand-roll `action.hover` one-offs. The
+global `prefers-reduced-motion` rule neutralizes the transform.
+
+## Profile is the personal hub (role-aware)
+
+Each role has its **own** profile — never shared. Students use `/app/profile` (under
+the student shell): tabbed **Overview / Submissions / Coding Profiles / Account**,
+synced to `?tab=`. The Overview has a Period filter (Overall/7d/30d/6mo) driving a
+**Submission Breakdown** (verdict-quality cards + `@mui/x-charts` pie) from
+`GET /api/student/stats?period=`. Faculty & admin use `/faculty/profile` (under the
+faculty shell, so they keep the faculty nav — never bounce into the student nav): a
+role-aware identity header + faculty stat cards (from `/api/faculty/dashboard`) +
+account/2FA. Each shell's `AppShell profileHref` points at its own profile route; the
+avatar menu uses that.
+
+## Faculty/Admin analytics (hierarchical drill-down)
+
+`/faculty/analytics` drills **cohorts → students → individual** with a breadcrumb, using
+`@mui/x-charts` `onItemClick` (click a bar to go deeper; each level fetches lazily).
+Level 1 = cohorts grouped by Department/Year/Section (`GET /api/faculty/analytics/cohorts`,
+Redis-cached ~120s); Level 2 = ranked students in a cohort (`…/cohort-students`, paginated);
+Level 3 = one student (`…/students/:id/detail` — learning curve/verdict pie/topic bars).
+**Department isolation:** admin sees all; HOD/faculty are scoped to their own department via
+`scopeDept(req)`/`canSeeDepartment(req)` (`role.middleware.js`) — threaded into every analytics
+query. New `hod` role behaves like dept-scoped faculty. Keep analytics aggregation **server-side +
+cached + paginated** (never ship raw rows) for 1000-concurrent.
+
+## Sidebar navigation
+
+Student nav items are grouped under `overline` section subheaders (Practice /
+Progress / Career / Assistant) via the optional `section` field on `NavItem` — keeps
+the list within Miller's 7±2 and adds scannable structure. Dashboard and single
+items may sit ungrouped at the top.
+
+## Courses & problems
+
+The Practice nav's **Courses** entry (`/app/courses`) is the primary problem-browsing
+surface: courses → modules (subcategories) → problems, backed by
+`courses`/`course_modules`/`module_problems` on the backend (`GET /api/courses`,
+`/api/courses/:id`). The flat searchable list still lives at `/app/problems` ("Browse
+all problems" from the Courses landing; keeps search + Pick Random) but is not a
+top-level nav item.
+
+## IDE editor & timer
+
+The Monaco editor uses custom `codementor-dark`/`codementor-light` themes defined in
+`beforeMount` (inherit VS Code `vs-dark`/`vs` token colours; background from
+`tokens.ts`). Never pass a raw/invalid theme name to `<MonacoEditor>`. The problem
+timer is `components/problem/TimerWidget.tsx`: one header chip shows **either** the
+auto Session timer (active-time, pauses on tab-hide/solve) **or** the user-controlled
+Pomodoro — never both; a popover switches modes. The results panel shows a
+`ResultsSummary` (avg/max time + `@mui/x-charts` `SparkLineChart` + "X of Y shown/hidden
+passed") above per-test rows; tabs are "Test cases"/"Terminal"; a bottom bar carries
+Prev · Reset · Submit · Next.
 
 ## Accessibility
 

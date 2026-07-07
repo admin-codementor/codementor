@@ -29,19 +29,12 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
-import CloseIcon from "@mui/icons-material/Close";
-import PeopleOutlineIcon from "@mui/icons-material/PeopleOutline";
-import BoltOutlinedIcon from "@mui/icons-material/BoltOutlined";
-import TrackChangesOutlinedIcon from "@mui/icons-material/TrackChangesOutlined";
-import DescriptionOutlinedIcon from "@mui/icons-material/DescriptionOutlined";
-import DownloadOutlinedIcon from "@mui/icons-material/DownloadOutlined";
-import AddIcon from "@mui/icons-material/Add";
-import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
-import { BarChart } from "@mui/x-charts/BarChart";
-import { LineChart } from "@mui/x-charts/LineChart";
-import { PieChart } from "@mui/x-charts/PieChart";
+import { CheckCircleIcon, RadioButtonUncheckedIcon, CloseIcon, PeopleOutlineIcon, BoltOutlinedIcon, TrackChangesOutlinedIcon, DescriptionOutlinedIcon, DownloadOutlinedIcon, AddIcon, ShieldOutlinedIcon } from "@/components/ui/icons";
+import { ResponsiveBar } from "@nivo/bar";
+import { ResponsiveLine } from "@nivo/line";
+import { ResponsivePie } from "@nivo/pie";
+import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
+import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -511,6 +504,8 @@ function SectionCard({ title, icon, action, children }: { title: string; icon?: 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FacultyDashboardPage() {
+  const nivoTheme = useNivoTheme();
+  const chartColors = useChartColors();
   const [tab, setTab] = React.useState<Tab>("overview");
   const [stats, setStats] = React.useState<Stats>({ totalStudents: 0, activeStudents: 0, problemsSolved: 0, totalSubs: 0, acRate: 0 });
   const [assignments, setAssignments] = React.useState<AssignmentItem[]>([]);
@@ -585,12 +580,14 @@ export default function FacultyDashboardPage() {
       />
 
       {/* Stat cards */}
-      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2, mb: 3 }}>
-        <StatCard icon={<PeopleOutlineIcon />} label="Total Students" value={loading ? "—" : stats.totalStudents} accent="primary" />
-        <StatCard icon={<BoltOutlinedIcon />} label="Active (7d)" value={loading ? "—" : stats.activeStudents} accent="success" />
-        <StatCard icon={<TrackChangesOutlinedIcon />} label="Class AC Rate" value={loading ? "—" : `${stats.acRate}%`} accent="tertiary" />
-        <StatCard icon={<DescriptionOutlinedIcon />} label="Total Submissions" value={loading ? "—" : stats.totalSubs} accent="warning" />
-      </Box>
+      <Reveal>
+        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2, mb: 3 }}>
+          <StatCard icon={<PeopleOutlineIcon />} label="Total Students" value={loading ? "—" : stats.totalStudents} accent="primary" />
+          <StatCard icon={<BoltOutlinedIcon />} label="Active (7d)" value={loading ? "—" : stats.activeStudents} accent="success" />
+          <StatCard icon={<TrackChangesOutlinedIcon />} label="Class AC Rate" value={loading ? "—" : `${stats.acRate}%`} accent="tertiary" />
+          <StatCard icon={<DescriptionOutlinedIcon />} label="Total Submissions" value={loading ? "—" : stats.totalSubs} accent="warning" />
+        </Box>
+      </Reveal>
 
       <Tabs value={tab} onChange={(_, v: Tab) => setTab(v)} sx={{ mb: 3, borderBottom: "1px solid", borderColor: "outlineVariant" }}>
         <Tab value="overview" label="Overview" />
@@ -754,12 +751,21 @@ export default function FacultyDashboardPage() {
                 {analytics.difficultyDistribution.length === 0 ? (
                   <EmptyState title="No solved problems yet" />
                 ) : (
-                  <BarChart
-                    height={220}
-                    xAxis={[{ scaleType: "band", data: analytics.difficultyDistribution.map((d) => d.difficulty) }]}
-                    series={[{ data: analytics.difficultyDistribution.map((d) => parseInt(d.count) || 0), label: "Accepted" }]}
-                    margin={{ top: 10, bottom: 24, left: 40, right: 10 }}
-                  />
+                  <Box sx={{ height: 240 }}>
+                    <ResponsiveBar
+                      data={analytics.difficultyDistribution.map((d) => ({ difficulty: d.difficulty, value: parseInt(d.count) || 0 }))}
+                      keys={["value"]}
+                      indexBy="difficulty"
+                      margin={{ top: 16, right: 16, bottom: 40, left: 44 }}
+                      padding={0.35}
+                      borderRadius={6}
+                      colors={[chartColors[0]]}
+                      theme={nivoTheme}
+                      enableLabel={false}
+                      axisLeft={{ tickSize: 0, tickPadding: 8 }}
+                      axisBottom={{ tickSize: 0, tickPadding: 8 }}
+                    />
+                  </Box>
                 )}
               </SectionCard>
 
@@ -768,12 +774,24 @@ export default function FacultyDashboardPage() {
                   {analytics.submissionsTimeline.length === 0 ? (
                     <EmptyState title="No submissions in last 30 days" />
                   ) : (
-                    <LineChart
-                      height={240}
-                      xAxis={[{ scaleType: "point", data: analytics.submissionsTimeline.map((d) => d.date.slice(5)) }]}
-                      series={[{ data: analytics.submissionsTimeline.map((d) => d.count), area: true, showMark: false }]}
-                      margin={{ top: 10, bottom: 24, left: 40, right: 10 }}
-                    />
+                    <Box sx={{ height: 240 }}>
+                      <ResponsiveLine
+                        data={[{ id: "submissions", data: analytics.submissionsTimeline.map((d) => ({ x: d.date.slice(5), y: d.count })) }]}
+                        margin={{ top: 16, right: 20, bottom: 40, left: 44 }}
+                        xScale={{ type: "point" }}
+                        yScale={{ type: "linear", min: 0, max: "auto" }}
+                        curve="monotoneX"
+                        colors={[chartColors[0]]}
+                        theme={nivoTheme}
+                        enableArea
+                        areaOpacity={0.12}
+                        enablePoints={false}
+                        enableGridX={false}
+                        axisBottom={{ tickSize: 0, tickPadding: 8, tickRotation: -35 }}
+                        axisLeft={{ tickSize: 0, tickPadding: 8 }}
+                        useMesh
+                      />
+                    </Box>
                   )}
                 </SectionCard>
               </Box>
@@ -782,10 +800,20 @@ export default function FacultyDashboardPage() {
                 {(analytics.verdictDistribution ?? []).length === 0 ? (
                   <EmptyState title="No submissions yet" />
                 ) : (
-                  <PieChart
-                    height={240}
-                    series={[{ data: (analytics.verdictDistribution ?? []).map((v, i) => ({ id: i, value: v.value, label: v.name })), innerRadius: 40 }]}
-                  />
+                  <Box sx={{ height: 240 }}>
+                    <ResponsivePie
+                      data={(analytics.verdictDistribution ?? []).map((v) => ({ id: v.name, label: v.name, value: v.value }))}
+                      margin={{ top: 16, right: 16, bottom: 16, left: 16 }}
+                      innerRadius={0.55}
+                      padAngle={1.2}
+                      cornerRadius={4}
+                      colors={chartColors}
+                      theme={nivoTheme}
+                      borderWidth={0}
+                      enableArcLinkLabels={false}
+                      arcLabelsSkipAngle={16}
+                    />
+                  </Box>
                 )}
               </SectionCard>
 

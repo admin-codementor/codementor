@@ -4,8 +4,7 @@ import * as React from "react";
 import { useColorScheme } from "@mui/material/styles";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
-import LightModeOutlinedIcon from "@mui/icons-material/LightModeOutlined";
-import DarkModeOutlinedIcon from "@mui/icons-material/DarkModeOutlined";
+import { LightModeOutlinedIcon, DarkModeOutlinedIcon } from "@/components/ui/icons";
 
 /** Toggles between light and dark color schemes. Avoids hydration mismatch by
  * rendering a stable placeholder until mounted. */

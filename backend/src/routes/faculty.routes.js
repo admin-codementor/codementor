@@ -11,7 +11,7 @@ const db = require('../config/db');
 const router = express.Router();
 
 router.use(protect);
-router.use(authorize('faculty', 'admin'));
+router.use(authorize('faculty', 'admin', 'hod'));
 
 // JPlag runs are expensive (~minutes each) — cap them per faculty to prevent
 // accidental or malicious DoS. Keyed by user id (route is always authenticated).
@@ -28,6 +28,9 @@ const plagiarismLimiter = rateLimit({
 router.get('/dashboard',  facultyController.getDashboardData);
 router.get('/analytics',  facultyController.getClassAnalytics);
 router.get('/cohort-topics', facultyController.getCohortTopics);
+// Hierarchical drill-down (department-scoped for HOD/faculty; admin = all).
+router.get('/analytics/cohorts', facultyController.getCohorts);
+router.get('/analytics/cohort-students', facultyController.getCohortStudents);
 router.get('/problems',   facultyController.getProblems);
 router.get('/problems/:id/test-heatmap', facultyController.getProblemTestHeatmap);
 router.post('/problems/:id/random-tests',

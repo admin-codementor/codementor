@@ -10,8 +10,7 @@ import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import Skeleton from "@mui/material/Skeleton";
-import CloseIcon from "@mui/icons-material/Close";
-import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
+import { CloseIcon, CodeOutlinedIcon } from "@/components/ui/icons";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import api from "@/lib/api";
 

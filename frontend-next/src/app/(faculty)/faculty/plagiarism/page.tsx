@@ -9,10 +9,9 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
-import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
-import { BarChart } from "@mui/x-charts/BarChart";
+import { PolicyOutlinedIcon, ChevronRightIcon, LocalFireDepartmentIcon } from "@/components/ui/icons";
+import { ResponsiveBar } from "@nivo/bar";
+import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -36,6 +35,8 @@ function simColor(s: number) {
 }
 
 export default function FacultyPlagiarismOverviewPage() {
+  const nivoTheme = useNivoTheme();
+  const chartColors = useChartColors();
   const [rows, setRows] = React.useState<OverviewRow[]>([]);
   const [loading, setLoading] = React.useState(true);
 
@@ -83,15 +84,27 @@ export default function FacultyPlagiarismOverviewPage() {
                   {chartRows.length === 0 ? (
                     <EmptyState title="No scans yet" />
                   ) : (
-                    <BarChart
-                      height={240}
-                      xAxis={[{ scaleType: "band", data: chartRows.map((r) => (r.title.length > 14 ? r.title.slice(0, 13) + "…" : r.title)) }]}
-                      series={[
-                        { data: chartRows.map((r) => r.pairs), label: "Flagged pairs" },
-                        { data: chartRows.map((r) => Math.round(r.maxSim)), label: "Max similarity %" },
-                      ]}
-                      margin={{ top: 10, bottom: 24, left: 40, right: 10 }}
-                    />
+                    <Box sx={{ height: 260 }}>
+                      <ResponsiveBar
+                        data={chartRows.map((r) => ({
+                          title: r.title.length > 14 ? r.title.slice(0, 13) + "…" : r.title,
+                          "Flagged pairs": r.pairs,
+                          "Max similarity %": Math.round(r.maxSim),
+                        }))}
+                        keys={["Flagged pairs", "Max similarity %"]}
+                        indexBy="title"
+                        groupMode="grouped"
+                        margin={{ top: 16, right: 16, bottom: 56, left: 44 }}
+                        padding={0.3}
+                        borderRadius={5}
+                        colors={[chartColors[0], chartColors[4]]}
+                        theme={nivoTheme}
+                        enableLabel={false}
+                        axisLeft={{ tickSize: 0, tickPadding: 8 }}
+                        axisBottom={{ tickSize: 0, tickPadding: 8, tickRotation: -30 }}
+                        legends={[{ dataFrom: "keys", anchor: "top-right", direction: "row", translateY: -12, itemWidth: 120, itemHeight: 16, symbolSize: 12, symbolShape: "circle" }]}
+                      />
+                    </Box>
                   )}
                 </CardContent>
               </Card>

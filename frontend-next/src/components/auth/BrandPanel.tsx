@@ -3,11 +3,7 @@
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import CodeIcon from "@mui/icons-material/Code";
-import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
-import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
-import FingerprintOutlinedIcon from "@mui/icons-material/FingerprintOutlined";
-import InsightsOutlinedIcon from "@mui/icons-material/InsightsOutlined";
+import { CodeIcon, SmartToyOutlinedIcon, EmojiEventsOutlinedIcon, FingerprintOutlinedIcon, InsightsOutlinedIcon } from "@/components/ui/icons";
 
 const HIGHLIGHTS = [
   { icon: SmartToyOutlinedIcon, title: "Socratic AI Tutor", desc: "Guides you with questions, never hands over the answer." },

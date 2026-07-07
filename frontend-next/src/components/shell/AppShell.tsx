@@ -23,18 +23,18 @@ import Stack from "@mui/material/Stack";
 import ListItemAvatar from "@mui/material/ListItemAvatar";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
-import MenuIcon from "@mui/icons-material/Menu";
-import CodeIcon from "@mui/icons-material/Code";
-import LogoutIcon from "@mui/icons-material/Logout";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
+import { MenuIcon, CodeIcon, LogoutIcon, PersonOutlineIcon } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { clearSession, getUser } from "@/lib/auth";
+import { SwapFade } from "@/components/ui/motion";
 import type { User } from "@/lib/types";
 
 export interface NavItem {
   label: string;
   href: string;
   icon: React.ReactNode;
+  /** Optional group heading; consecutive items sharing a section render under one subheader. */
+  section?: string;
 }
 
 const DRAWER_WIDTH = 268;
@@ -103,30 +103,52 @@ export function AppShell({
       </Toolbar>
 
       <List component="nav" aria-label="Main navigation" sx={{ px: 1.5, flex: 1, overflowY: "auto" }}>
-        {navItems.map((item) => {
+        {navItems.map((item, i) => {
           const active = isActive(item.href);
+          const showSection = item.section && item.section !== navItems[i - 1]?.section;
           return (
-            <ListItem key={item.href} disablePadding sx={{ mb: 0.25 }}>
-              <ListItemButton
-                component={NextLink}
-                href={item.href}
-                aria-current={active ? "page" : undefined}
-                sx={{
-                  borderRadius: 9999,
-                  px: 2,
-                  minHeight: 48,
-                  color: active ? "onSecondaryContainer" : "onSurfaceVariant",
-                  bgcolor: active ? "secondaryContainer" : "transparent",
-                  "&:hover": { bgcolor: active ? "secondaryContainer" : "action.hover" },
-                }}
-              >
-                <ListItemIcon sx={{ minWidth: 40, color: "inherit" }}>{item.icon}</ListItemIcon>
-                <ListItemText
-                  primary={item.label}
-                  slotProps={{ primary: { fontWeight: active ? 600 : 500, variant: "body2" } }}
-                />
-              </ListItemButton>
-            </ListItem>
+            <React.Fragment key={item.href}>
+              {showSection && (
+                <Typography
+                  component="li"
+                  variant="overline"
+                  sx={{
+                    display: "block",
+                    px: 2,
+                    pt: i === 0 ? 0.5 : 2,
+                    pb: 0.5,
+                    color: "onSurfaceVariant",
+                    letterSpacing: "0.08em",
+                  }}
+                >
+                  {item.section}
+                </Typography>
+              )}
+              <ListItem disablePadding sx={{ mb: 0.25 }}>
+                <ListItemButton
+                  component={NextLink}
+                  href={item.href}
+                  aria-current={active ? "page" : undefined}
+                  sx={{
+                    borderRadius: 9999,
+                    px: 2,
+                    minHeight: 48,
+                    color: active ? "onSecondaryContainer" : "onSurfaceVariant",
+                    bgcolor: active ? "secondaryContainer" : "transparent",
+                    transition: "background-color 150ms ease",
+                    "&:hover": {
+                      bgcolor: active ? "secondaryContainer" : "surfaceContainerHigh",
+                    },
+                  }}
+                >
+                  <ListItemIcon sx={{ minWidth: 40, color: "inherit" }}>{item.icon}</ListItemIcon>
+                  <ListItemText
+                    primary={item.label}
+                    slotProps={{ primary: { fontWeight: active ? 600 : 500, variant: "body2" } }}
+                  />
+                </ListItemButton>
+              </ListItem>
+            </React.Fragment>
           );
         })}
       </List>
@@ -248,7 +270,9 @@ export function AppShell({
         sx={{ flexGrow: 1, width: { lg: `calc(100% - ${DRAWER_WIDTH}px)` }, minWidth: 0 }}
       >
         <Toolbar aria-hidden />
-        <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>{children}</Box>
+        <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+          <SwapFade swapKey={pathname}>{children}</SwapFade>
+        </Box>
       </Box>
     </Box>
   );

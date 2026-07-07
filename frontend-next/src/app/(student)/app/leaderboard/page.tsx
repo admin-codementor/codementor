@@ -16,9 +16,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import EmojiEventsIcon from "@mui/icons-material/EmojiEvents";
-import MilitaryTechIcon from "@mui/icons-material/MilitaryTech";
-import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
+import { EmojiEventsOutlinedIcon, MilitaryTechOutlinedIcon, LocalFireDepartmentOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -26,6 +24,7 @@ import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { RatingBadge } from "@/components/ui/RatingBadge";
 import { EmptyState } from "@/components/ui/States";
+import { Reveal } from "@/components/ui/motion";
 
 interface LeaderboardEntry {
   id: string;
@@ -49,14 +48,23 @@ interface RatingEntry {
 
 type Board = "solved" | "rating";
 
+// Metallic medal accents for the top-3 podium. Gold maps to the theme's warning
+// role; silver/bronze have no theme equivalent, so they live here as documented
+// constants rather than magic hex inline (same convention as RatingBadge's tiers).
+const MEDAL = {
+  gold: "var(--mui-palette-warning-main)",
+  silver: "#9CA3AF",
+  bronze: "#B45309",
+} as const;
+
 function avatarInitials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 
 function RankCell({ rank }: { rank: number }) {
-  if (rank === 1) return <EmojiEventsIcon sx={{ color: "warning.main" }} />;
-  if (rank === 2) return <MilitaryTechIcon sx={{ color: "#9CA3AF" }} />;
-  if (rank === 3) return <MilitaryTechIcon sx={{ color: "#B45309" }} />;
+  if (rank === 1) return <EmojiEventsOutlinedIcon sx={{ color: MEDAL.gold }} />;
+  if (rank === 2) return <MilitaryTechOutlinedIcon sx={{ color: MEDAL.silver }} />;
+  if (rank === 3) return <MilitaryTechOutlinedIcon sx={{ color: MEDAL.bronze }} />;
   return (
     <Typography
       component="span"
@@ -71,7 +79,7 @@ function RankCell({ rank }: { rank: number }) {
 
 function tierLabel(rank: number): { label: string; color: string } | null {
   if (rank === 1) return { label: "Grandmaster", color: "var(--mui-palette-warning-main)" };
-  if (rank <= 3) return { label: "Master", color: "#A371F7" };
+  if (rank <= 3) return { label: "Master", color: "var(--mui-palette-ai)" };
   if (rank <= 10) return { label: "Diamond", color: "var(--mui-palette-primary-main)" };
   if (rank <= 25) return { label: "Platinum", color: "var(--mui-palette-success-main)" };
   return null;
@@ -170,19 +178,20 @@ export default function LeaderboardPage() {
         <>
           {/* Podium */}
           {!loading && data.length >= 3 && (
+            <Reveal>
             <Box
               sx={{
                 display: "grid",
                 gridTemplateColumns: "repeat(3, 1fr)",
-                gap: 1.5,
+                gap: { xs: 1, sm: 1.5 },
                 alignItems: "end",
                 mb: 3,
               }}
             >
               {[
-                { entry: data[1], place: 2, height: 88, color: "#9CA3AF" },
-                { entry: data[0], place: 1, height: 120, color: "var(--mui-palette-warning-main)" },
-                { entry: data[2], place: 3, height: 72, color: "#B45309" },
+                { entry: data[1], place: 2, height: 88, color: MEDAL.silver },
+                { entry: data[0], place: 1, height: 120, color: MEDAL.gold },
+                { entry: data[2], place: 3, height: 72, color: MEDAL.bronze },
               ].map(({ entry, place, height, color }) => {
                 if (!entry) return null;
                 const isMe = String(entry.id) === currentUserId;
@@ -228,6 +237,7 @@ export default function LeaderboardPage() {
                 );
               })}
             </Box>
+            </Reveal>
           )}
 
           {/* Your rank banner */}
@@ -328,7 +338,7 @@ export default function LeaderboardPage() {
                     <TableRow>
                       <TableCell colSpan={6} sx={{ border: 0 }}>
                         <EmptyState
-                          icon={<EmojiEventsIcon />}
+                          icon={<EmojiEventsOutlinedIcon />}
                           title={search ? "No matching students" : "No students yet"}
                         />
                       </TableCell>
@@ -377,7 +387,7 @@ export default function LeaderboardPage() {
                                 </Stack>
                                 {tier && (
                                   <Stack direction="row" spacing={0.25} alignItems="center" sx={{ color: tier.color }}>
-                                    <LocalFireDepartmentIcon sx={{ fontSize: 12 }} />
+                                    <LocalFireDepartmentOutlinedIcon sx={{ fontSize: 12 }} />
                                     <Typography variant="caption" fontWeight={600} sx={{ textTransform: "uppercase", letterSpacing: "0.05em" }}>
                                       {tier.label}
                                     </Typography>
@@ -427,7 +437,7 @@ export default function LeaderboardPage() {
             </Box>
           ) : ratingData.length === 0 ? (
             <EmptyState
-              icon={<EmojiEventsIcon />}
+              icon={<EmojiEventsOutlinedIcon />}
               title="No rated users yet"
               description="Finalize a contest's ratings first to populate this board."
             />

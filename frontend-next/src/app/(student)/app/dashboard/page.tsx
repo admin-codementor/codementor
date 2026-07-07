@@ -18,19 +18,12 @@ import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
 import Link from "@mui/material/Link";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
-import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
-import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
-import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
-import LeaderboardOutlinedIcon from "@mui/icons-material/LeaderboardOutlined";
-import TipsAndUpdatesOutlinedIcon from "@mui/icons-material/TipsAndUpdatesOutlined";
-import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
-import WarningAmberOutlinedIcon from "@mui/icons-material/WarningAmberOutlined";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { Reveal } from "@/components/ui/motion";
 import { StatCard } from "@/components/ui/StatCard";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
@@ -148,10 +141,12 @@ function ActivityHeatmap({
     return 3;
   }
 
+  // Monotonic primary-hue intensity ramp (empty → strongest). The mid step is a
+  // color-mix between the container and main roles so the gradient reads as one hue.
   const bgByLevel = [
     "surfaceContainerHighest",
     "primaryContainer",
-    "secondary.main",
+    "color-mix(in srgb, var(--mui-palette-primary-main) 55%, var(--mui-palette-primaryContainer))",
     "primary.main",
   ];
 
@@ -402,6 +397,7 @@ export default function DashboardPage() {
       />
 
       {/* ── Stats row ── */}
+      <Reveal>
       <Box
         sx={{
           display: "grid",
@@ -417,10 +413,10 @@ export default function DashboardPage() {
           accent="primary"
         />
         <StatCard
-          icon={<LocalFireDepartmentIcon />}
+          icon={<LocalFireDepartmentOutlinedIcon />}
           label="Day Streak"
           value={stats.streak}
-          helper={stats.streak >= 3 ? "🔥 On fire!" : undefined}
+          helper={stats.streak >= 3 ? "On fire!" : undefined}
           accent="warning"
         />
         <StatCard
@@ -436,6 +432,7 @@ export default function DashboardPage() {
           accent="tertiary"
         />
       </Box>
+      </Reveal>
 
       {/* ── New-user empty state ── */}
       {isNewUser && (
@@ -480,7 +477,7 @@ export default function DashboardPage() {
               action={
                 <Link
                   component={NextLink}
-                  href="/app/submissions"
+                  href="/app/profile?tab=submissions"
                   variant="body2"
                   sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
                 >
@@ -641,7 +638,7 @@ export default function DashboardPage() {
                             ? "errorContainer"
                             : "outlineVariant",
                           bgcolor: urgent ? "errorContainer" : "transparent",
-                          "&:hover": { bgcolor: urgent ? "errorContainer" : "action.hover" },
+                          "&:hover": { bgcolor: urgent ? "errorContainer" : "surfaceContainerHigh" },
                           transition: "background-color 150ms",
                         }}
                       >
@@ -661,7 +658,7 @@ export default function DashboardPage() {
                             {a.title}
                           </Typography>
                           {done ? (
-                            <CheckCircleIcon
+                            <CheckCircleOutlinedIcon
                               sx={{ fontSize: 18, color: "success.main", flexShrink: 0 }}
                             />
                           ) : urgent ? (

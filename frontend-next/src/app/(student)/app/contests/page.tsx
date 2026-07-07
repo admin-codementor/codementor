@@ -16,6 +16,7 @@ import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import Badge from "@mui/material/Badge";
 import CircularProgress from "@mui/material/CircularProgress";
+import Skeleton from "@mui/material/Skeleton";
 import Alert from "@mui/material/Alert";
 import TextField from "@mui/material/TextField";
 import Divider from "@mui/material/Divider";
@@ -25,17 +26,12 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import CloseIcon from "@mui/icons-material/Close";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
-import GroupsOutlinedIcon from "@mui/icons-material/GroupsOutlined";
-import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
-import AcUnitIcon from "@mui/icons-material/AcUnit";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import PlayArrowIcon from "@mui/icons-material/PlayArrow";
+import { CloseIcon, AccessTimeIcon, EmojiEventsOutlinedIcon, GroupsOutlinedIcon, VisibilityOutlinedIcon, VisibilityOffOutlinedIcon, AcUnitIcon, CheckCircleIcon, PlayArrowIcon } from "@/components/ui/icons";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
+import { interactiveSurfaceSx } from "@/components/ui/interactive";
+import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { createSocket, joinRoom, leaveRoom } from "@/lib/socket";
@@ -121,8 +117,8 @@ const STATUS_TONE: Record<ContestStatus, { bg: string; fg: string }> = {
 function ContestCard({ contest, onClick }: { contest: Contest; onClick: () => void }) {
   const status = contestStatus(contest);
   return (
-    <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-      <CardActionArea onClick={onClick} sx={{ p: 2.5 }}>
+    <Card variant="outlined" sx={{ borderColor: "outlineVariant", ...interactiveSurfaceSx }}>
+      <CardActionArea onClick={onClick} sx={{ p: 2.5, borderRadius: "inherit" }}>
         <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1.5} sx={{ mb: 1.5 }}>
           <Box sx={{ minWidth: 0 }}>
             <Typography variant="subtitle1" fontWeight={600} noWrap>
@@ -435,6 +431,10 @@ export default function ContestsPage() {
 
   return (
     <Box>
+      <PageHeader
+        title="Contests"
+        subtitle="Compete in timed rounds, climb the live scoreboard, and earn contest rating."
+      />
       <Tabs
         value={listTab}
         onChange={(_, v: ContestStatus) => setListTab(v)}
@@ -457,19 +457,27 @@ export default function ContestsPage() {
       </Tabs>
 
       {loading ? (
-        <Box sx={{ display: "grid", placeItems: "center", py: 8 }}>
-          <CircularProgress />
-        </Box>
+        <Stack spacing={1.5}>
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Card key={i} variant="outlined" sx={{ p: 2.5, borderColor: "outlineVariant" }}>
+              <Skeleton width="45%" height={26} />
+              <Skeleton width="70%" />
+              <Skeleton width="30%" sx={{ mt: 1.5 }} />
+            </Card>
+          ))}
+        </Stack>
       ) : list.length === 0 ? (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
           <EmptyState icon={<EmojiEventsOutlinedIcon />} title={`No ${listTab} contests.`} />
         </Card>
       ) : (
-        <Stack spacing={1.5}>
-          {list.map((c) => (
-            <ContestCard key={c.id} contest={c} onClick={() => openContest(c)} />
-          ))}
-        </Stack>
+        <Reveal>
+          <Stack spacing={1.5}>
+            {list.map((c) => (
+              <ContestCard key={c.id} contest={c} onClick={() => openContest(c)} />
+            ))}
+          </Stack>
+        </Reveal>
       )}
 
       {/* Detail drawer */}
@@ -677,7 +685,7 @@ export default function ContestsPage() {
                           />
                         )}
                         <Button
-                          variant="contained"
+                          variant="outlined"
                           color="success"
                           onClick={handleUpdateScoreboardMode}
                           disabled={savingMode || (sbMode === "frozen" && !sbFreezeAt)}
@@ -691,7 +699,7 @@ export default function ContestsPage() {
                         {selectedStatus === "past" && (
                           <>
                             <Divider sx={{ borderColor: "outlineVariant" }} />
-                            <Button variant="contained" color="info" startIcon={<EmojiEventsOutlinedIcon />} onClick={handleFinalizeRatings} disabled={finalizing}>
+                            <Button variant="outlined" color="info" startIcon={<EmojiEventsOutlinedIcon />} onClick={handleFinalizeRatings} disabled={finalizing}>
                               {finalizing ? "Finalizing…" : "Finalize Contest Ratings"}
                             </Button>
                             {finalizeMsg && (

@@ -1,20 +1,14 @@
 "use client";
 
 import * as React from "react";
-import SpaceDashboardOutlinedIcon from "@mui/icons-material/SpaceDashboardOutlined";
-import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
-import SchoolOutlinedIcon from "@mui/icons-material/SchoolOutlined";
-import QuizOutlinedIcon from "@mui/icons-material/QuizOutlined";
-import PolicyOutlinedIcon from "@mui/icons-material/PolicyOutlined";
-import AdminPanelSettingsOutlinedIcon from "@mui/icons-material/AdminPanelSettingsOutlined";
-import MonitorHeartOutlinedIcon from "@mui/icons-material/MonitorHeartOutlined";
-import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
+import { SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, ReceiptLongOutlinedIcon } from "@/components/ui/icons";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { getRole } from "@/lib/auth";
 
 const BASE_NAV: NavItem[] = [
   { label: "Dashboard", href: "/faculty/dashboard", icon: <SpaceDashboardOutlinedIcon /> },
+  { label: "Analytics", href: "/faculty/analytics", icon: <InsightsOutlinedIcon /> },
   { label: "Problems", href: "/faculty/problems", icon: <CodeOutlinedIcon /> },
   { label: "Classes", href: "/faculty/classes", icon: <SchoolOutlinedIcon /> },
   { label: "MCQ Tests", href: "/faculty/mcq", icon: <QuizOutlinedIcon /> },
@@ -36,8 +30,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
   }, []);
 
   return (
-    <AuthGuard roles={["faculty", "admin"]}>
-      <AppShell navItems={navItems} profileHref="/app/profile">
+    <AuthGuard roles={["faculty", "admin", "hod"]}>
+      <AppShell navItems={navItems} profileHref="/faculty/profile">
         {children}
       </AppShell>
     </AuthGuard>

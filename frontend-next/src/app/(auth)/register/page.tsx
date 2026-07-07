@@ -18,11 +18,7 @@ import Link from "@mui/material/Link";
 import LinearProgress from "@mui/material/LinearProgress";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import CodeIcon from "@mui/icons-material/Code";
-import SchoolOutlinedIcon from "@mui/icons-material/SchoolOutlined";
-import MenuBookOutlinedIcon from "@mui/icons-material/MenuBookOutlined";
-import Visibility from "@mui/icons-material/Visibility";
-import VisibilityOff from "@mui/icons-material/VisibilityOff";
+import { CodeIcon, SchoolOutlinedIcon, MenuBookOutlinedIcon, VisibilityIcon as Visibility, VisibilityOffIcon as VisibilityOff } from "@/components/ui/icons";
 import { setSession, homeForRole } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 

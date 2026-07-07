@@ -13,15 +13,13 @@ import Link from "@mui/material/Link";
 import LinearProgress from "@mui/material/LinearProgress";
 import CircularProgress from "@mui/material/CircularProgress";
 import Skeleton from "@mui/material/Skeleton";
-import TrackChangesOutlinedIcon from "@mui/icons-material/TrackChangesOutlined";
-import BusinessOutlinedIcon from "@mui/icons-material/BusinessOutlined";
-import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import { TrackChangesOutlinedIcon, BusinessOutlinedIcon, AutoAwesomeOutlinedIcon, CheckCircleIcon, ArrowForwardIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { EmptyState } from "@/components/ui/States";
+import { interactiveSurfaceSx } from "@/components/ui/interactive";
+import { Reveal } from "@/components/ui/motion";
 
 interface TrackTopic {
   topic: string;
@@ -130,6 +128,7 @@ export default function PlacementPage() {
       ) : (
         <Stack spacing={3}>
           {/* Track readiness cards */}
+          <Reveal>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2 }}>
             {tracks.map((t) => {
               const active = selected === t.key;
@@ -139,10 +138,12 @@ export default function PlacementPage() {
                   variant="outlined"
                   sx={{
                     borderColor: active ? "primary.main" : "outlineVariant",
-                    boxShadow: active ? (theme) => `0 0 0 2px ${theme.palette.primary.main}33` : "none",
+                    bgcolor: active ? "primaryContainer" : undefined,
+                    ...interactiveSurfaceSx,
+                    ...(active ? { "&:hover": { borderColor: "primary.main", transform: "translateY(-2px)", boxShadow: 3 } } : {}),
                   }}
                 >
-                  <CardActionArea onClick={() => setSelected(t.key)} sx={{ p: 2 }}>
+                  <CardActionArea onClick={() => setSelected(t.key)} aria-pressed={active} sx={{ p: 2, borderRadius: "inherit" }}>
                     <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1.5 }}>
                       <ReadinessRing pct={t.readiness} color={t.color} />
                       <Box sx={{ minWidth: 0 }}>
@@ -164,6 +165,7 @@ export default function PlacementPage() {
               );
             })}
           </Box>
+          </Reveal>
 
           {/* Selected track breakdown */}
           {track && (
@@ -214,7 +216,7 @@ export default function PlacementPage() {
                     <Stack alignItems="center" spacing={1} sx={{ py: 3, color: "success.main" }}>
                       <CheckCircleIcon sx={{ fontSize: 32 }} />
                       <Typography variant="body2" fontWeight={600}>
-                        You&apos;re track-ready! 🎉
+                        You&apos;re track-ready!
                       </Typography>
                     </Stack>
                   ) : (

@@ -10,10 +10,7 @@ import Alert from "@mui/material/Alert";
 import TextField from "@mui/material/TextField";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
-import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
-import GppGoodOutlinedIcon from "@mui/icons-material/GppGoodOutlined";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import CheckIcon from "@mui/icons-material/Check";
+import { ShieldOutlinedIcon, GppGoodOutlinedIcon, ContentCopyIcon, CheckIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 

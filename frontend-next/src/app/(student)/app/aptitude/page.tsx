@@ -11,15 +11,12 @@ import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import AppBar from "@mui/material/AppBar";
 import Toolbar from "@mui/material/Toolbar";
-import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import CancelIcon from "@mui/icons-material/Cancel";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
+import { PsychologyOutlinedIcon, AccessTimeIcon, EmojiEventsOutlinedIcon, CheckCircleIcon, CancelIcon, ChevronLeftIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
+import { useToast } from "@/components/feedback/ToastProvider";
+import { Reveal } from "@/components/ui/motion";
 
 interface TestCard {
   id: string;
@@ -63,6 +60,7 @@ function mmss(s: number) {
 }
 
 export default function AptitudePage() {
+  const showToast = useToast();
   const [view, setView] = React.useState<"list" | "taking" | "result">("list");
   const [tests, setTests] = React.useState<TestCard[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -101,7 +99,7 @@ export default function AptitudePage() {
       setView("taking");
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };
-      alert(err?.response?.data?.error || "Could not start the test.");
+      showToast(err?.response?.data?.error || "Could not start the test.", { severity: "error" });
       loadList();
     }
   };
@@ -117,7 +115,7 @@ export default function AptitudePage() {
       }
     } catch (e) {
       const err = e as { response?: { data?: { error?: string } } };
-      alert(err?.response?.data?.error || "Submit failed.");
+      showToast(err?.response?.data?.error || "Submit failed.", { severity: "error" });
     } finally {
       setSubmitting(false);
     }
@@ -170,6 +168,7 @@ export default function AptitudePage() {
             <EmptyState icon={<PsychologyOutlinedIcon />} title="No tests published yet" description="Check back soon." />
           </Card>
         ) : (
+          <Reveal>
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
             {tests.map((t) => {
               const tone = catTone(t.category);
@@ -212,6 +211,7 @@ export default function AptitudePage() {
               );
             })}
           </Box>
+          </Reveal>
         )}
       </Box>
     );

@@ -13,13 +13,7 @@ import Skeleton from "@mui/material/Skeleton";
 import IconButton from "@mui/material/IconButton";
 import LinearProgress from "@mui/material/LinearProgress";
 import Divider from "@mui/material/Divider";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
-import AssignmentOutlinedIcon from "@mui/icons-material/AssignmentOutlined";
-import AccessTimeIcon from "@mui/icons-material/AccessTime";
-import WarningAmberIcon from "@mui/icons-material/WarningAmber";
-import ArrowForwardIcon from "@mui/icons-material/ArrowForward";
+import { ExpandMoreIcon, CheckCircleIcon, RadioButtonUncheckedIcon, AssignmentOutlinedIcon, AccessTimeIcon, WarningAmberIcon, ArrowForwardIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -152,7 +146,8 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
           textAlign: "left",
           color: "inherit",
           font: "inherit",
-          "&:hover": { bgcolor: "action.hover" },
+          transition: "background-color 150ms ease",
+          "&:hover": { bgcolor: "surfaceContainerHigh" },
         }}
       >
         <ProgressRing pct={pct} color={ringColor} />

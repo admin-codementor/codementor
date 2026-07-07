@@ -24,17 +24,9 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteOutlineIcon from "@mui/icons-material/DeleteOutline";
-import CloseIcon from "@mui/icons-material/Close";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import SaveOutlinedIcon from "@mui/icons-material/SaveOutlined";
-import ListAltOutlinedIcon from "@mui/icons-material/ListAltOutlined";
-import BarChartOutlinedIcon from "@mui/icons-material/BarChartOutlined";
-import VisibilityOutlinedIcon from "@mui/icons-material/VisibilityOutlined";
-import VisibilityOffOutlinedIcon from "@mui/icons-material/VisibilityOffOutlined";
-import PsychologyOutlinedIcon from "@mui/icons-material/PsychologyOutlined";
-import { BarChart } from "@mui/x-charts/BarChart";
+import { AddIcon, DeleteOutlineIcon, CloseIcon, ChevronLeftIcon, SaveOutlinedIcon, ListAltOutlinedIcon, BarChartOutlinedIcon, VisibilityOutlinedIcon, VisibilityOffOutlinedIcon, PsychologyOutlinedIcon } from "@/components/ui/icons";
+import { ResponsiveBar } from "@nivo/bar";
+import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -126,6 +118,8 @@ function CreateTestDialog({ open, onClose, onCreated }: { open: boolean; onClose
 }
 
 export default function FacultyMcqPage() {
+  const nivoTheme = useNivoTheme();
+  const chartColors = useChartColors();
   const [mode, setMode] = React.useState<"list" | "build" | "results">("list");
   const [tests, setTests] = React.useState<TestRow[]>([]);
   const [loading, setLoading] = React.useState(true);
@@ -316,14 +310,23 @@ export default function FacultyMcqPage() {
             <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
               <CardContent>
                 <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>Per-question accuracy</Typography>
-                <BarChart
-                  height={Math.max(200, results.questionStats.length * 36)}
-                  layout="horizontal"
-                  xAxis={[{ min: 0, max: 100 }]}
-                  yAxis={[{ scaleType: "band", data: results.questionStats.map((_, i) => `Q${i + 1}`) }]}
-                  series={[{ data: results.questionStats.map((q) => q.accuracy), label: "Accuracy %" }]}
-                  margin={{ top: 10, bottom: 24, left: 48, right: 10 }}
-                />
+                <Box sx={{ height: Math.max(220, results.questionStats.length * 38) }}>
+                  <ResponsiveBar
+                    data={results.questionStats.map((q, i) => ({ q: `Q${i + 1}`, accuracy: q.accuracy }))}
+                    keys={["accuracy"]}
+                    indexBy="q"
+                    layout="horizontal"
+                    valueScale={{ type: "linear", min: 0, max: 100 }}
+                    margin={{ top: 8, right: 16, bottom: 28, left: 48 }}
+                    padding={0.3}
+                    borderRadius={5}
+                    colors={[chartColors[0]]}
+                    theme={nivoTheme}
+                    enableLabel={false}
+                    axisBottom={{ tickSize: 0, tickPadding: 8 }}
+                    axisLeft={{ tickSize: 0, tickPadding: 8 }}
+                  />
+                </Box>
               </CardContent>
             </Card>
 

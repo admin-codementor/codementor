@@ -111,6 +111,10 @@ const scaffoldDatabase = async () => {
       ALTER TABLE code_submissions
         ADD COLUMN IF NOT EXISTS test_results JSONB DEFAULT NULL;
     `);
+    // Indexes for profile/analytics stats (period + verdict breakdowns) — keep
+    // per-user time-ranged and verdict-grouped queries fast at scale.
+    await query(`CREATE INDEX IF NOT EXISTS idx_submissions_user_time ON code_submissions (user_id, submitted_at DESC);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_submissions_user_verdict ON code_submissions (user_id, verdict);`);
 
     // Scaffold Assignments Table
     await query(`
@@ -144,6 +148,15 @@ const scaffoldDatabase = async () => {
       );
     `);
 
+    // Tag graded code submissions with the assignment/exam they were made under, so
+    // "My Submissions" can show only assessed work (assignment_id IS NOT NULL) rather
+    // than every practice run. NULL = free practice. (Added after `assignments` for FK.)
+    await query(`
+      ALTER TABLE code_submissions
+        ADD COLUMN IF NOT EXISTS assignment_id UUID REFERENCES assignments(id) ON DELETE SET NULL;
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_submissions_user_assignment ON code_submissions (user_id, assignment_id);`);
+
     // Scaffold AI Tutor Conversations Table
     await query(`
       CREATE TABLE IF NOT EXISTS ai_tutor_conversations (
@@ -167,6 +180,40 @@ const scaffoldDatabase = async () => {
         PRIMARY KEY (user_id, topic)
       );
     `);
+
+    // ── Courses → modules → problems (module-based catalogue) ──
+    // Mirrors the assignments/assignment_problems grouping pattern. A course groups
+    // ordered modules (subcategories like "Arrays" or "TCS Programs"); each module
+    // maps to problems many-to-many. Progress is derived from accepted submissions —
+    // no separate progress table.
+    await query(`
+      CREATE TABLE IF NOT EXISTS courses (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        title VARCHAR(200) NOT NULL,
+        description TEXT,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        is_published BOOLEAN NOT NULL DEFAULT TRUE,
+        created_at TIMESTAMP DEFAULT NOW()
+      );
+    `);
+    await query(`
+      CREATE TABLE IF NOT EXISTS course_modules (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        course_id UUID REFERENCES courses(id) ON DELETE CASCADE,
+        title VARCHAR(120) NOT NULL,
+        sort_order INTEGER NOT NULL DEFAULT 0
+      );
+    `);
+    await query(`
+      CREATE TABLE IF NOT EXISTS module_problems (
+        module_id UUID REFERENCES course_modules(id) ON DELETE CASCADE,
+        problem_id UUID REFERENCES problems(id) ON DELETE CASCADE,
+        sort_order INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (module_id, problem_id)
+      );
+    `);
+    await query(`CREATE INDEX IF NOT EXISTS idx_course_modules_course ON course_modules(course_id);`);
+    await query(`CREATE INDEX IF NOT EXISTS idx_module_problems_module ON module_problems(module_id);`);
 
     // Scaffold Contests Table
     await query(`

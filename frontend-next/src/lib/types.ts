@@ -3,7 +3,7 @@
  * existing Express controllers; they document the contract the UI consumes.
  */
 
-export type Role = "student" | "faculty" | "admin";
+export type Role = "student" | "faculty" | "hod" | "admin";
 
 export interface User {
   id: string | number;
@@ -213,4 +213,35 @@ export interface RecommendedProblem {
   difficulty: string;
   tags?: string[];
   acceptance_rate?: number;
+}
+
+// ── Courses / modules ──
+export interface CourseSummary {
+  id: string;
+  title: string;
+  description: string | null;
+  moduleCount: number;
+  problemCount: number;
+  solvedCount: number;
+}
+
+export interface CourseModuleProblem {
+  id: string;
+  title: string;
+  difficulty: string;
+  tags: string[];
+  is_solved: boolean;
+}
+
+export interface CourseModule {
+  id: string;
+  title: string;
+  problems: CourseModuleProblem[];
+}
+
+export interface CourseDetail {
+  id: string;
+  title: string;
+  description: string | null;
+  modules: CourseModule[];
 }

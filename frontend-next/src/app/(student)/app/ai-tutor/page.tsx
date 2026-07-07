@@ -14,17 +14,37 @@ import Tooltip from "@mui/material/Tooltip";
 import LinearProgress from "@mui/material/LinearProgress";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
-import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
-import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
-import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
-import SendIcon from "@mui/icons-material/Send";
-import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
-import ContentCopyIcon from "@mui/icons-material/ContentCopy";
-import CheckIcon from "@mui/icons-material/Check";
+import { keyframes } from "@emotion/react";
+import { SmartToyOutlinedIcon, BugReportOutlinedIcon, CodeOutlinedIcon, PersonOutlineIcon, SendIcon, AutoAwesomeOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 
 const AI = "var(--mui-palette-ai)";
+
+// Animated "thinking" dots. The global prefers-reduced-motion override neutralizes
+// the animation for motion-sensitive users.
+const blink = keyframes`
+  0%, 80%, 100% { opacity: 0.2; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-2px); }
+`;
+
+function ThinkingDots() {
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center" aria-label="AI is thinking" sx={{ py: 0.25 }}>
+      {[0, 1, 2].map((i) => (
+        <Box
+          key={i}
+          sx={{
+            width: 6,
+            height: 6,
+            borderRadius: "50%",
+            bgcolor: "text.secondary",
+            animation: `${blink} 1.2s ${i * 0.16}s infinite ease-in-out`,
+          }}
+        />
+      ))}
+    </Stack>
+  );
+}
 
 type Mode = "tutor" | "explain" | "review";
 interface Message {
@@ -36,8 +56,8 @@ interface Message {
 
 const MODES: { key: Mode; label: string; icon: React.ElementType; color: string; desc: string }[] = [
   { key: "tutor", label: "AI Tutor", icon: SmartToyOutlinedIcon, color: AI, desc: "Socratic guidance — never gives direct answers" },
-  { key: "explain", label: "Explain Error", icon: BugReportOutlinedIcon, color: "#E5484D", desc: "Explains why your code failed in plain English" },
-  { key: "review", label: "Code Review", icon: CodeOutlinedIcon, color: "#30A46C", desc: "Reviews quality, complexity, and code smells" },
+  { key: "explain", label: "Explain Error", icon: BugReportOutlinedIcon, color: "var(--mui-palette-error-main)", desc: "Explains why your code failed in plain English" },
+  { key: "review", label: "Code Review", icon: CodeOutlinedIcon, color: "var(--mui-palette-success-main)", desc: "Reviews quality, complexity, and code smells" },
 ];
 
 const QUICK_PROMPTS = [
@@ -64,7 +84,7 @@ function CodeBlock({ code, lang }: { code: string; lang?: string }) {
     <Box sx={{ my: 1, border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, overflow: "hidden" }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ px: 1.5, py: 0.5, bgcolor: "surfaceContainerHigh" }}>
         <Typography variant="caption" sx={{ fontFamily: "ui-monospace, monospace", textTransform: "uppercase", color: "text.secondary" }}>{lang || "code"}</Typography>
-        <Button size="small" startIcon={copied ? <CheckIcon fontSize="small" /> : <ContentCopyIcon fontSize="small" />} onClick={copy} sx={{ minWidth: 0 }}>
+        <Button size="small" startIcon={copied ? <CheckIcon fontSize="small" /> : <ContentCopyOutlinedIcon fontSize="small" />} onClick={copy} sx={{ minWidth: 0 }}>
           {copied ? "Copied" : "Copy"}
         </Button>
       </Stack>
@@ -204,7 +224,15 @@ export default function AITutorPage() {
   const activeMode = MODES.find((m) => m.key === mode)!;
 
   return (
-    <Box sx={{ mx: { xs: -2, sm: -3, md: -4 }, mt: { xs: -2, sm: -3, md: -4 }, height: "calc(100dvh - 64px)", display: "flex" }}>
+    <Box
+      sx={{
+        mx: { xs: -2, sm: -3, md: -4 },
+        mt: { xs: -2, sm: -3, md: -4 },
+        // Offset the AppShell top bar: MUI Toolbar is 56px on xs, 64px from sm up.
+        height: { xs: "calc(100dvh - 56px)", sm: "calc(100dvh - 64px)" },
+        display: "flex",
+      }}
+    >
       {/* Sidebar (desktop) */}
       {isDesktop && (
         <Box sx={{ width: 260, flexShrink: 0, borderRight: "1px solid", borderColor: "outlineVariant", overflowY: "auto", p: 2 }}>
@@ -223,7 +251,8 @@ export default function AITutorPage() {
                     p: 1.25, borderRadius: 2, cursor: "pointer", font: "inherit", color: "inherit",
                     border: "1px solid", borderColor: active ? "outlineVariant" : "transparent",
                     bgcolor: active ? "surfaceContainerHigh" : "transparent",
-                    "&:hover": { bgcolor: "action.hover" },
+                    transition: "background-color 150ms ease",
+                    "&:hover": { bgcolor: "surfaceContainerHigh" },
                   }}
                 >
                   <Icon sx={{ fontSize: 18, color: m.color, mt: 0.25, flexShrink: 0 }} />
@@ -246,7 +275,7 @@ export default function AITutorPage() {
                 sx={{
                   display: "flex", gap: 1, alignItems: "center", textAlign: "left", width: "100%",
                   px: 1, py: 0.75, borderRadius: 1.5, border: 0, bgcolor: "transparent", cursor: "pointer",
-                  color: "text.secondary", font: "inherit", "&:hover": { bgcolor: "action.hover", color: "text.primary" },
+                  color: "text.secondary", font: "inherit", transition: "background-color 150ms ease, color 150ms ease", "&:hover": { bgcolor: "surfaceContainerHigh", color: "text.primary" },
                   "&:disabled": { opacity: 0.4, cursor: "default" },
                 }}
               >
@@ -302,7 +331,7 @@ export default function AITutorPage() {
                 <Stack direction="row" spacing={1.5} alignItems="center">
                   <Avatar variant="rounded" sx={{ width: 32, height: 32, bgcolor: `color-mix(in srgb, ${AI} 18%, transparent)`, color: AI }}><SmartToyOutlinedIcon sx={{ fontSize: 18 }} /></Avatar>
                   <Box sx={{ px: 2, py: 1.25, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant", bgcolor: "surfaceContainerHigh" }}>
-                    <Typography variant="caption" color="text.secondary">Thinking…</Typography>
+                    <ThinkingDots />
                   </Box>
                 </Stack>
               )}

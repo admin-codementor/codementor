@@ -9,10 +9,7 @@ import Avatar from "@mui/material/Avatar";
 import Chip from "@mui/material/Chip";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
-import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
-import SendIcon from "@mui/icons-material/Send";
-import CloseIcon from "@mui/icons-material/Close";
-import AutoAwesomeOutlinedIcon from "@mui/icons-material/AutoAwesomeOutlined";
+import { SmartToyOutlinedIcon, SendIcon, CloseIcon, AutoAwesomeOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 
 // AI accent — theme token (scheme-aware), kept distinct from the primary palette

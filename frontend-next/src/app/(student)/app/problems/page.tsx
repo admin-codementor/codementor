@@ -20,12 +20,7 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import { visuallyHidden } from "@mui/utils";
-import CasinoOutlinedIcon from "@mui/icons-material/CasinoOutlined";
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import RadioButtonUncheckedIcon from "@mui/icons-material/RadioButtonUnchecked";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import CodeOffOutlinedIcon from "@mui/icons-material/CodeOffOutlined";
+import { CasinoOutlinedIcon, CheckCircleIcon, RadioButtonUncheckedIcon, ChevronLeftIcon, ChevronRightIcon, CodeOffOutlinedIcon, SignalLowIcon, SignalMediumIcon, SignalHighIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import type { Problem } from "@/lib/types";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -138,39 +133,26 @@ function ProblemsInner() {
           loading={loading && total === 0}
         />
         {([
-          { label: "Easy", icon: "E", accent: "success", count: countBy("easy") },
-          { label: "Medium", icon: "M", accent: "warning", count: countBy("medium") },
-          { label: "Hard", icon: "H", accent: "error", count: countBy("hard") },
+          { label: "Easy", icon: <SignalLowIcon />, accent: "success", count: countBy("easy") },
+          { label: "Medium", icon: <SignalMediumIcon />, accent: "warning", count: countBy("medium") },
+          { label: "Hard", icon: <SignalHighIcon />, accent: "error", count: countBy("hard") },
         ] as const).map((d) => {
           const active = difficulty === d.label;
-          const apply = () => {
-            setDifficulty(active ? "All" : d.label);
-            setPage(1);
-          };
           return (
-            <Box
+            <StatCard
               key={d.label}
-              role="button"
-              tabIndex={0}
-              aria-pressed={active}
-              aria-label={`Filter by ${d.label}`}
-              onClick={apply}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  apply();
-                }
+              icon={d.icon}
+              label={d.label}
+              value={d.count}
+              helper={`of ${total}`}
+              accent={d.accent}
+              selected={active}
+              ariaLabel={`Filter by ${d.label}`}
+              onClick={() => {
+                setDifficulty(active ? "All" : d.label);
+                setPage(1);
               }}
-              sx={{
-                cursor: "pointer",
-                borderRadius: 3,
-                transition: "box-shadow 150ms",
-                boxShadow: active ? (t) => `0 0 0 2px ${t.palette.primary.main}` : "none",
-                "&:hover": { boxShadow: (t) => `0 0 0 2px ${t.palette.outlineVariant}` },
-              }}
-            >
-              <StatCard icon={<span aria-hidden>{d.icon}</span>} label={d.label} value={d.count} helper={`of ${total}`} accent={d.accent} />
-            </Box>
+            />
           );
         })}
       </Box>

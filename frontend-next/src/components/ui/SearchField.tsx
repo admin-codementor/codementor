@@ -3,8 +3,7 @@
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import IconButton from "@mui/material/IconButton";
-import SearchIcon from "@mui/icons-material/Search";
-import CloseIcon from "@mui/icons-material/Close";
+import { SearchIcon, CloseIcon } from "@/components/ui/icons";
 
 /** Controlled search input with a leading icon and a clear button. Debouncing
  * is the caller's responsibility (keeps this purely presentational). */

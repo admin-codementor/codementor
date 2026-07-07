@@ -12,7 +12,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import ReceiptLongOutlinedIcon from "@mui/icons-material/ReceiptLongOutlined";
+import { ReceiptLongOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { PageHeader } from "@/components/ui/PageHeader";

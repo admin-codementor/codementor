@@ -31,13 +31,16 @@ const MAX_INPUT_BYTES = 8 * 1024; // 8 KB
 // POST /api/submit — enqueue submission
 router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP, async (req, res) => {
   try {
-    const { source_code, language_id, problem_id, custom_input, contest_id } = req.body;
+    const { source_code, language_id, problem_id, custom_input, contest_id, assignment_id } = req.body;
 
     if (!source_code || !language_id || !problem_id) {
       return res.status(400).json({ success: false, error: 'source_code, language_id, and problem_id are required' });
     }
     if (contest_id && !UUID_RE.test(String(contest_id))) {
       return res.status(400).json({ success: false, error: 'Invalid contest_id format.' });
+    }
+    if (assignment_id && !UUID_RE.test(String(assignment_id))) {
+      return res.status(400).json({ success: false, error: 'Invalid assignment_id format.' });
     }
     if (typeof source_code !== 'string' || Buffer.byteLength(source_code, 'utf8') > MAX_CODE_BYTES) {
       return res.status(400).json({ success: false, error: 'source_code exceeds 64 KB limit.' });
@@ -60,6 +63,8 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
         jobId, source_code, language_id, problem_id, user_id,
         custom_input: custom_input || null,
         contest_id: custom_input ? null : (contest_id || null),
+        // Only graded submits (not custom runs) are recorded against an assignment/exam.
+        assignment_id: custom_input ? null : (assignment_id || null),
       }, { jobId });
     } catch (queueErr) {
       console.error('Queue add failed:', queueErr.message);
@@ -107,21 +112,31 @@ router.get('/submit/history/:problemId', async (req, res) => {
   }
 });
 
-// GET /api/submissions — full history (last 50)
+// GET /api/submissions?scope=graded|practice|all — submission history (last 50).
+// Default `graded`: only submissions made under an assignment/exam (assignment_id set),
+// so students see assessed work rather than every practice run.
 router.get('/submissions', async (req, res) => {
   try {
     const user_id = extractUserId(req);
-    const query = user_id
-      ? `SELECT s.id, s.verdict, s.language, s.runtime, s.memory, s.submitted_at, p.title as problem_title, p.id as problem_id
-         FROM code_submissions s JOIN problems p ON s.problem_id = p.id
-         WHERE s.user_id = $1 ORDER BY s.submitted_at DESC LIMIT 50`
-      : `SELECT s.id, s.verdict, s.language, s.runtime, s.memory, s.submitted_at, p.title as problem_title, p.id as problem_id
-         FROM code_submissions s JOIN problems p ON s.problem_id = p.id
-         ORDER BY s.submitted_at DESC LIMIT 50`;
+    if (!user_id) return res.json({ success: true, data: [] });
 
-    const { rows } = user_id
-      ? await db.query(query, [user_id])
-      : await db.query(query);
+    const scope = ['graded', 'practice', 'all'].includes(req.query.scope) ? req.query.scope : 'graded';
+    const scopeClause =
+      scope === 'graded' ? 'AND s.assignment_id IS NOT NULL'
+        : scope === 'practice' ? 'AND s.assignment_id IS NULL'
+          : '';
+
+    const { rows } = await db.query(
+      `SELECT s.id, s.verdict, s.language, s.runtime, s.memory, s.submitted_at,
+              p.title AS problem_title, p.id AS problem_id,
+              s.assignment_id, a.title AS assignment_title
+       FROM code_submissions s
+       JOIN problems p ON s.problem_id = p.id
+       LEFT JOIN assignments a ON s.assignment_id = a.id
+       WHERE s.user_id = $1 ${scopeClause}
+       ORDER BY s.submitted_at DESC LIMIT 50`,
+      [user_id],
+    );
 
     res.json({ success: true, data: rows });
   } catch (error) {

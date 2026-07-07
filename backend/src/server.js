@@ -35,6 +35,7 @@ const classroomRoutes = require('./routes/classroom.routes');
 const proctorRoutes = require('./routes/proctor.routes');
 const mcqRoutes = require('./routes/mcq.routes');
 const profilesRoutes = require('./routes/profiles.routes');
+const courseRoutes = require('./routes/courses.routes');
 const db = require('./config/db');
 
 // Initialize Judge Worker
@@ -84,6 +85,7 @@ app.use('/api/classrooms', classroomRoutes);
 app.use('/api/proctor', proctorRoutes);
 app.use('/api/mcq', mcqRoutes);
 app.use('/api/profiles', profilesRoutes);
+app.use('/api/courses', courseRoutes);
 
 // ── Health check ────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -16,20 +17,22 @@ import Skeleton from "@mui/material/Skeleton";
 import LinearProgress from "@mui/material/LinearProgress";
 import Tooltip from "@mui/material/Tooltip";
 import Divider from "@mui/material/Divider";
-import EditOutlinedIcon from "@mui/icons-material/EditOutlined";
-import CheckIcon from "@mui/icons-material/Check";
-import CloseIcon from "@mui/icons-material/Close";
-import CodeOutlinedIcon from "@mui/icons-material/CodeOutlined";
-import LocalFireDepartmentIcon from "@mui/icons-material/LocalFireDepartment";
-import EmojiEventsOutlinedIcon from "@mui/icons-material/EmojiEventsOutlined";
-import TrackChangesOutlinedIcon from "@mui/icons-material/TrackChangesOutlined";
-import LockOutlinedIcon from "@mui/icons-material/LockOutlined";
+import Tabs from "@mui/material/Tabs";
+import Tab from "@mui/material/Tab";
+import { EditOutlinedIcon, CheckIcon, CloseIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, TrackChangesOutlinedIcon, LockOutlinedIcon, PersonOutlineIcon, HistoryOutlinedIcon, HubOutlinedIcon, CodeOffOutlinedIcon, BugReportOutlinedIcon, CancelOutlinedIcon } from "@/components/ui/icons";
+import { ResponsivePie } from "@nivo/pie";
+import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
+import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
+import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
+import { SectionCard } from "@/components/ui/SectionCard";
 import { RatingBadge } from "@/components/ui/RatingBadge";
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
+import { ProfileSubmissions } from "@/components/profile/ProfileSubmissions";
+import { ProfileCodingProfiles } from "@/components/profile/ProfileCodingProfiles";
 import type { DashboardStats, TopicMastery } from "@/lib/types";
 
 interface LanguageRow {
@@ -65,6 +68,23 @@ const DEFAULT_STATS: DashboardStats = {
   rating: 1200,
 };
 
+type StatPeriod = "all" | "7d" | "30d" | "6mo";
+const PERIODS: { value: StatPeriod; label: string }[] = [
+  { value: "all", label: "Overall" },
+  { value: "7d", label: "7 Days" },
+  { value: "30d", label: "30 Days" },
+  { value: "6mo", label: "6 Months" },
+];
+interface StatsData {
+  period: string;
+  total: number;
+  verdicts: { verdict: string | null; n: number }[];
+  languages: { language: string; n: number }[];
+}
+
+const TABS = ["overview", "submissions", "coding-profiles", "account"] as const;
+type TabKey = (typeof TABS)[number];
+
 function initialsOf(name?: string) {
   if (!name) return "ST";
   return name
@@ -74,35 +94,6 @@ function initialsOf(name?: string) {
     .join("")
     .toUpperCase()
     .slice(0, 2);
-}
-
-// ── Section card ──────────────────────────────────────────────────────────────
-
-function SectionCard({
-  title,
-  icon,
-  action,
-  children,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  action?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-      <CardContent sx={{ p: 2.5, "&:last-child": { pb: 2.5 } }}>
-        <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 2 }}>
-          {icon}
-          <Typography variant="subtitle2" fontWeight={600}>
-            {title}
-          </Typography>
-          {action && <Box sx={{ ml: "auto" }}>{action}</Box>}
-        </Stack>
-        {children}
-      </CardContent>
-    </Card>
-  );
 }
 
 // ── Labeled progress bar ────────────────────────────────────────────────────────
@@ -135,7 +126,17 @@ function ProgressRow({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
-export default function ProfilePage() {
+function ProfileInner() {
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const nivoTheme = useNivoTheme();
+  const chartColors = useChartColors();
+  const tabParam = searchParams.get("tab");
+  const tab: TabKey = (TABS as readonly string[]).includes(tabParam ?? "")
+    ? (tabParam as TabKey)
+    : "overview";
+
   const [user, setUserState] = React.useState<ReturnType<typeof getUser>>(null);
   const [stats, setStats] = React.useState<DashboardStats>(DEFAULT_STATS);
   const [topics, setTopics] = React.useState<TopicMastery[]>([]);
@@ -143,6 +144,10 @@ export default function ProfilePage() {
   const [ratingHistory, setRatingHistory] = React.useState<RatingHistoryRow[]>([]);
   const [badges, setBadges] = React.useState<Badge[]>([]);
   const [loading, setLoading] = React.useState(true);
+
+  // Submission-quality stats (period-filtered) for the Overview dashboard.
+  const [period, setPeriod] = React.useState<StatPeriod>("all");
+  const [statsData, setStatsData] = React.useState<StatsData | null>(null);
 
   // Name edit
   const [editingName, setEditingName] = React.useState(false);
@@ -189,6 +194,23 @@ export default function ProfilePage() {
       })
       .catch(() => {});
   }, []);
+
+  React.useEffect(() => {
+    api
+      .get(`/api/student/stats?period=${period}`)
+      .then((r) => {
+        if (r.data?.success) setStatsData(r.data.data);
+      })
+      .catch(() => {});
+  }, [period]);
+
+  const changeTab = (next: TabKey) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (next === "overview") params.delete("tab");
+    else params.set("tab", next);
+    const qs = params.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+  };
 
   const handleNameSave = async () => {
     if (!nameVal.trim()) return;
@@ -242,269 +264,376 @@ export default function ProfilePage() {
   const topTopics = [...topics].sort((a, b) => b.mastery - a.mastery).slice(0, 8);
   const earnedBadges = badges.filter((b) => b.earned).length;
 
+  // ── Submission-quality breakdown (from /api/student/stats) ──
+  const vmap = new Map((statsData?.verdicts ?? []).map((v) => [v.verdict ?? "Unknown", v.n]));
+  const vget = (k: string) => vmap.get(k) ?? 0;
+  const vAccepted = vget("Accepted");
+  const vWrong = vget("Wrong Answer");
+  const vCompile = vget("Compilation Error");
+  const vExec =
+    vget("Runtime Error") +
+    vget("Runtime Error (NZEC)") +
+    vget("Time Limit Exceeded") +
+    vget("Memory Limit Exceeded");
+  const vTotal = statsData?.total ?? 0;
+  const vOther = Math.max(0, vTotal - vAccepted - vWrong - vCompile - vExec);
+  const verdictPie = [
+    { id: "Accepted", value: vAccepted, label: "Accepted", color: chartColors[2] },
+    { id: "Wrong Answer", value: vWrong, label: "Wrong Answer", color: chartColors[4] },
+    { id: "Execution Failed", value: vExec, label: "Execution Failed", color: chartColors[3] },
+    { id: "Compilation Error", value: vCompile, label: "Compilation Error", color: chartColors[1] },
+    { id: "Other", value: vOther, label: "Other", color: chartColors[5] },
+  ].filter((s) => s.value > 0);
+
   return (
     <Box>
-      <PageHeader title="Profile" subtitle="Your stats, achievements, and account settings." />
+      <PageHeader title="Profile" subtitle="Your stats, achievements, submissions, and account." />
 
-      <Stack spacing={3}>
-        {/* Profile header card */}
-        <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-          <CardContent>
-            <Stack direction="row" spacing={2.5} alignItems="flex-start" flexWrap="wrap" useFlexGap>
-              <Avatar sx={{ width: 64, height: 64, fontSize: 24, fontWeight: 700, bgcolor: "primary.main", color: "primary.contrastText" }}>
-                {initialsOf(user?.name)}
-              </Avatar>
-              <Box sx={{ flex: 1, minWidth: 0 }}>
-                {editingName ? (
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
-                    <TextField
-                      value={nameVal}
-                      onChange={(e) => setNameVal(e.target.value)}
-                      size="small"
-                      autoFocus
-                      onKeyDown={(e) => {
-                        if (e.key === "Enter") handleNameSave();
-                        if (e.key === "Escape") setEditingName(false);
-                      }}
-                    />
-                    <IconButton size="small" color="primary" onClick={handleNameSave} disabled={nameLoading} aria-label="Save name">
-                      <CheckIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton size="small" onClick={() => setEditingName(false)} aria-label="Cancel">
-                      <CloseIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                ) : (
-                  <Stack direction="row" spacing={0.5} alignItems="center">
-                    <Typography variant="h5" fontWeight={700}>
-                      {user?.name || "Student"}
-                    </Typography>
-                    <IconButton size="small" onClick={() => setEditingName(true)} aria-label="Edit name">
-                      <EditOutlinedIcon fontSize="small" />
-                    </IconButton>
-                  </Stack>
-                )}
-                {nameMsg && (
-                  <Typography variant="caption" color={nameMsg.ok ? "success.main" : "error.main"}>
-                    {nameMsg.text}
-                  </Typography>
-                )}
-                <Typography variant="body2" color="text.secondary">
-                  {user?.email || ""}
-                </Typography>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
-                  <Chip
-                    label={user?.role || "student"}
+      {/* Identity header — persists across tabs */}
+      <Card variant="outlined" sx={{ borderColor: "outlineVariant", mb: 3 }}>
+        <CardContent>
+          <Stack direction="row" spacing={2.5} alignItems="flex-start" flexWrap="wrap" useFlexGap>
+            <Avatar sx={{ width: 64, height: 64, fontSize: 24, fontWeight: 700, bgcolor: "primary.main", color: "primary.contrastText" }}>
+              {initialsOf(user?.name)}
+            </Avatar>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
+              {editingName ? (
+                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 0.5 }}>
+                  <TextField
+                    value={nameVal}
+                    onChange={(e) => setNameVal(e.target.value)}
                     size="small"
-                    sx={{ textTransform: "capitalize", bgcolor: "secondaryContainer", color: "onSecondaryContainer", fontWeight: 600 }}
-                  />
-                  {!loading && <RatingBadge rating={stats.rating} />}
-                </Stack>
-              </Box>
-            </Stack>
-          </CardContent>
-        </Card>
-
-        {/* Stat cards */}
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2 }}>
-          <StatCard icon={<CodeOutlinedIcon />} label="Problems Solved" value={loading ? "—" : stats.problemsSolved} accent="primary" />
-          <StatCard icon={<LocalFireDepartmentIcon />} label="Day Streak" value={loading ? "—" : stats.streak} accent="warning" />
-          <StatCard icon={<EmojiEventsOutlinedIcon />} label="Global Rank" value={loading ? "—" : stats.rank > 0 ? `#${stats.rank}` : "—"} accent="tertiary" />
-          <StatCard icon={<TrackChangesOutlinedIcon />} label="AC Rate" value={loading ? "—" : `${stats.acRate}%`} accent="success" />
-        </Box>
-
-        {/* Languages + Topic mastery */}
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "1fr 1fr" }, gap: 3 }}>
-          <SectionCard title="Languages Used">
-            {loading ? (
-              <Stack spacing={1.5}>
-                {[0, 1, 2].map((i) => (
-                  <Skeleton key={i} height={28} />
-                ))}
-              </Stack>
-            ) : languages.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
-                No submissions yet
-              </Typography>
-            ) : (
-              <Stack spacing={2}>
-                {languages.map((l) => {
-                  const pct = Math.round((Number(l.count) / totalLangSubs) * 100);
-                  return (
-                    <ProgressRow key={l.language} label={l.language} detail={`${l.count} subs · ${pct}%`} pct={pct} color="primary" />
-                  );
-                })}
-              </Stack>
-            )}
-          </SectionCard>
-
-          <SectionCard title="Topic Mastery">
-            {loading ? (
-              <Stack spacing={1.5}>
-                {[0, 1, 2].map((i) => (
-                  <Skeleton key={i} height={28} />
-                ))}
-              </Stack>
-            ) : topTopics.length === 0 ? (
-              <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
-                No topics solved yet
-              </Typography>
-            ) : (
-              <Stack spacing={2}>
-                {topTopics.map((t) => (
-                  <ProgressRow
-                    key={t.topic}
-                    label={t.topic}
-                    detail={`${t.mastery}%`}
-                    pct={t.mastery}
-                    color={t.mastery >= 80 ? "success" : t.mastery >= 40 ? "primary" : "warning"}
-                  />
-                ))}
-              </Stack>
-            )}
-          </SectionCard>
-        </Box>
-
-        {/* Badges */}
-        {badges.length > 0 && (
-          <SectionCard
-            title="Badges"
-            icon={<EmojiEventsOutlinedIcon sx={{ color: "warning.main", fontSize: 20 }} />}
-            action={
-              <Typography variant="caption" color="text.secondary">
-                {earnedBadges}/{badges.length} earned
-              </Typography>
-            }
-          >
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, 1fr)", lg: "repeat(5, 1fr)" }, gap: 1.5 }}>
-              {badges.map((b) => (
-                <Tooltip key={b.key} title={b.earned ? b.desc : `${b.desc} — ${b.cur}/${b.target}`} arrow>
-                  <Box
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      textAlign: "center",
-                      p: 1.5,
-                      borderRadius: 2,
-                      border: "1px solid",
-                      borderColor: b.earned ? "warning.main" : "outlineVariant",
-                      bgcolor: b.earned ? "warningContainer" : "transparent",
-                      opacity: b.earned ? 1 : 0.6,
+                    autoFocus
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") handleNameSave();
+                      if (e.key === "Escape") setEditingName(false);
                     }}
-                  >
-                    <Box sx={{ fontSize: 26, mb: 0.5, filter: b.earned ? "none" : "grayscale(1)" }} aria-hidden>
-                      {b.icon}
-                    </Box>
-                    <Typography variant="caption" fontWeight={600} sx={{ lineHeight: 1.2 }}>
-                      {b.label}
-                    </Typography>
-                    {!b.earned && (
-                      <LinearProgress
-                        variant="determinate"
-                        value={b.progress}
-                        color="warning"
-                        sx={{ width: "100%", height: 4, borderRadius: 2, mt: 1 }}
-                      />
-                    )}
-                  </Box>
-                </Tooltip>
-              ))}
+                  />
+                  <IconButton size="small" color="primary" onClick={handleNameSave} disabled={nameLoading} aria-label="Save name">
+                    <CheckIcon fontSize="small" />
+                  </IconButton>
+                  <IconButton size="small" onClick={() => setEditingName(false)} aria-label="Cancel">
+                    <CloseIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              ) : (
+                <Stack direction="row" spacing={0.5} alignItems="center">
+                  <Typography variant="h5" fontWeight={700}>
+                    {user?.name || "Student"}
+                  </Typography>
+                  <IconButton size="small" onClick={() => setEditingName(true)} aria-label="Edit name">
+                    <EditOutlinedIcon fontSize="small" />
+                  </IconButton>
+                </Stack>
+              )}
+              {nameMsg && (
+                <Typography variant="caption" color={nameMsg.ok ? "success.main" : "error.main"}>
+                  {nameMsg.text}
+                </Typography>
+              )}
+              <Typography variant="body2" color="text.secondary">
+                {user?.email || ""}
+              </Typography>
+              <Stack direction="row" spacing={1} alignItems="center" sx={{ mt: 1 }}>
+                <Chip
+                  label={user?.role || "student"}
+                  size="small"
+                  sx={{ textTransform: "capitalize", bgcolor: "secondaryContainer", color: "onSecondaryContainer", fontWeight: 600 }}
+                />
+                {!loading && <RatingBadge rating={stats.rating} />}
+              </Stack>
             </Box>
-          </SectionCard>
-        )}
+          </Stack>
+        </CardContent>
+      </Card>
 
-        {/* Contest Rating history */}
-        <SectionCard
-          title="Contest Rating"
-          icon={<EmojiEventsOutlinedIcon sx={{ color: "info.main", fontSize: 20 }} />}
-          action={<RatingBadge rating={stats.rating} />}
-        >
-          {ratingHistory.length === 0 ? (
-            <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
-              No rated contests yet. Compete in a contest to earn a rating.
-            </Typography>
-          ) : (
-            <Stack spacing={1}>
-              {ratingHistory
-                .slice()
-                .reverse()
-                .map((h) => (
-                  <Stack
-                    key={h.id}
-                    direction="row"
-                    spacing={2}
-                    alignItems="center"
-                    sx={{ py: 1, px: 1.5, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant" }}
-                  >
-                    <Typography variant="body2" noWrap sx={{ flex: 1 }}>
-                      {h.contest_title || "Contest"}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      Rank #{h.rank}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace" }}>
-                      {h.old_rating}→{h.new_rating}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      fontWeight={700}
-                      sx={{ fontFamily: "ui-monospace, monospace", width: 48, textAlign: "right", color: h.delta >= 0 ? "success.main" : "error.main" }}
-                    >
-                      {h.delta >= 0 ? "+" : ""}
-                      {h.delta}
-                    </Typography>
+      {/* Tabs */}
+      <Tabs
+        value={tab}
+        onChange={(_, v: TabKey) => changeTab(v)}
+        variant="scrollable"
+        scrollButtons="auto"
+        allowScrollButtonsMobile
+        sx={{ mb: 3, borderBottom: "1px solid", borderColor: "outlineVariant", minHeight: 48 }}
+      >
+        <Tab value="overview" icon={<PersonOutlineIcon fontSize="small" />} iconPosition="start" label="Overview" sx={{ minHeight: 48, textTransform: "none" }} />
+        <Tab value="submissions" icon={<HistoryOutlinedIcon fontSize="small" />} iconPosition="start" label="Submissions" sx={{ minHeight: 48, textTransform: "none" }} />
+        <Tab value="coding-profiles" icon={<HubOutlinedIcon fontSize="small" />} iconPosition="start" label="Coding Profiles" sx={{ minHeight: 48, textTransform: "none" }} />
+        <Tab value="account" icon={<LockOutlinedIcon fontSize="small" />} iconPosition="start" label="Account" sx={{ minHeight: 48, textTransform: "none" }} />
+      </Tabs>
+
+      {/* ── Overview ── */}
+      {tab === "overview" && (
+        <Stack spacing={3}>
+          <Stack direction="row" justifyContent="flex-end">
+            <SegmentedButtons<StatPeriod>
+              value={period}
+              onChange={setPeriod}
+              segments={PERIODS}
+              ariaLabel="Stats time period"
+            />
+          </Stack>
+
+          <Reveal>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2 }}>
+              <StatCard icon={<CodeOutlinedIcon />} label="Problems Solved" value={loading ? "—" : stats.problemsSolved} accent="primary" />
+              <StatCard icon={<LocalFireDepartmentOutlinedIcon />} label="Day Streak" value={loading ? "—" : stats.streak} accent="warning" />
+              <StatCard icon={<EmojiEventsOutlinedIcon />} label="Global Rank" value={loading ? "—" : stats.rank > 0 ? `#${stats.rank}` : "—"} accent="tertiary" />
+              <StatCard icon={<TrackChangesOutlinedIcon />} label="AC Rate" value={loading ? "—" : `${stats.acRate}%`} accent="success" />
+            </Box>
+          </Reveal>
+
+          {/* Submission breakdown (period-filtered) */}
+          <SectionCard title="Submission Breakdown">
+            {vTotal === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+                No submissions in this period.
+              </Typography>
+            ) : (
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3, alignItems: "center" }}>
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 2 }}>
+                  <StatCard icon={<CancelOutlinedIcon />} label="Wrong Answers" value={vWrong} accent="error" />
+                  <StatCard icon={<BugReportOutlinedIcon />} label="Execution Failed" value={vExec} accent="warning" />
+                  <StatCard icon={<CodeOffOutlinedIcon />} label="Compilation Errors" value={vCompile} accent="tertiary" />
+                  <StatCard icon={<TrackChangesOutlinedIcon />} label="Total" value={vTotal} accent="primary" />
+                </Box>
+                <Box>
+                  <Box sx={{ height: 200 }}>
+                    <ResponsivePie
+                      data={verdictPie.map((s) => ({ id: s.id, label: s.label, value: s.value, color: s.color }))}
+                      margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                      innerRadius={0.6}
+                      padAngle={1.5}
+                      cornerRadius={4}
+                      colors={{ datum: "data.color" }}
+                      theme={nivoTheme}
+                      borderWidth={0}
+                      enableArcLinkLabels={false}
+                      arcLabelsSkipAngle={16}
+                    />
+                  </Box>
+                  <Stack direction="row" flexWrap="wrap" useFlexGap spacing={1.5} justifyContent="center" sx={{ mt: 1 }}>
+                    {verdictPie.map((s) => (
+                      <Stack key={s.id} direction="row" spacing={0.5} alignItems="center">
+                        <Box sx={{ width: 10, height: 10, borderRadius: "50%", bgcolor: s.color }} />
+                        <Typography variant="caption" color="text.secondary">
+                          {s.label} ({s.value})
+                        </Typography>
+                      </Stack>
+                    ))}
                   </Stack>
-                ))}
-            </Stack>
-          )}
-        </SectionCard>
+                </Box>
+              </Box>
+            )}
+          </SectionCard>
 
-        {/* Change Password */}
-        <SectionCard title="Change Password" icon={<LockOutlinedIcon sx={{ color: "text.secondary", fontSize: 20 }} />}>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 2 }}>
-            <TextField
-              type="password"
-              label="Current Password"
-              size="small"
-              value={pwForm.current}
-              onChange={(e) => setPwForm((p) => ({ ...p, current: e.target.value }))}
-              autoComplete="current-password"
-            />
-            <TextField
-              type="password"
-              label="New Password"
-              size="small"
-              value={pwForm.next}
-              onChange={(e) => setPwForm((p) => ({ ...p, next: e.target.value }))}
-              helperText="Min 6 characters"
-              autoComplete="new-password"
-            />
-            <TextField
-              type="password"
-              label="Confirm New"
-              size="small"
-              value={pwForm.confirm}
-              onChange={(e) => setPwForm((p) => ({ ...p, confirm: e.target.value }))}
-              autoComplete="new-password"
-            />
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "1fr 1fr" }, gap: 3 }}>
+            <SectionCard title="Languages Used">
+              {loading ? (
+                <Stack spacing={1.5}>
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} height={28} />
+                  ))}
+                </Stack>
+              ) : languages.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+                  No submissions yet
+                </Typography>
+              ) : (
+                <Stack spacing={2}>
+                  {languages.map((l) => {
+                    const pct = Math.round((Number(l.count) / totalLangSubs) * 100);
+                    return (
+                      <ProgressRow key={l.language} label={l.language} detail={`${l.count} subs · ${pct}%`} pct={pct} color="primary" />
+                    );
+                  })}
+                </Stack>
+              )}
+            </SectionCard>
+
+            <SectionCard title="Topic Mastery">
+              {loading ? (
+                <Stack spacing={1.5}>
+                  {[0, 1, 2].map((i) => (
+                    <Skeleton key={i} height={28} />
+                  ))}
+                </Stack>
+              ) : topTopics.length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+                  No topics solved yet
+                </Typography>
+              ) : (
+                <Stack spacing={2}>
+                  {topTopics.map((t) => (
+                    <ProgressRow
+                      key={t.topic}
+                      label={t.topic}
+                      detail={`${t.mastery}%`}
+                      pct={t.mastery}
+                      color={t.mastery >= 80 ? "success" : t.mastery >= 40 ? "primary" : "warning"}
+                    />
+                  ))}
+                </Stack>
+              )}
+            </SectionCard>
           </Box>
-          {pwMsg && (
-            <Alert severity={pwMsg.ok ? "success" : "error"} sx={{ mt: 2 }}>
-              {pwMsg.text}
-            </Alert>
-          )}
-          <Button variant="contained" onClick={handlePasswordChange} disabled={pwLoading} sx={{ mt: 2 }}>
-            {pwLoading ? "Updating…" : "Update Password"}
-          </Button>
-        </SectionCard>
 
-        {/* 2FA */}
-        <SectionCard title="Two-Factor Authentication" icon={<LockOutlinedIcon sx={{ color: "text.secondary", fontSize: 20 }} />}>
-          <Divider sx={{ mb: 2, borderColor: "outlineVariant" }} />
-          <TwoFactorSetup />
-        </SectionCard>
-      </Stack>
+          {badges.length > 0 && (
+            <SectionCard
+              title="Badges"
+              icon={<EmojiEventsOutlinedIcon sx={{ color: "warning.main", fontSize: 20 }} />}
+              action={
+                <Typography variant="caption" color="text.secondary">
+                  {earnedBadges}/{badges.length} earned
+                </Typography>
+              }
+            >
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, 1fr)", lg: "repeat(5, 1fr)" }, gap: 1.5 }}>
+                {badges.map((b) => (
+                  <Tooltip key={b.key} title={b.earned ? b.desc : `${b.desc} — ${b.cur}/${b.target}`} arrow>
+                    <Box
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        textAlign: "center",
+                        p: 1.5,
+                        borderRadius: 2,
+                        border: "1px solid",
+                        borderColor: b.earned ? "warning.main" : "outlineVariant",
+                        bgcolor: b.earned ? "warningContainer" : "transparent",
+                        opacity: b.earned ? 1 : 0.6,
+                      }}
+                    >
+                      <Box sx={{ fontSize: 26, mb: 0.5, filter: b.earned ? "none" : "grayscale(1)" }} aria-hidden>
+                        {b.icon}
+                      </Box>
+                      <Typography variant="caption" fontWeight={600} sx={{ lineHeight: 1.2 }}>
+                        {b.label}
+                      </Typography>
+                      {!b.earned && (
+                        <LinearProgress
+                          variant="determinate"
+                          value={b.progress}
+                          color="warning"
+                          sx={{ width: "100%", height: 4, borderRadius: 2, mt: 1 }}
+                        />
+                      )}
+                    </Box>
+                  </Tooltip>
+                ))}
+              </Box>
+            </SectionCard>
+          )}
+
+          <SectionCard
+            title="Contest Rating"
+            icon={<EmojiEventsOutlinedIcon sx={{ color: "info.main", fontSize: 20 }} />}
+            action={<RatingBadge rating={stats.rating} />}
+          >
+            {ratingHistory.length === 0 ? (
+              <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+                No rated contests yet. Compete in a contest to earn a rating.
+              </Typography>
+            ) : (
+              <Stack spacing={1}>
+                {ratingHistory
+                  .slice()
+                  .reverse()
+                  .map((h) => (
+                    <Stack
+                      key={h.id}
+                      direction="row"
+                      spacing={2}
+                      alignItems="center"
+                      sx={{ py: 1, px: 1.5, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant" }}
+                    >
+                      <Typography variant="body2" noWrap sx={{ flex: 1 }}>
+                        {h.contest_title || "Contest"}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        Rank #{h.rank}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace" }}>
+                        {h.old_rating}→{h.new_rating}
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        fontWeight={700}
+                        sx={{ fontFamily: "ui-monospace, monospace", width: 48, textAlign: "right", color: h.delta >= 0 ? "success.main" : "error.main" }}
+                      >
+                        {h.delta >= 0 ? "+" : ""}
+                        {h.delta}
+                      </Typography>
+                    </Stack>
+                  ))}
+              </Stack>
+            )}
+          </SectionCard>
+        </Stack>
+      )}
+
+      {/* ── Submissions ── */}
+      {tab === "submissions" && <ProfileSubmissions />}
+
+      {/* ── Coding Profiles ── */}
+      {tab === "coding-profiles" && <ProfileCodingProfiles />}
+
+      {/* ── Account ── */}
+      {tab === "account" && (
+        <Stack spacing={3}>
+          <SectionCard title="Change Password" icon={<LockOutlinedIcon sx={{ color: "text.secondary", fontSize: 20 }} />}>
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "repeat(3, 1fr)" }, gap: 2 }}>
+              <TextField
+                type="password"
+                label="Current Password"
+                size="small"
+                value={pwForm.current}
+                onChange={(e) => setPwForm((p) => ({ ...p, current: e.target.value }))}
+                autoComplete="current-password"
+              />
+              <TextField
+                type="password"
+                label="New Password"
+                size="small"
+                value={pwForm.next}
+                onChange={(e) => setPwForm((p) => ({ ...p, next: e.target.value }))}
+                helperText="Min 6 characters"
+                autoComplete="new-password"
+              />
+              <TextField
+                type="password"
+                label="Confirm New"
+                size="small"
+                value={pwForm.confirm}
+                onChange={(e) => setPwForm((p) => ({ ...p, confirm: e.target.value }))}
+                autoComplete="new-password"
+              />
+            </Box>
+            {pwMsg && (
+              <Alert severity={pwMsg.ok ? "success" : "error"} sx={{ mt: 2 }}>
+                {pwMsg.text}
+              </Alert>
+            )}
+            <Button variant="contained" onClick={handlePasswordChange} disabled={pwLoading} sx={{ mt: 2 }}>
+              {pwLoading ? "Updating…" : "Update Password"}
+            </Button>
+          </SectionCard>
+
+          <SectionCard title="Two-Factor Authentication" icon={<LockOutlinedIcon sx={{ color: "text.secondary", fontSize: 20 }} />}>
+            <Divider sx={{ mb: 2, borderColor: "outlineVariant" }} />
+            <TwoFactorSetup />
+          </SectionCard>
+        </Stack>
+      )}
     </Box>
+  );
+}
+
+export default function ProfilePage() {
+  return (
+    <React.Suspense fallback={null}>
+      <ProfileInner />
+    </React.Suspense>
   );
 }

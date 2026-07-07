@@ -2,6 +2,12 @@ const db = require('../config/db');
 const { Parser } = require('json2csv');
 const { getGeminiClient } = require('./ai.controller');
 const { logAction } = require('../middleware/audit');
+const { scopeDept, canSeeDepartment } = require('../middleware/role.middleware');
+const { cached } = require('../utils/cache');
+
+// Whitelisted cohort dimensions → real column names (guards against SQL injection
+// when the dimension is interpolated into GROUP BY / WHERE).
+const COHORT_DIMS = { department: 'department', year: 'year', section: 'section' };
 
 exports.getDashboardData = async (req, res) => {
   try {
@@ -872,6 +878,111 @@ exports.getClassAnalytics = async (req, res) => {
 };
 
 // Per-student deep-dive: learning curve, topic mastery radar, verdict mix, totals.
+// ── Hierarchical drill-down analytics (class → cohort → student) ───────────────
+
+// Level 1: cohort aggregates for the class bar chart. Department-scoped (admin = all),
+// cached briefly. `?dimension=department|year|section`.
+exports.getCohorts = async (req, res) => {
+  try {
+    const dim = COHORT_DIMS[req.query.dimension] || 'department';
+    const dept = scopeDept(req); // null = admin (all); else restrict to own dept
+    const params = [];
+    let where = `u.role = 'student'`;
+    if (dept !== null) { params.push(dept); where += ` AND u.department = $${params.length}`; }
+
+    const key = `analytics:cohorts:${dept ?? 'all'}:${dim}`;
+    const data = await cached(key, 120, async () => {
+      const { rows } = await db.query(
+        `SELECT cohort,
+                COUNT(*)::int                                          AS students,
+                ROUND(AVG(solved))::int                                AS avg_solved,
+                CASE WHEN SUM(subs) > 0
+                     THEN ROUND(100.0 * SUM(ac) / SUM(subs))::int ELSE 0 END AS ac_rate
+           FROM (
+             SELECT u.id,
+                    COALESCE(u.${dim}::text, 'Unassigned')                    AS cohort,
+                    COUNT(DISTINCT CASE WHEN s.verdict='Accepted' THEN s.problem_id END) AS solved,
+                    COUNT(s.id)                                               AS subs,
+                    SUM(CASE WHEN s.verdict='Accepted' THEN 1 ELSE 0 END)     AS ac
+               FROM users u
+               LEFT JOIN code_submissions s ON s.user_id = u.id
+              WHERE ${where}
+              GROUP BY u.id, cohort
+           ) t
+          GROUP BY cohort
+          ORDER BY cohort ASC`,
+        params,
+      );
+      return rows;
+    });
+
+    res.json({ success: true, data, dimension: dim });
+  } catch (error) {
+    console.error('getCohorts error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load cohorts' });
+  }
+};
+
+// Level 2: ranked students within one cohort, paginated. Department-scoped.
+// `?dimension=&value=&page=&limit=`.
+exports.getCohortStudents = async (req, res) => {
+  try {
+    const dim = COHORT_DIMS[req.query.dimension] || 'department';
+    const value = String(req.query.value ?? 'Unassigned');
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
+    const offset = (page - 1) * limit;
+    const dept = scopeDept(req);
+
+    // A scoped faculty/HOD may only inspect their own department's cohorts.
+    if (dim === 'department' && dept !== null && value !== dept) {
+      return res.status(403).json({ success: false, error: 'Outside your department scope.' });
+    }
+
+    const params = [value];
+    let where = `u.role = 'student' AND COALESCE(u.${dim}::text, 'Unassigned') = $1`;
+    if (dept !== null) { params.push(dept); where += ` AND u.department = $${params.length}`; }
+
+    const countRes = await db.query(`SELECT COUNT(*)::int AS n FROM users u WHERE ${where}`, params);
+    const total = countRes.rows[0]?.n || 0;
+
+    params.push(limit, offset);
+    const { rows } = await db.query(
+      `SELECT u.id, u.name, u.roll_no, u.department, u.section, u.year,
+              COUNT(DISTINCT CASE WHEN s.verdict='Accepted' THEN s.problem_id END)::int AS solved,
+              COUNT(s.id)::int                                                          AS subs,
+              SUM(CASE WHEN s.verdict='Accepted' THEN 1 ELSE 0 END)::int                AS ac
+         FROM users u
+         LEFT JOIN code_submissions s ON s.user_id = u.id
+        WHERE ${where}
+        GROUP BY u.id
+        ORDER BY solved DESC, u.name ASC
+        LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params,
+    );
+
+    res.json({
+      success: true,
+      total,
+      page,
+      limit,
+      data: rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        rollNo: r.roll_no,
+        department: r.department,
+        section: r.section,
+        year: r.year,
+        solved: r.solved,
+        acRate: r.subs > 0 ? Math.round((r.ac / r.subs) * 100) : 0,
+      })),
+    });
+  } catch (error) {
+    console.error('getCohortStudents error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load cohort students' });
+  }
+};
+
 exports.getStudentDetail = async (req, res) => {
   try {
     const { id } = req.params;
@@ -882,6 +993,10 @@ exports.getStudentDetail = async (req, res) => {
       [id]
     );
     if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+    // Strict department isolation: HOD/faculty may only drill into their own dept.
+    if (!canSeeDepartment(req, student.department)) {
+      return res.status(403).json({ success: false, error: 'Outside your department scope.' });
+    }
 
     // Learning curve: cumulative distinct problems solved over time
     // (keyed by the date each problem was *first* accepted).

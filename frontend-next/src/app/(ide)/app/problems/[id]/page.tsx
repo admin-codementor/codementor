@@ -25,25 +25,11 @@ import Avatar from "@mui/material/Avatar";
 import Menu from "@mui/material/Menu";
 import Drawer from "@mui/material/Drawer";
 import ListItemIcon from "@mui/material/ListItemIcon";
+import { SparkLineChart } from "@mui/x-charts/SparkLineChart";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import CodeIcon from "@mui/icons-material/Code";
-import ChevronLeftIcon from "@mui/icons-material/ChevronLeft";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
-import PlayArrowOutlinedIcon from "@mui/icons-material/PlayArrowOutlined";
-import UploadOutlinedIcon from "@mui/icons-material/UploadOutlined";
-import RestartAltOutlinedIcon from "@mui/icons-material/RestartAltOutlined";
-import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import ExpandLessIcon from "@mui/icons-material/ExpandLess";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
-import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
-import LogoutIcon from "@mui/icons-material/Logout";
-import PersonOutlineIcon from "@mui/icons-material/PersonOutline";
-import SmartToyOutlinedIcon from "@mui/icons-material/SmartToyOutlined";
+import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import Alert from "@mui/material/Alert";
-import ShieldOutlinedIcon from "@mui/icons-material/ShieldOutlined";
-import FullscreenIcon from "@mui/icons-material/Fullscreen";
 import api from "@/lib/api";
 import { createSocket, joinRoom, leaveRoom } from "@/lib/socket";
 import { useProctor } from "@/hooks/useProctor";
@@ -53,6 +39,8 @@ import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
 import { ErrorState } from "@/components/ui/States";
 import { AITutorSidebar, type FailingTest } from "@/components/problem/AITutorSidebar";
+import { TimerWidget } from "@/components/problem/TimerWidget";
+import { darkScheme, lightScheme } from "@/theme/tokens";
 import type {
   ProblemDetail,
   AdjacentProblems,
@@ -135,6 +123,33 @@ const MonacoEditor = dynamic(() => import("@monaco-editor/react"), {
   ),
 });
 
+// VS Code-authentic editor themes: inherit the full Dark+/Light+ token palette from
+// Monaco's built-in `vs-dark`/`vs` (so keywords/strings/types/etc. are properly
+// coloured — the previous `theme="light"` was an invalid name and rendered as plain
+// text) and only recolour the editor surface to match our M3 tokens.
+function defineEditorThemes(monaco: MonacoNamespace) {
+  monaco.editor.defineTheme("codementor-dark", {
+    base: "vs-dark",
+    inherit: true,
+    rules: [],
+    colors: {
+      "editor.background": darkScheme.surfaceContainerLowest,
+      "editorGutter.background": darkScheme.surfaceContainerLowest,
+      "editor.lineHighlightBackground": darkScheme.surfaceContainerLow,
+    },
+  });
+  monaco.editor.defineTheme("codementor-light", {
+    base: "vs",
+    inherit: true,
+    rules: [],
+    colors: {
+      "editor.background": lightScheme.surfaceContainerLowest,
+      "editorGutter.background": lightScheme.surfaceContainerLowest,
+      "editor.lineHighlightBackground": lightScheme.surfaceContainerLow,
+    },
+  });
+}
+
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const LANGUAGES = [
@@ -148,15 +163,6 @@ type LangId = (typeof LANGUAGES)[number]["id"];
 
 const LS_LANG   = "cm:lang";
 const lsCode    = (pid: string, lid: number) => `cm:code:${pid}:${lid}`;
-const lsTimer   = (pid: string) => `cm:timer:${pid}`;
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function formatTimer(secs: number): string {
-  const m = Math.floor(secs / 60).toString().padStart(2, "0");
-  const s = (secs % 60).toString().padStart(2, "0");
-  return `${m}:${s}`;
-}
 
 function formatMs(secs: number): string {
   return secs < 1 ? `${Math.round(secs * 1000)} ms` : `${secs.toFixed(2)} s`;
@@ -294,6 +300,78 @@ function TestCaseRow({
   );
 }
 
+// ── Results summary: timing + shown/hidden pass counts (CodeTantra-style) ──────
+
+function SummaryCard({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <Box sx={{ px: 1.5, py: 1, border: "1px solid", borderColor: "outlineVariant", borderRadius: 1.5, minWidth: 96 }}>
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", lineHeight: 1.3 }}>
+        {label}
+      </Typography>
+      {children}
+    </Box>
+  );
+}
+
+function ResultsSummary({ result }: { result: VerdictResult }) {
+  const cases = result.test_case_results;
+  if (cases.length === 0) return null;
+  const timesMs = cases.map((c) => Math.max(0, Math.round(c.time * 1000)));
+  const avg = timesMs.length ? Math.round(timesMs.reduce((a, b) => a + b, 0) / timesMs.length) : 0;
+  const max = timesMs.length ? Math.max(...timesMs) : 0;
+  const shown = cases.filter((c) => c.is_public);
+  const hidden = cases.filter((c) => !c.is_public);
+  const shownPassed = shown.filter((c) => c.passed).length;
+  const hiddenPassed = hidden.filter((c) => c.passed).length;
+
+  const countChip = (passed: number, total: number, label: string) => {
+    const all = total > 0 && passed === total;
+    return (
+      <Box
+        sx={{
+          px: 1.5,
+          py: 1,
+          borderRadius: 1.5,
+          display: "flex",
+          alignItems: "center",
+          gap: 1,
+          bgcolor: all ? "successContainer" : "errorContainer",
+          color: all ? "onSuccessContainer" : "onErrorContainer",
+        }}
+      >
+        {all ? <CheckCircleOutlineIcon fontSize="small" /> : <CancelOutlinedIcon fontSize="small" />}
+        <Typography variant="body2" fontWeight={600}>
+          {passed} of {total} {label} passed
+        </Typography>
+      </Box>
+    );
+  };
+
+  return (
+    <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+      <SummaryCard label="Average time">
+        <Typography variant="subtitle2" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace" }}>
+          {avg} ms
+        </Typography>
+      </SummaryCard>
+      <SummaryCard label="Maximum time">
+        <Stack direction="row" spacing={1} alignItems="center">
+          <Typography variant="subtitle2" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace" }}>
+            {max} ms
+          </Typography>
+          {timesMs.length > 1 && (
+            <Box sx={{ width: 56, height: 24 }} aria-hidden>
+              <SparkLineChart data={timesMs} height={24} width={56} area colors={["var(--mui-palette-primary-main)"]} />
+            </Box>
+          )}
+        </Stack>
+      </SummaryCard>
+      {shown.length > 0 && countChip(shownPassed, shown.length, "shown")}
+      {hidden.length > 0 && countChip(hiddenPassed, hidden.length, "hidden")}
+    </Stack>
+  );
+}
+
 function TestIOBlock({
   label,
   value,
@@ -336,22 +414,22 @@ function TestIOBlock({
 
 function IDEHeader({
   problem,
+  problemId,
   adjacent,
-  adjacent2,
   submitting,
   running,
-  timerSecs,
+  solved,
   onRun,
   onSubmit,
   showAI,
   onToggleAI,
 }: {
   problem: ProblemDetail | null;
+  problemId: string;
   adjacent: AdjacentProblems | null;
-  adjacent2?: AdjacentProblems | null;
   submitting: boolean;
   running: boolean;
-  timerSecs: number;
+  solved: boolean;
   onRun: () => void;
   onSubmit: () => void;
   showAI: boolean;
@@ -433,13 +511,10 @@ function IDEHeader({
         {problem?.title ?? "Loading…"}
       </Typography>
 
-      {/* Timer */}
-      <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mr: 0.5 }}>
-        <TimerOutlinedIcon sx={{ fontSize: 16, color: "text.secondary" }} />
-        <Typography variant="caption" fontFamily="monospace" color="text.secondary">
-          {formatTimer(timerSecs)}
-        </Typography>
-      </Stack>
+      {/* Timer (session + Pomodoro) */}
+      <Box sx={{ mr: 0.5 }}>
+        <TimerWidget problemId={problemId} solved={solved} />
+      </Box>
 
       {/* Run */}
       <Button
@@ -519,6 +594,52 @@ function historyLangName(langId: number): string {
   return LANGUAGES.find((l) => l.id === langId)?.name ?? `Language ${langId}`;
 }
 
+// ── Example input/output block ────────────────────────────────────────────────
+
+/** A labelled monospace pane for an example's Input/Output, with an optional copy button. */
+function ExampleIO({ label, value, copyable = false }: { label: string; value: string; copyable?: boolean }) {
+  const [copied, setCopied] = React.useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(value).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    });
+  };
+  return (
+    <Box sx={{ minWidth: 0 }}>
+      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
+        <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
+          {label}
+        </Typography>
+        {copyable && (
+          <Tooltip title={copied ? "Copied" : "Copy"}>
+            <IconButton size="small" onClick={copy} aria-label={`Copy ${label.toLowerCase()}`} sx={{ p: 0.25 }}>
+              {copied ? <CheckIcon sx={{ fontSize: 14, color: "success.main" }} /> : <ContentCopyOutlinedIcon sx={{ fontSize: 14 }} />}
+            </IconButton>
+          </Tooltip>
+        )}
+      </Stack>
+      <Box
+        component="pre"
+        sx={{
+          m: 0,
+          p: 1.25,
+          bgcolor: "surfaceContainerHighest",
+          borderRadius: 1,
+          fontFamily: "ui-monospace, monospace",
+          fontSize: "0.8rem",
+          lineHeight: 1.5,
+          overflow: "auto",
+          whiteSpace: "pre-wrap",
+          wordBreak: "break-word",
+        }}
+      >
+        {value}
+      </Box>
+    </Box>
+  );
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type OutputTab = "testcases" | "custom";
@@ -583,26 +704,7 @@ export default function ProblemSolvingPage() {
   const [solved, setSolved] = React.useState(false);
   const [mobilePane, setMobilePane] = React.useState<"problem" | "code">("problem");
 
-  // ── Timer ──
-  const [timerSecs, setTimerSecs] = React.useState(() => {
-    if (typeof window === "undefined") return 0;
-    return parseInt(localStorage.getItem(lsTimer(problemId)) ?? "0", 10);
-  });
-  const timerRef = React.useRef<ReturnType<typeof setInterval> | null>(null);
-
-  React.useEffect(() => {
-    if (solved) return; // pause once the problem is accepted
-    timerRef.current = setInterval(() => {
-      setTimerSecs((s) => {
-        const next = s + 1;
-        if (next % 30 === 0) localStorage.setItem(lsTimer(problemId), String(next));
-        return next;
-      });
-    }, 1000);
-    return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
-    };
-  }, [problemId, solved]);
+  // Timer (session + Pomodoro) lives in <TimerWidget>, keyed by problemId + solved.
 
   // ── Load problem + adjacent ──
   React.useEffect(() => {
@@ -614,7 +716,6 @@ export default function ProblemSolvingPage() {
     setSolved(false);
     setVerdict(null);
     setMobilePane("problem");
-    setTimerSecs(parseInt(localStorage.getItem(lsTimer(problemId)) ?? "0", 10));
     Promise.allSettled([
       api.get<{ success: boolean; data: ProblemDetail }>(`/api/problems/${problemId}`),
       api.get<{ success: boolean; data: AdjacentProblems }>(`/api/problems/${problemId}/adjacent`),
@@ -946,10 +1047,11 @@ export default function ProblemSolvingPage() {
       {/* ── Header ── */}
       <IDEHeader
         problem={problem}
+        problemId={problemId}
         adjacent={adjacent}
         submitting={submitting}
         running={running}
-        timerSecs={timerSecs}
+        solved={solved}
         onRun={() => { setOutputTab("custom"); setOutputOpen(true); execute(false); }}
         onSubmit={() => execute(true)}
         showAI={showAI}
@@ -962,7 +1064,7 @@ export default function ProblemSolvingPage() {
           value={mobilePane}
           onChange={(_, v: "problem" | "code") => setMobilePane(v)}
           variant="fullWidth"
-          sx={{ borderBottom: "1px solid", borderColor: "outlineVariant", flexShrink: 0, minHeight: 44 }}
+          sx={{ borderBottom: "1px solid", borderColor: "outlineVariant", bgcolor: "surface", flexShrink: 0, minHeight: 44 }}
         >
           <Tab value="problem" label="Problem" sx={{ minHeight: 44 }} />
           <Tab value="code" label="Code" sx={{ minHeight: 44 }} />
@@ -992,7 +1094,7 @@ export default function ProblemSolvingPage() {
           }}
         >
           {/* Tabs */}
-          <Box sx={{ borderBottom: "1px solid", borderColor: "outlineVariant", px: 1 }}>
+          <Box sx={{ borderBottom: "1px solid", borderColor: "outlineVariant", bgcolor: "surface", px: 1, flexShrink: 0 }}>
             <Tabs
               value={panelTab}
               onChange={handlePanelTab}
@@ -1044,35 +1146,41 @@ export default function ProblemSolvingPage() {
                         <Box
                           key={i}
                           sx={{
-                            bgcolor: "surfaceContainerLow",
-                            borderRadius: 2,
-                            p: 2,
                             border: "1px solid",
                             borderColor: "outlineVariant",
+                            borderRadius: 1.5,
+                            overflow: "hidden",
                           }}
                         >
-                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                            Example {i + 1}
-                          </Typography>
-                          <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 1 }}>
-                            <Box>
-                              <Typography variant="caption" color="text.secondary">Input</Typography>
-                              <Box component="pre" sx={{ m: 0, mt: 0.5, p: 1, bgcolor: "surfaceContainerHighest", borderRadius: 1, fontFamily: "monospace", fontSize: "0.8rem", overflow: "auto" }}>
-                                {ex.input}
-                              </Box>
-                            </Box>
-                            <Box>
-                              <Typography variant="caption" color="text.secondary">Output</Typography>
-                              <Box component="pre" sx={{ m: 0, mt: 0.5, p: 1, bgcolor: "surfaceContainerHighest", borderRadius: 1, fontFamily: "monospace", fontSize: "0.8rem", overflow: "auto" }}>
-                                {ex.output}
-                              </Box>
-                            </Box>
-                          </Box>
-                          {ex.explanation && (
-                            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1 }}>
-                              {ex.explanation}
+                          <Box
+                            sx={{
+                              px: 1.75,
+                              py: 0.875,
+                              bgcolor: "surfaceContainerHigh",
+                              borderBottom: "1px solid",
+                              borderColor: "outlineVariant",
+                            }}
+                          >
+                            <Typography variant="caption" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: "0.05em", color: "text.secondary" }}>
+                              Example {i + 1}
                             </Typography>
-                          )}
+                          </Box>
+                          <Stack spacing={1.5} sx={{ p: 1.75 }}>
+                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5 }}>
+                              <ExampleIO label="Input" value={ex.input} copyable />
+                              <ExampleIO label="Output" value={ex.output} />
+                            </Box>
+                            {ex.explanation && (
+                              <Box>
+                                <Typography variant="caption" fontWeight={600} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                                  Explanation
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.25 }}>
+                                  {ex.explanation}
+                                </Typography>
+                              </Box>
+                            )}
+                          </Stack>
                         </Box>
                       ))}
                     </Stack>
@@ -1197,7 +1305,8 @@ export default function ProblemSolvingPage() {
               language={lang.monaco}
               value={code}
               onChange={handleCodeChange}
-              theme={isDark ? "vs-dark" : "light"}
+              theme={isDark ? "codementor-dark" : "codementor-light"}
+              beforeMount={defineEditorThemes}
               options={{
                 fontSize,
                 minimap: { enabled: false },
@@ -1239,8 +1348,8 @@ export default function ProblemSolvingPage() {
                 onChange={(_, v) => setOutputTab(v as OutputTab)}
                 sx={{ flex: 1, minHeight: 40, "& .MuiTab-root": { minHeight: 40, py: 0, fontSize: "0.75rem" } }}
               >
-                <Tab label="Test Results" value="testcases" />
-                <Tab label="Custom Input" value="custom" />
+                <Tab label="Test cases" value="testcases" />
+                <Tab label="Terminal" value="custom" />
               </Tabs>
               <IconButton
                 size="small"
@@ -1299,11 +1408,14 @@ export default function ProblemSolvingPage() {
                       </Stack>
                     )}
                     {!submitting && !running && verdictResult && (
-                      <Stack spacing={1}>
-                        {verdictResult.test_case_results.map((r, i) => (
-                          <TestCaseRow key={i} index={i} result={r} />
-                        ))}
-                      </Stack>
+                      <Box>
+                        {!verdictResult.custom_run && <ResultsSummary result={verdictResult} />}
+                        <Stack spacing={1}>
+                          {verdictResult.test_case_results.map((r, i) => (
+                            <TestCaseRow key={i} index={i} result={r} />
+                          ))}
+                        </Stack>
+                      </Box>
                     )}
                     {!submitting && !running && !verdictResult && !verdict && (
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", py: 3 }}>
@@ -1387,6 +1499,63 @@ export default function ProblemSolvingPage() {
                 )}
               </Box>
             </Collapse>
+          </Box>
+
+          {/* Bottom action bar (Prev · Reset · Submit · Next) */}
+          <Box
+            sx={{
+              flexShrink: 0,
+              display: "flex",
+              alignItems: "center",
+              gap: 1,
+              px: 1.5,
+              height: 48,
+              borderTop: "1px solid",
+              borderColor: "outlineVariant",
+              bgcolor: "surface",
+            }}
+          >
+            <Button
+              {...(adjacent?.prev
+                ? { component: NextLink, href: `/app/problems/${adjacent.prev}` }
+                : { disabled: true })}
+              size="small"
+              variant="text"
+              startIcon={<ChevronLeftIcon />}
+              sx={{ color: "text.secondary" }}
+            >
+              Prev
+            </Button>
+            <Box sx={{ flex: 1 }} />
+            <Button
+              onClick={resetCode}
+              size="small"
+              variant="text"
+              startIcon={<RestartAltOutlinedIcon />}
+              sx={{ color: "text.secondary" }}
+            >
+              Reset
+            </Button>
+            <Button
+              onClick={() => execute(true)}
+              disabled={submitting || running}
+              size="small"
+              variant="contained"
+              startIcon={submitting ? <CircularProgress size={14} sx={{ color: "inherit" }} /> : <UploadOutlinedIcon />}
+            >
+              {submitting ? "Judging…" : "Submit"}
+            </Button>
+            <Button
+              {...(adjacent?.next
+                ? { component: NextLink, href: `/app/problems/${adjacent.next}` }
+                : { disabled: true })}
+              size="small"
+              variant="text"
+              endIcon={<ChevronRightIcon />}
+              sx={{ color: "text.secondary" }}
+            >
+              Next
+            </Button>
           </Box>
         </Box>
 

@@ -200,9 +200,9 @@ const updateTopicMastery = async (userId, problemId, isAccepted, hintUsed) => {
 const MAX_ATTEMPTS = 3;
 
 const judgeWorker = new Worker('submissions', async job => {
-  const { problem_id, source_code, language_id, user_id, custom_input, contest_id } = job.data;
+  const { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id } = job.data;
   try {
-    return await runJob(job, { problem_id, source_code, language_id, user_id, custom_input, contest_id });
+    return await runJob(job, { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id });
   } catch (err) {
     if (err.name === 'QueueFullError') {
       getIO()?.to(job.id).emit('judging_retry', {
@@ -214,7 +214,7 @@ const judgeWorker = new Worker('submissions', async job => {
   }
 }, { connection });
 
-async function runJob(job, { problem_id, source_code, language_id, user_id, custom_input, contest_id }) {
+async function runJob(job, { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id }) {
 
   console.log(`Processing Job ${job.id} for Problem ${problem_id}${custom_input ? ' [custom input]' : ''}`);
 
@@ -386,8 +386,8 @@ async function runJob(job, { problem_id, source_code, language_id, user_id, cust
 
   // Insert submission record — cap source_code before writing to DB
   const insertResult = await db.query(
-    `INSERT INTO code_submissions (user_id, problem_id, code, language, verdict, runtime, memory, score, test_results)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
+    `INSERT INTO code_submissions (user_id, problem_id, code, language, verdict, runtime, memory, score, test_results, assignment_id)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
     [
       user_id || null,
       problem_id,
@@ -398,6 +398,7 @@ async function runJob(job, { problem_id, source_code, language_id, user_id, cust
       maxMemory,
       finalScore,
       testResultsJson,
+      assignment_id || null,
     ]
   );
 

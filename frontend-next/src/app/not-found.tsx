@@ -7,9 +7,7 @@ import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
-import CodeIcon from "@mui/icons-material/Code";
-import HomeOutlinedIcon from "@mui/icons-material/HomeOutlined";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import { CodeIcon, HomeOutlinedIcon, ArrowBackIcon } from "@/components/ui/icons";
 
 export default function NotFound() {
   const router = useRouter();

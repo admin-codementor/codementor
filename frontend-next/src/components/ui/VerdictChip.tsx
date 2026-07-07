@@ -2,13 +2,7 @@
 
 import * as React from "react";
 import Chip, { type ChipProps } from "@mui/material/Chip";
-import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
-import CancelOutlinedIcon from "@mui/icons-material/CancelOutlined";
-import TimerOutlinedIcon from "@mui/icons-material/TimerOutlined";
-import MemoryOutlinedIcon from "@mui/icons-material/MemoryOutlined";
-import BugReportOutlinedIcon from "@mui/icons-material/BugReportOutlined";
-import CodeOffOutlinedIcon from "@mui/icons-material/CodeOffOutlined";
-import PendingOutlinedIcon from "@mui/icons-material/PendingOutlined";
+import { CheckCircleOutlineIcon, CancelOutlinedIcon, TimerOutlinedIcon, MemoryOutlinedIcon, BugReportOutlinedIcon, CodeOffOutlinedIcon, PendingOutlinedIcon } from "@/components/ui/icons";
 
 interface VerdictStyle {
   label: string;

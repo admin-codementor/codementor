@@ -10,7 +10,8 @@ const {
   updateProfile,
   getPlacementReadiness,
   getBadges,
-  getProblemSolutions
+  getProblemSolutions,
+  getStats
 } = require('../controllers/student.controller');
 const { protect } = require('../middleware/auth.middleware');
 
@@ -19,6 +20,7 @@ const router = express.Router();
 router.use(protect);
 
 router.get('/dashboard', getDashboardData);
+router.get('/stats', getStats);
 router.get('/assignments', getAssignments);
 router.get('/notifications', getNotifications);
 router.get('/recommendations', getRecommendations);

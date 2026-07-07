@@ -211,6 +211,31 @@ export const theme = createTheme({
     MuiIconButton: {
       styleOverrides: { root: { borderRadius: shape.full } },
     },
+    MuiCardActionArea: {
+      styleOverrides: {
+        root: { borderRadius: "inherit" },
+        // Let the parent card's own hover treatment carry the affordance; keep
+        // the action area's overlay for focus-visible only (subtle on hover).
+        focusHighlight: { borderRadius: "inherit" },
+      },
+    },
+    MuiListItemButton: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          transition: "background-color 150ms ease",
+          "&:hover": { backgroundColor: theme.vars.palette.surfaceContainerHigh },
+        }),
+      },
+    },
+    MuiTableRow: {
+      styleOverrides: {
+        root: ({ theme }) => ({
+          "&.MuiTableRow-hover:hover": {
+            backgroundColor: theme.vars.palette.surfaceContainer,
+          },
+        }),
+      },
+    },
     MuiChip: {
       styleOverrides: {
         root: { borderRadius: shape.small, fontWeight: 500 },

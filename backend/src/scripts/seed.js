@@ -239,6 +239,94 @@ const ALL_PROBLEMS = [...SEED_PROBLEMS, ...MORE_PROBLEMS.map(p => ({
   description: `Solve the problem: ${p.title}. Default description.`
 }))];
 
+// ── Course / module seed definitions ───────────────────────────────────────────
+// CDP 699 groups the seeded problems into topic modules by tag. "Advanced DSA for
+// Top Companies" is a company-oriented course; there are no company-tagged problems
+// yet, so a few modules get sample problems and the rest are intentional placeholders.
+
+const CDP_MODULES = [
+  { title: 'Basics', tags: ['math'] },
+  { title: 'Arrays', tags: ['arrays', 'prefix-sum'] },
+  { title: 'Strings', tags: ['strings'] },
+  { title: 'Hashing', tags: ['hash-table'] },
+  { title: 'Searching & Sorting', tags: ['two-pointers', 'sliding-window'] },
+  { title: 'Recursion & Backtracking', tags: ['backtracking'] },
+  { title: 'Dynamic Programming', tags: ['dp'] },
+  { title: 'Bit Manipulation', tags: ['bit-manipulation'] },
+  { title: 'Graphs', tags: ['dfs', 'graphs'] },
+  { title: 'Trees', tags: ['trees'] },
+];
+
+const COMPANY_MODULES = [
+  'TCS', 'Accenture', 'Wipro', 'Infosys', 'Cognizant',
+  'Capgemini', 'Microsoft', 'Amazon', 'Google', 'Adobe',
+];
+
+async function seedCourses(inserted) {
+  // Tag → problem ids
+  const byTag = new Map();
+  for (const p of inserted) {
+    for (const t of p.tags) {
+      if (!byTag.has(t)) byTag.set(t, []);
+      byTag.get(t).push(p.id);
+    }
+  }
+
+  // Reset course tables (cascades to modules + module_problems).
+  await pool.query('DELETE FROM courses');
+
+  const insertCourse = async (title, description, sortOrder, modules) => {
+    const c = await pool.query(
+      `INSERT INTO courses (title, description, sort_order) VALUES ($1, $2, $3) RETURNING id`,
+      [title, description, sortOrder]
+    );
+    const courseId = c.rows[0].id;
+    let mOrder = 0;
+    for (const mod of modules) {
+      const m = await pool.query(
+        `INSERT INTO course_modules (course_id, title, sort_order) VALUES ($1, $2, $3) RETURNING id`,
+        [courseId, mod.title, mOrder++]
+      );
+      const moduleId = m.rows[0].id;
+      const pids = mod.problemIds
+        ? mod.problemIds
+        : [...new Set((mod.tags || []).flatMap((t) => byTag.get(t) || []))];
+      let pOrder = 0;
+      for (const pid of pids) {
+        await pool.query(
+          `INSERT INTO module_problems (module_id, problem_id, sort_order) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
+          [moduleId, pid, pOrder++]
+        );
+      }
+    }
+    return courseId;
+  };
+
+  await insertCourse(
+    'CDP 699 – Career Placement Program – AIML – 2025',
+    'The Coding and Problem-Solving Series accommodates varying proficiency levels, offering challenges ranging from foundational to intermediate and advanced complexities.',
+    0,
+    CDP_MODULES
+  );
+
+  // Sample a handful of problems into the first few company modules so the course
+  // isn't empty; the remaining companies are placeholders until real sets are added.
+  const sample = inserted.slice(0, 4).map((p) => p.id);
+  const companyModuleDefs = COMPANY_MODULES.map((name, i) => ({
+    title: `${name} Programs`,
+    problemIds: i < 3 ? sample : [],
+  }));
+
+  await insertCourse(
+    'Advanced DSA for Top Companies',
+    'Company-focused problem sets curated for top-tier placement preparation across service and product companies.',
+    1,
+    companyModuleDefs
+  );
+
+  console.log(`✅ Seeded 2 courses (CDP 699 + Advanced DSA). Note: company modules are sample/placeholder until company-specific problems are added.`);
+}
+
 const seedDB = async () => {
   try {
     console.log('Seeding Database...');
@@ -248,12 +336,14 @@ const seedDB = async () => {
     await pool.query('DELETE FROM code_submissions');
     await pool.query('DELETE FROM problems');
 
+    const inserted = []; // { id, title, tags } — used to build course modules
     for (const problem of ALL_PROBLEMS) {
       const pRes = await pool.query(
         `INSERT INTO problems (title, description, difficulty, tags) VALUES ($1, $2, $3, $4) RETURNING id`,
         [problem.title, problem.description, problem.difficulty, problem.tags]
       );
       const pid = pRes.rows[0].id;
+      inserted.push({ id: pid, title: problem.title, tags: problem.tags || [] });
 
       for (const tc of problem.testCases) {
         await pool.query(
@@ -264,6 +354,9 @@ const seedDB = async () => {
     }
 
     console.log(`✅ Successfully seeded ${ALL_PROBLEMS.length} problems with test cases.`);
+
+    await seedCourses(inserted);
+
     process.exit(0);
   } catch (error) {
     console.error('❌ Seeding failed:', error);

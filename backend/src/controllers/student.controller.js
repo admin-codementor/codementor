@@ -406,6 +406,47 @@ exports.updateProfile = async (req, res) => {
   }
 };
 
+// @desc    Submission-quality stats for the profile dashboard (verdict + language
+//          breakdown), optionally filtered by time period.
+// @route   GET /api/student/stats?period=7d|30d|6mo|all
+exports.getStats = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    // Whitelist → fixed interval strings (no user input interpolated into SQL).
+    const INTERVALS = { '7d': '7 days', '30d': '30 days', '6mo': '6 months' };
+    const interval = INTERVALS[req.query.period];
+    const period = interval ? req.query.period : 'all';
+    const timeClause = interval ? `AND submitted_at >= NOW() - INTERVAL '${interval}'` : '';
+
+    const [verdictRes, langRes] = await Promise.all([
+      db.query(
+        `SELECT verdict, COUNT(*)::int AS n FROM code_submissions
+         WHERE user_id = $1 ${timeClause} GROUP BY verdict`,
+        [userId],
+      ),
+      db.query(
+        `SELECT language, COUNT(*)::int AS n FROM code_submissions
+         WHERE user_id = $1 ${timeClause} GROUP BY language ORDER BY n DESC`,
+        [userId],
+      ),
+    ]);
+
+    const total = verdictRes.rows.reduce((a, r) => a + r.n, 0);
+    res.json({
+      success: true,
+      data: {
+        period,
+        total,
+        verdicts: verdictRes.rows,   // [{ verdict, n }]
+        languages: langRes.rows,     // [{ language, n }]
+      },
+    });
+  } catch (error) {
+    console.error('getStats error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load stats' });
+  }
+};
+
 exports.getPlacementReadiness = async (req, res) => {
   const userId = req.user.id;
   try {
