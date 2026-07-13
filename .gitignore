@@ -2,6 +2,9 @@
 # CodeMentor — .gitignore
 # ============================================================
 
+# ── Legacy frontend (replaced by frontend-next/) ─────────────
+frontend/
+
 # ── Node.js ──────────────────────────────────────────────────
 node_modules/
 npm-debug.log*
