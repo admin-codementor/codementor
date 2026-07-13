@@ -4,6 +4,7 @@ const { getGeminiClient } = require('./ai.controller');
 const { logAction } = require('../middleware/audit');
 const { scopeDept, canSeeDepartment } = require('../middleware/role.middleware');
 const { cached } = require('../utils/cache');
+const { computeStrengthsWeaknesses } = require('../utils/topicScores');
 
 // Whitelisted cohort dimensions → real column names (guards against SQL injection
 // when the dimension is interpolated into GROUP BY / WHERE).
@@ -998,9 +999,24 @@ exports.getStudentDetail = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Outside your department scope.' });
     }
 
+    const data = await cached(`student-profile:${id}`, 120, () => buildStudentProfile(id, student));
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Student Detail Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch student detail' });
+  }
+};
+
+// Runs every query for one student's full profile bundle. Pulled out of the route
+// handler so the (department-check-free) result can be Redis-cached by id alone.
+async function buildStudentProfile(id, student) {
+  const [
+    curveRes, topicRes, verdictRes, totalsRes, difficultyRes,
+    velocityRes, heatmapRes, ratingRes, langRes, masteryRes, codingProfilesRes,
+  ] = await Promise.all([
     // Learning curve: cumulative distinct problems solved over time
     // (keyed by the date each problem was *first* accepted).
-    const { rows: curveRows } = await db.query(`
+    db.query(`
       SELECT to_char(DATE(first_ac), 'YYYY-MM-DD') AS date, COUNT(*) AS solved
         FROM (
           SELECT problem_id, MIN(submitted_at) AS first_ac
@@ -1009,15 +1025,10 @@ exports.getStudentDetail = async (req, res) => {
            GROUP BY problem_id
         ) t
        GROUP BY DATE(first_ac) ORDER BY DATE(first_ac) ASC
-    `, [id]);
-    let cum = 0;
-    const learningCurve = curveRows.map(r => {
-      cum += parseInt(r.solved) || 0;
-      return { date: r.date, solved: cum };
-    });
+    `, [id]),
 
     // Topic mastery for this student: solved vs attempted per tag.
-    const { rows: topicRows } = await db.query(`
+    db.query(`
       SELECT topic,
              COUNT(DISTINCT CASE WHEN verdict = 'Accepted' THEN problem_id END) AS solved,
              COUNT(*) AS attempts
@@ -1026,53 +1037,187 @@ exports.getStudentDetail = async (req, res) => {
             FROM code_submissions s JOIN problems p ON p.id = s.problem_id
            WHERE s.user_id = $1
         ) x
-       GROUP BY topic ORDER BY attempts DESC LIMIT 8
-    `, [id]);
-    const topicBreakdown = topicRows.map(r => ({
-      topic: r.topic, solved: parseInt(r.solved) || 0, attempts: parseInt(r.attempts) || 0,
-    }));
+       GROUP BY topic ORDER BY attempts DESC LIMIT 15
+    `, [id]),
 
     // Verdict mix for this student.
-    const { rows: verdictRows } = await db.query(`
+    db.query(`
       SELECT verdict AS name, COUNT(*) AS value
         FROM code_submissions WHERE user_id = $1 AND verdict IS NOT NULL
        GROUP BY verdict ORDER BY value DESC
-    `, [id]);
+    `, [id]),
 
     // Totals.
-    const { rows: [totals] } = await db.query(`
+    db.query(`
       SELECT COUNT(*) AS total,
              SUM(CASE WHEN verdict = 'Accepted' THEN 1 ELSE 0 END) AS accepted,
              COUNT(DISTINCT CASE WHEN verdict = 'Accepted' THEN problem_id END) AS solved
         FROM code_submissions WHERE user_id = $1
-    `, [id]);
-    const total = parseInt(totals.total) || 0;
-    const accepted = parseInt(totals.accepted) || 0;
+    `, [id]),
 
-    res.json({
-      success: true,
-      data: {
-        student: {
-          id: student.id, name: student.name, email: student.email,
-          department: student.department, section: student.section, year: student.year,
-          rollNo: student.roll_no, rating: student.rating, lastLoginAt: student.last_login_at,
-          joinedDate: student.created_at,
-        },
-        totals: {
-          total, accepted,
-          solved: parseInt(totals.solved) || 0,
-          acRate: total ? Math.round((accepted / total) * 100) : 0,
-        },
-        learningCurve,
-        topicBreakdown,
-        verdictBreakdown: verdictRows.map(r => ({ name: r.name, value: parseInt(r.value) || 0 })),
-      }
-    });
-  } catch (error) {
-    console.error('Student Detail Error:', error);
-    res.status(500).json({ success: false, error: 'Failed to fetch student detail' });
+    // Difficulty progression: accepted problems by difficulty tier.
+    db.query(`
+      SELECT p.difficulty, COUNT(DISTINCT s.problem_id) AS solved
+        FROM code_submissions s JOIN problems p ON p.id = s.problem_id
+       WHERE s.user_id = $1 AND s.verdict = 'Accepted'
+       GROUP BY p.difficulty
+    `, [id]),
+
+    // Submission velocity: submissions per week, last ~12 weeks.
+    db.query(`
+      SELECT to_char(DATE_TRUNC('week', submitted_at), 'YYYY-MM-DD') AS week, COUNT(*) AS count
+        FROM code_submissions
+       WHERE user_id = $1 AND submitted_at >= NOW() - INTERVAL '12 weeks'
+       GROUP BY DATE_TRUNC('week', submitted_at)
+       ORDER BY DATE_TRUNC('week', submitted_at) ASC
+    `, [id]),
+
+    // Activity heatmap, last 12 months (same shape as the student dashboard's).
+    db.query(`
+      SELECT DATE(submitted_at) AS date, COUNT(*) AS count
+        FROM code_submissions
+       WHERE user_id = $1 AND submitted_at >= NOW() - INTERVAL '12 months'
+       GROUP BY DATE(submitted_at)
+       ORDER BY date ASC
+    `, [id]),
+
+    // Contest rating history (previously only visible to the student themselves).
+    db.query(`
+      SELECT rh.contest_id, c.title AS contest_title,
+             rh.old_rating, rh.new_rating, rh.rank, rh.created_at
+        FROM rating_history rh
+        LEFT JOIN contests c ON c.id = rh.contest_id
+       WHERE rh.user_id = $1
+       ORDER BY rh.created_at ASC
+    `, [id]),
+
+    // Language usage, ranked.
+    db.query(`
+      SELECT language, COUNT(*) AS count
+        FROM code_submissions WHERE user_id = $1 AND language IS NOT NULL
+       GROUP BY language ORDER BY count DESC
+    `, [id]),
+
+    // Topic mastery table (solved/failed/hint counts) — the strengths/weaknesses source.
+    db.query(`
+      SELECT topic, solved_count, failed_count, hint_usage_count
+        FROM student_topic_mastery WHERE user_id = $1
+    `, [id]),
+
+    // Third-party coding platform profiles (LeetCode/Codeforces/etc.) — broadens the
+    // skill picture beyond in-house submissions.
+    db.query(`
+      SELECT platform, handle, solved, rating, max_rating, extra, sync_status, last_synced
+        FROM coding_profiles WHERE user_id = $1 ORDER BY platform
+    `, [id]),
+  ]);
+
+  let cum = 0;
+  const learningCurve = curveRes.rows.map(r => {
+    cum += parseInt(r.solved) || 0;
+    return { date: r.date, solved: cum };
+  });
+
+  const topicBreakdown = topicRes.rows.map(r => ({
+    topic: r.topic, solved: parseInt(r.solved) || 0, attempts: parseInt(r.attempts) || 0,
+  }));
+
+  const verdictBreakdown = verdictRes.rows.map(r => ({ name: r.name, value: parseInt(r.value) || 0 }));
+
+  const totals = totalsRes.rows[0];
+  const total = parseInt(totals.total) || 0;
+  const accepted = parseInt(totals.accepted) || 0;
+
+  const difficultyProgression = difficultyRes.rows.map(r => ({
+    difficulty: r.difficulty || 'Unknown', solved: parseInt(r.solved) || 0,
+  }));
+
+  const submissionVelocity = velocityRes.rows.map(r => ({ week: r.week, count: parseInt(r.count) || 0 }));
+
+  const activityHeatmap = heatmapRes.rows.map(r => ({
+    date: r.date.toISOString().split('T')[0], count: parseInt(r.count) || 0,
+  }));
+
+  const ratingHistory = ratingRes.rows.map(r => ({
+    contestId: r.contest_id, contestTitle: r.contest_title || 'Untitled contest',
+    oldRating: r.old_rating, newRating: r.new_rating, rank: r.rank, createdAt: r.created_at,
+  }));
+
+  const languages = langRes.rows.map(r => ({ language: r.language, count: parseInt(r.count) || 0 }));
+
+  const { strengths, weaknesses } = computeStrengthsWeaknesses(masteryRes.rows);
+
+  const codingProfiles = codingProfilesRes.rows.map(r => ({
+    platform: r.platform, handle: r.handle,
+    solved: parseInt(r.solved) || 0,
+    rating: r.rating, maxRating: r.max_rating,
+    syncStatus: r.sync_status, lastSynced: r.last_synced,
+  }));
+  const externalSolved = codingProfiles.reduce((sum, p) => sum + p.solved, 0);
+
+  // At-a-glance highlights.
+  const topTopic = strengths[0]?.topic ?? null;
+  const weakTopic = weaknesses[0]?.topic ?? null;
+  const topLanguage = languages[0]?.language ?? null;
+  const busiestDay = activityHeatmap.reduce(
+    (best, d) => (d.count > (best?.count ?? -1) ? d : best), null
+  );
+  const currentStreak = calculateStreakFromHeatmap(activityHeatmap);
+
+  return {
+    student: {
+      id: student.id, name: student.name, email: student.email,
+      department: student.department, section: student.section, year: student.year,
+      rollNo: student.roll_no, rating: student.rating, lastLoginAt: student.last_login_at,
+      joinedDate: student.created_at,
+    },
+    totals: {
+      total, accepted,
+      solved: parseInt(totals.solved) || 0,
+      acRate: total ? Math.round((accepted / total) * 100) : 0,
+    },
+    learningCurve,
+    topicBreakdown,
+    verdictBreakdown,
+    difficultyProgression,
+    submissionVelocity,
+    activityHeatmap,
+    ratingHistory,
+    languages,
+    strengths,
+    weaknesses,
+    codingProfiles,
+    highlights: {
+      topTopic,
+      weakTopic,
+      topLanguage,
+      busiestDay: busiestDay ? busiestDay.date : null,
+      currentStreak,
+      externalSolved,
+    },
+  };
+}
+
+// Mirrors calculateStreak() in student.controller.js so faculty see the same
+// "current streak" a student would on their own dashboard.
+function calculateStreakFromHeatmap(heatmapRows) {
+  if (!heatmapRows.length) return 0;
+  const dates = heatmapRows.map(r => r.date).sort((a, b) => b.localeCompare(a));
+
+  const today = new Date().toISOString().split('T')[0];
+  const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
+  if (dates[0] !== today && dates[0] !== yesterday) return 0;
+
+  let streak = 1;
+  for (let i = 0; i < dates.length - 1; i++) {
+    const curr = new Date(dates[i]);
+    const prev = new Date(dates[i + 1]);
+    const diffDays = Math.round((curr - prev) / 86400000);
+    if (diffDays === 1) streak++;
+    else break;
   }
-};
+  return streak;
+}
 
 // Topic-mastery matrix per cohort, for an overlay radar chart.
 // `dim` selects the grouping: department | section | year (whitelisted).

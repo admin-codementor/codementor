@@ -19,7 +19,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Divider from "@mui/material/Divider";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
-import { EditOutlinedIcon, CheckIcon, CloseIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, TrackChangesOutlinedIcon, LockOutlinedIcon, PersonOutlineIcon, HistoryOutlinedIcon, HubOutlinedIcon, CodeOffOutlinedIcon, BugReportOutlinedIcon, CancelOutlinedIcon } from "@/components/ui/icons";
+import { EditOutlinedIcon, CheckIcon, CloseIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, TrackChangesOutlinedIcon, LockOutlinedIcon, PersonOutlineIcon, HistoryOutlinedIcon, HubOutlinedIcon, CodeOffOutlinedIcon, BugReportOutlinedIcon, CancelOutlinedIcon, TrendingUpIcon, TrendingDownIcon, LayersOutlinedIcon } from "@/components/ui/icons";
 import { ResponsivePie } from "@nivo/pie";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal } from "@/components/ui/motion";
@@ -57,6 +57,18 @@ interface Badge {
   progress: number;
   cur: number;
   target: number;
+}
+interface TopicScore {
+  topic: string;
+  solvedCount: number;
+  failedCount: number;
+  acRate: number;
+  reason: string;
+}
+interface SkillsData {
+  strengths: TopicScore[];
+  weaknesses: TopicScore[];
+  difficultyProgression: { difficulty: string; solved: number }[];
 }
 
 const DEFAULT_STATS: DashboardStats = {
@@ -143,6 +155,7 @@ function ProfileInner() {
   const [languages, setLanguages] = React.useState<LanguageRow[]>([]);
   const [ratingHistory, setRatingHistory] = React.useState<RatingHistoryRow[]>([]);
   const [badges, setBadges] = React.useState<Badge[]>([]);
+  const [skills, setSkills] = React.useState<SkillsData | null>(null);
   const [loading, setLoading] = React.useState(true);
 
   // Submission-quality stats (period-filtered) for the Overview dashboard.
@@ -191,6 +204,13 @@ function ProfileInner() {
       .get("/api/student/badges")
       .then((r) => {
         if (r.data?.success) setBadges(r.data.data.badges ?? []);
+      })
+      .catch(() => {});
+
+    api
+      .get("/api/student/skills")
+      .then((r) => {
+        if (r.data?.success) setSkills(r.data.data);
       })
       .catch(() => {});
   }, []);
@@ -477,6 +497,52 @@ function ProfileInner() {
               )}
             </SectionCard>
           </Box>
+
+          {skills && (skills.strengths.length > 0 || skills.weaknesses.length > 0) && (
+            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3 }}>
+              <SectionCard title="Strengths" icon={<TrendingUpIcon sx={{ fontSize: 20, color: "success.main" }} />}>
+                {skills.strengths.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+                    Not enough attempts yet to identify strengths.
+                  </Typography>
+                ) : (
+                  <Stack spacing={2}>
+                    {skills.strengths.map((s) => (
+                      <ProgressRow key={s.topic} label={s.topic} detail={s.reason} pct={s.acRate} color="success" />
+                    ))}
+                  </Stack>
+                )}
+              </SectionCard>
+              <SectionCard title="Weaknesses" icon={<TrendingDownIcon sx={{ fontSize: 20, color: "warning.main" }} />}>
+                {skills.weaknesses.length === 0 ? (
+                  <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
+                    Not enough attempts yet to identify weak spots.
+                  </Typography>
+                ) : (
+                  <Stack spacing={2}>
+                    {skills.weaknesses.map((s) => (
+                      <ProgressRow key={s.topic} label={s.topic} detail={s.reason} pct={s.acRate} color="warning" />
+                    ))}
+                  </Stack>
+                )}
+              </SectionCard>
+            </Box>
+          )}
+
+          {skills && skills.difficultyProgression.length > 0 && (
+            <SectionCard title="Difficulty Progression" icon={<LayersOutlinedIcon sx={{ fontSize: 20, color: "text.secondary" }} />}>
+              <Stack direction="row" spacing={1.5} flexWrap="wrap" useFlexGap>
+                {skills.difficultyProgression.map((d) => (
+                  <Chip
+                    key={d.difficulty}
+                    label={`${d.difficulty}: ${d.solved} solved`}
+                    variant="outlined"
+                    sx={{ borderColor: "outlineVariant" }}
+                  />
+                ))}
+              </Stack>
+            </SectionCard>
+          )}
 
           {badges.length > 0 && (
             <SectionCard

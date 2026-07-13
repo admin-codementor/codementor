@@ -27,7 +27,7 @@ import {
   Shield, Bot, LayoutDashboard, Timer, Lightbulb, Target, FileUp, Upload, LayoutGrid,
   Eye, EyeOff, TriangleAlert, Briefcase,
   SignalLow, SignalMedium, SignalHigh, Type, Hash, ArrowRightLeft, ArrowDownUp, GitFork,
-  Boxes, Binary, PenTool, Waypoints,
+  Boxes, Binary, PenTool, Waypoints, TrendingUp, TrendingDown,
 } from "lucide-react";
 
 export type IconFontSize = "small" | "medium" | "large" | "inherit";
@@ -193,3 +193,5 @@ export const BoxesIcon = makeIcon(Boxes, "BoxesIcon");
 export const BinaryIcon = makeIcon(Binary, "BinaryIcon");
 export const PenToolIcon = makeIcon(PenTool, "PenToolIcon");
 export const WaypointsIcon = makeIcon(Waypoints, "WaypointsIcon");
+export const TrendingUpIcon = makeIcon(TrendingUp, "TrendingUpIcon");
+export const TrendingDownIcon = makeIcon(TrendingDown, "TrendingDownIcon");

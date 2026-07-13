@@ -16,7 +16,6 @@ import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
-import Tooltip from "@mui/material/Tooltip";
 import Link from "@mui/material/Link";
 import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
@@ -28,6 +27,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
+import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import type {
   DashboardData,
   Assignment,
@@ -113,96 +113,6 @@ function SectionCard({
         {children}
       </CardContent>
     </Card>
-  );
-}
-
-// ── Activity heatmap (last 28 days) ──────────────────────────────────────────
-
-function ActivityHeatmap({
-  heatmap,
-}: {
-  heatmap: Array<{ date: string; count: number }>;
-}) {
-  const cells = React.useMemo(() => {
-    const map = new Map(heatmap.map((h) => [h.date, h.count]));
-    const today = new Date();
-    return Array.from({ length: 28 }, (_, i) => {
-      const d = new Date(today);
-      d.setDate(d.getDate() - (27 - i));
-      const date = d.toISOString().split("T")[0];
-      return { date, count: map.get(date) ?? 0 };
-    });
-  }, [heatmap]);
-
-  function level(count: number) {
-    if (count === 0) return 0;
-    if (count <= 2) return 1;
-    if (count <= 5) return 2;
-    return 3;
-  }
-
-  // Monotonic primary-hue intensity ramp (empty → strongest). The mid step is a
-  // color-mix between the container and main roles so the gradient reads as one hue.
-  const bgByLevel = [
-    "surfaceContainerHighest",
-    "primaryContainer",
-    "color-mix(in srgb, var(--mui-palette-primary-main) 55%, var(--mui-palette-primaryContainer))",
-    "primary.main",
-  ];
-
-  return (
-    <Box>
-      <Box
-        role="img"
-        aria-label="Activity heatmap for the last 28 days"
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "repeat(28, 1fr)",
-          gap: "3px",
-        }}
-      >
-        {cells.map(({ date, count }) => (
-          <Tooltip
-            key={date}
-            title={
-              count === 0
-                ? `No submissions on ${date}`
-                : `${count} submission${count !== 1 ? "s" : ""} on ${date}`
-            }
-            arrow
-          >
-            <Box
-              sx={{
-                aspectRatio: "1",
-                borderRadius: 0.5,
-                bgcolor: bgByLevel[level(count)],
-              }}
-            />
-          </Tooltip>
-        ))}
-      </Box>
-      <Stack
-        direction="row"
-        justifyContent="flex-end"
-        alignItems="center"
-        spacing={0.75}
-        sx={{ mt: 1 }}
-      >
-        <Typography variant="caption" color="text.secondary">
-          Less
-        </Typography>
-        {bgByLevel.map((bg, i) => (
-          <Box
-            key={i}
-            aria-hidden
-            sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: bg }}
-          />
-        ))}
-        <Typography variant="caption" color="text.secondary">
-          More
-        </Typography>
-      </Stack>
-    </Box>
   );
 }
 
@@ -574,7 +484,7 @@ export default function DashboardPage() {
           <Stack spacing={3}>
             {/* Activity heatmap */}
             <SectionCard title="Last 28 Days" aria-label="Activity heatmap">
-              <ActivityHeatmap heatmap={heatmap} />
+              <ActivityHeatmap heatmap={heatmap} days={28} />
               <Stack
                 direction="row"
                 spacing={3}

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import NextLink from "next/link";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -19,6 +20,7 @@ import { AddIcon, ContentCopyIcon, CheckIcon, CloseIcon, GroupsOutlinedIcon, Sch
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
+import { interactiveSurfaceSx } from "@/components/ui/interactive";
 
 interface Classroom {
   id: string;
@@ -78,7 +80,23 @@ function MembersDialog({ classroom, onClose }: { classroom: Classroom | null; on
             ) : (
               <Stack spacing={1}>
                 {members.map((m) => (
-                  <Stack key={m.id} direction="row" spacing={1.5} alignItems="center" sx={{ p: 1, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant" }}>
+                  <Stack
+                    key={m.id}
+                    component={NextLink}
+                    href={`/faculty/students/${m.id}`}
+                    direction="row"
+                    spacing={1.5}
+                    alignItems="center"
+                    sx={{
+                      p: 1,
+                      borderRadius: 2,
+                      border: "1px solid",
+                      borderColor: "outlineVariant",
+                      textDecoration: "none",
+                      color: "inherit",
+                      ...interactiveSurfaceSx,
+                    }}
+                  >
                     <Avatar sx={{ width: 32, height: 32, fontSize: 12, bgcolor: "primaryContainer", color: "onPrimaryContainer" }}>{initials(m.name)}</Avatar>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="body2" fontWeight={500} noWrap>{m.name}</Typography>

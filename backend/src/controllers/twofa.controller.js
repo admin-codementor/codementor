@@ -7,10 +7,10 @@ const bcrypt = require('bcryptjs');
 
 const { resolvePermissions } = require('../middleware/permissions');
 
-// Mirror auth.controller.generateTokens exactly: payload { id, role, permissions }.
+// Mirror auth.controller.generateTokens exactly: payload { id, role, permissions, department }.
 const generateTokens = (user) => {
   const permissions = resolvePermissions(user);
-  const payload = { id: user.id, role: user.role, permissions };
+  const payload = { id: user.id, role: user.role, permissions, department: user.department ?? null };
   const accessToken  = jwt.sign(payload, process.env.JWT_SECRET,         { expiresIn: '15m' });
   const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
   return { accessToken, refreshToken };
@@ -142,7 +142,7 @@ exports.verify2FA = async (req, res) => {
     }
 
     const result = await db.query(
-      'SELECT id, name, email, role, permissions, totp_secret, totp_enabled FROM users WHERE id = $1',
+      'SELECT id, name, email, role, department, permissions, totp_secret, totp_enabled FROM users WHERE id = $1',
       [user_id]
     );
 
@@ -227,7 +227,7 @@ exports.googleLogin = async (req, res) => {
 
     // Upsert by email.
     const existing = await db.query(
-      'SELECT id, name, email, role, permissions FROM users WHERE email = $1',
+      'SELECT id, name, email, role, department, permissions FROM users WHERE email = $1',
       [email]
     );
 
@@ -245,7 +245,7 @@ exports.googleLogin = async (req, res) => {
       const inserted = await db.query(
         `INSERT INTO users (name, email, password_hash, role, google_id)
          VALUES ($1, $2, $3, 'student', $4)
-         RETURNING id, name, email, role, permissions`,
+         RETURNING id, name, email, role, department, permissions`,
         [name, email, passwordHash, googleId]
       );
       user = inserted.rows[0];

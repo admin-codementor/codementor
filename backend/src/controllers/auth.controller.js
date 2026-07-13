@@ -6,7 +6,7 @@ const { resolvePermissions } = require('../middleware/permissions');
 
 const generateTokens = (user) => {
   const permissions = resolvePermissions(user);
-  const payload = { id: user.id, role: user.role, permissions };
+  const payload = { id: user.id, role: user.role, permissions, department: user.department ?? null };
   const accessToken  = jwt.sign(payload, process.env.JWT_SECRET,         { expiresIn: '1h' });
   const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
   return { accessToken, refreshToken };
@@ -39,7 +39,7 @@ exports.register = async (req, res) => {
     // Insert user
     const newUser = await db.query(
       `INSERT INTO users (name, email, password_hash, role, department, section, year, roll_no)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role`,
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8) RETURNING id, name, email, role, department`,
       [name, email, passwordHash, role || 'student', dept, sec, yr, roll]
     );
 
@@ -61,7 +61,7 @@ exports.login = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Please provide email and password' });
     }
 
-    const result = await db.query('SELECT id, name, email, password_hash, role, permissions, failed_login_attempts, locked_until, totp_enabled FROM users WHERE email = $1', [email]);
+    const result = await db.query('SELECT id, name, email, password_hash, role, department, permissions, failed_login_attempts, locked_until, totp_enabled FROM users WHERE email = $1', [email]);
     
     if (result.rows.length === 0) {
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
@@ -140,7 +140,7 @@ exports.refresh = async (req, res) => {
 
     const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
     
-    const user = await db.query('SELECT id, role FROM users WHERE id = $1', [decoded.id]);
+    const user = await db.query('SELECT id, role, department FROM users WHERE id = $1', [decoded.id]);
     if (user.rows.length === 0) {
       return res.status(401).json({ success: false, error: 'User no longer exists' });
     }
@@ -149,7 +149,7 @@ exports.refresh = async (req, res) => {
     const { resolvePermissions } = require('../middleware/permissions');
     const permissions = resolvePermissions(user.rows[0]);
     const newAccessToken = jwt.sign(
-      { id: user.rows[0].id, role: user.rows[0].role, permissions },
+      { id: user.rows[0].id, role: user.rows[0].role, permissions, department: user.rows[0].department ?? null },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );

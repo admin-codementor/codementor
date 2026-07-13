@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const { computeStrengthsWeaknesses } = require('../utils/topicScores');
 
 // Calculate consecutive-day submission streak from heatmap rows
 const calculateStreak = (heatmapRows) => {
@@ -590,6 +591,37 @@ exports.getBadges = async (req, res) => {
   } catch (error) {
     console.error('Badges error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch badges' });
+  }
+};
+
+// @desc    Self strengths/weaknesses + difficulty progression, so a student sees
+//          the same skill-gap analysis faculty see on the drill-down page.
+// @route   GET /api/student/skills
+exports.getSkills = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const [masteryRes, difficultyRes] = await Promise.all([
+      db.query(`
+        SELECT topic, solved_count, failed_count, hint_usage_count
+          FROM student_topic_mastery WHERE user_id = $1
+      `, [userId]),
+      db.query(`
+        SELECT p.difficulty, COUNT(DISTINCT s.problem_id) AS solved
+          FROM code_submissions s JOIN problems p ON p.id = s.problem_id
+         WHERE s.user_id = $1 AND s.verdict = 'Accepted'
+         GROUP BY p.difficulty
+      `, [userId]),
+    ]);
+
+    const { strengths, weaknesses } = computeStrengthsWeaknesses(masteryRes.rows);
+    const difficultyProgression = difficultyRes.rows.map(r => ({
+      difficulty: r.difficulty || 'Unknown', solved: parseInt(r.solved) || 0,
+    }));
+
+    res.json({ success: true, data: { strengths, weaknesses, difficultyProgression } });
+  } catch (error) {
+    console.error('getSkills error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load skills' });
   }
 };
 

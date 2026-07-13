@@ -23,6 +23,7 @@ import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { EmptyState } from "@/components/ui/States";
+import { CODING_PLATFORM_META as META, CODING_PLATFORM_ORDER as ORDER } from "@/lib/codingPlatforms";
 
 interface Profile {
   platform: string;
@@ -45,15 +46,6 @@ interface LbRow {
   platforms: number;
   byPlatform: Record<string, number>;
 }
-
-const META: Record<string, { label: string; live: boolean; placeholder: string }> = {
-  codeforces: { label: "Codeforces", live: true, placeholder: "tourist" },
-  leetcode: { label: "LeetCode", live: true, placeholder: "your-username" },
-  hackerrank: { label: "HackerRank", live: false, placeholder: "profile id" },
-  codechef: { label: "CodeChef", live: false, placeholder: "username" },
-  gfg: { label: "GeeksforGeeks", live: false, placeholder: "username" },
-};
-const ORDER = ["codeforces", "leetcode", "hackerrank", "codechef", "gfg"];
 
 function StatusIcon({ status }: { status: string }) {
   if (status === "ok") return <CheckCircleOutlineIcon sx={{ fontSize: 16, color: "success.main" }} />;

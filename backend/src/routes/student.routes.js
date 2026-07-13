@@ -11,7 +11,8 @@ const {
   getPlacementReadiness,
   getBadges,
   getProblemSolutions,
-  getStats
+  getStats,
+  getSkills
 } = require('../controllers/student.controller');
 const { protect } = require('../middleware/auth.middleware');
 
@@ -21,6 +22,7 @@ router.use(protect);
 
 router.get('/dashboard', getDashboardData);
 router.get('/stats', getStats);
+router.get('/skills', getSkills);
 router.get('/assignments', getAssignments);
 router.get('/notifications', getNotifications);
 router.get('/recommendations', getRecommendations);
