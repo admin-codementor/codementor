@@ -4,6 +4,8 @@ import * as React from "react";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { createUserWithEmailAndPassword } from "firebase/auth";
+import { firebaseAuth } from "@/lib/firebase";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Paper from "@mui/material/Paper";
@@ -57,10 +59,12 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      const res = await axios.post("/api/auth/register", {
+      const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
+      const idToken = await cred.user.getIdToken();
+
+      const res = await axios.post("/api/auth/firebase", {
+        id_token: idToken,
         name,
-        email,
-        password,
         role,
         ...(role === "student"
           ? {
@@ -80,8 +84,15 @@ export default function RegisterPage() {
         router.replace(homeForRole(res.data.user.role));
       }
     } catch (err) {
-      const e = err as { response?: { data?: { error?: string } } };
-      setError(e.response?.data?.error || "Registration failed. Try again.");
+      const code = (err as { code?: string })?.code;
+      if (code === "auth/email-already-in-use") {
+        setError("Email is already registered");
+      } else if (code === "auth/weak-password") {
+        setError("Password is too weak");
+      } else {
+        const e = err as { response?: { data?: { error?: string } } };
+        setError(e.response?.data?.error || "Registration failed. Try again.");
+      }
     } finally {
       setLoading(false);
     }

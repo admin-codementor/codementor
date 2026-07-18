@@ -24,6 +24,9 @@ yarn.lock
 .env.test
 *.env
 
+# ── Firebase secrets ─────────────────────────────────────────
+backend/firebase-service-account.json
+
 # ── Build Outputs ────────────────────────────────────────────
 dist/
 build/

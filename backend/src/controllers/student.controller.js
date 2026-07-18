@@ -377,27 +377,10 @@ exports.getDailyChallenge = async (req, res) => {
 exports.updateProfile = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { name, currentPassword, newPassword } = req.body;
+    const { name } = req.body;
 
     if (name) {
       await db.query('UPDATE users SET name = $1 WHERE id = $2', [name.trim(), userId]);
-    }
-
-    if (newPassword) {
-      if (!currentPassword) {
-        return res.status(400).json({ success: false, error: 'Current password required' });
-      }
-      const bcrypt = require('bcrypt');
-      const userRes = await db.query('SELECT password_hash FROM users WHERE id = $1', [userId]);
-      if (!userRes.rows.length) {
-        return res.status(404).json({ success: false, error: 'User not found' });
-      }
-      const match = await bcrypt.compare(currentPassword, userRes.rows[0].password_hash);
-      if (!match) {
-        return res.status(400).json({ success: false, error: 'Current password is incorrect' });
-      }
-      const hash = await bcrypt.hash(newPassword, 10);
-      await db.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, userId]);
     }
 
     res.json({ success: true, message: 'Profile updated' });

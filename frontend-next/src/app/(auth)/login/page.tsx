@@ -1,10 +1,11 @@
 "use client";
 
 import * as React from "react";
-import Script from "next/script";
 import NextLink from "next/link";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { signInWithEmailAndPassword, signInWithPopup } from "firebase/auth";
+import { firebaseAuth, googleProvider } from "@/lib/firebase";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Paper from "@mui/material/Paper";
@@ -21,15 +22,6 @@ import type { AuthSuccess } from "@/lib/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { BrandPanel } from "@/components/auth/BrandPanel";
 import { GoogleIcon } from "@/components/auth/GoogleIcon";
-
-type GoogleId = {
-  accounts?: {
-    id?: {
-      initialize: (o: { client_id?: string; callback: (r: { credential: string }) => void }) => void;
-      prompt: () => void;
-    };
-  };
-};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -50,22 +42,44 @@ export default function LoginPage() {
   const errorMessage = (err: unknown) =>
     (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
 
+  const firebaseErrorMessage = (err: unknown) => {
+    const code = (err as { code?: string })?.code;
+    switch (code) {
+      case "auth/invalid-credential":
+      case "auth/wrong-password":
+      case "auth/user-not-found":
+        return "Invalid email or password";
+      case "auth/too-many-requests":
+        return "Too many attempts, please try again later.";
+      case "auth/popup-closed-by-user":
+        return null; // user cancelled the Google popup — not an error worth showing
+      default:
+        return null;
+    }
+  };
+
+  const completeFirebaseSignIn = async (idToken: string) => {
+    const res = await axios.post("/api/auth/firebase", { id_token: idToken });
+    if (res.data.success) {
+      if (res.data.twofa_required) {
+        setTwofaRequired(true);
+        setTwofaUserId(res.data.user_id);
+      } else {
+        completeLogin(res.data);
+      }
+    }
+  };
+
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const res = await axios.post("/api/auth/login", { email, password });
-      if (res.data.success) {
-        if (res.data.twofa_required) {
-          setTwofaRequired(true);
-          setTwofaUserId(res.data.user_id);
-        } else {
-          completeLogin(res.data);
-        }
-      }
+      const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
+      const idToken = await cred.user.getIdToken();
+      await completeFirebaseSignIn(idToken);
     } catch (err) {
-      setError(errorMessage(err) || "Failed to login");
+      setError(firebaseErrorMessage(err) || errorMessage(err) || "Failed to login");
     } finally {
       setLoading(false);
     }
@@ -85,30 +99,23 @@ export default function LoginPage() {
     }
   };
 
-  const handleGoogle = () => {
+  const handleGoogle = async () => {
     setError(null);
-    const g = (window as unknown as { google?: GoogleId }).google;
-    if (!g?.accounts?.id) {
-      setError("Google sign-in is not configured for this deployment.");
-      return;
+    setLoading(true);
+    try {
+      const cred = await signInWithPopup(firebaseAuth, googleProvider);
+      const idToken = await cred.user.getIdToken();
+      await completeFirebaseSignIn(idToken);
+    } catch (err) {
+      const msg = firebaseErrorMessage(err);
+      if (msg !== null) setError(msg || errorMessage(err) || "Google login failed");
+    } finally {
+      setLoading(false);
     }
-    g.accounts.id.initialize({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
-      callback: async (resp) => {
-        try {
-          const res = await axios.post("/api/2fa/google", { id_token: resp.credential });
-          if (res.data.success) completeLogin(res.data);
-        } catch (err) {
-          setError(errorMessage(err) || "Google login failed");
-        }
-      },
-    });
-    g.accounts.id.prompt();
   };
 
   return (
     <>
-      <Script src="https://accounts.google.com/gsi/client" strategy="afterInteractive" />
       <Box sx={{ minHeight: "100dvh", display: "flex", bgcolor: "background.default" }}>
         <BrandPanel />
 

@@ -326,6 +326,12 @@ const scaffoldDatabase = async () => {
     await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS totp_enabled BOOLEAN NOT NULL DEFAULT FALSE;`);
     await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT DEFAULT NULL;`);
 
+    // Phase 1: Firebase Auth migration
+    await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS firebase_uid TEXT UNIQUE DEFAULT NULL;`);
+
+    // Phase 2: Postgres no longer verifies passwords — Firebase owns that entirely.
+    await query(`ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;`);
+
     // Feature 15: Elo-style contest rating
     await query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS rating INTEGER NOT NULL DEFAULT 1200;`);
     await query(`

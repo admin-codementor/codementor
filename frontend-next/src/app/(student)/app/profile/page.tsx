@@ -25,6 +25,7 @@ import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import { changeFirebasePassword } from "@/lib/firebase";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
@@ -266,15 +267,16 @@ function ProfileInner() {
     setPwLoading(true);
     setPwMsg(null);
     try {
-      await api.put("/api/student/profile", {
-        currentPassword: pwForm.current,
-        newPassword: pwForm.next,
-      });
+      await changeFirebasePassword(pwForm.current, pwForm.next);
       setPwMsg({ text: "Password changed successfully", ok: true });
       setPwForm({ current: "", next: "", confirm: "" });
     } catch (e) {
-      const err = e as { response?: { data?: { error?: string } } };
-      setPwMsg({ text: err?.response?.data?.error || "Failed to change password", ok: false });
+      const code = (e as { code?: string })?.code;
+      const text =
+        code === "auth/wrong-password" || code === "auth/invalid-credential"
+          ? "Current password is incorrect"
+          : (e as Error)?.message || "Failed to change password";
+      setPwMsg({ text, ok: false });
     } finally {
       setPwLoading(false);
     }

@@ -6,7 +6,6 @@ const {
   enable2FA,
   disable2FA,
   verify2FA,
-  googleLogin,
 } = require('../controllers/twofa.controller');
 
 const router = express.Router();
@@ -25,8 +24,7 @@ router.post('/setup', protect, setup2FA);
 router.post('/enable', protect, enable2FA);
 router.post('/disable', protect, disable2FA);
 
-// Public login-flow endpoints.
+// Public login-flow endpoint.
 router.post('/verify', twofaLimiter, verify2FA);
-router.post('/google', twofaLimiter, googleLogin);
 
 module.exports = router;
