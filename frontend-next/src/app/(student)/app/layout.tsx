@@ -1,13 +1,14 @@
 "use client";
 
 import * as React from "react";
-import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, EmojiEventsOutlinedIcon, AssignmentOutlinedIcon, PsychologyOutlinedIcon, SchoolOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon } from "@/components/ui/icons";
+import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, EmojiEventsOutlinedIcon, AssignmentOutlinedIcon, PsychologyOutlinedIcon, SchoolOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon } from "@/components/ui/icons";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 
 // Submissions & Coding Profiles now live as tabs on the Profile page (reached via the avatar menu).
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/app/dashboard", icon: <SpaceDashboardOutlinedIcon /> },
+  { label: "Sandbox", href: "/app/sandbox", icon: <CodeOutlinedIcon />, section: "Practice" },
   { label: "Courses", href: "/app/courses", icon: <MenuBookOutlinedIcon />, section: "Practice" },
   { label: "Contests", href: "/app/contests", icon: <EmojiEventsOutlinedIcon />, section: "Practice" },
   { label: "Assignments", href: "/app/assignments", icon: <AssignmentOutlinedIcon />, section: "Practice" },

@@ -224,7 +224,7 @@ const judgeWorker = new Worker('submissions', async job => {
 
 async function runJob(job, { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id }) {
 
-  console.log(`Processing Job ${job.id} for Problem ${problem_id}${custom_input ? ' [custom input]' : ''}`);
+  console.log(`Processing Job ${job.id}${problem_id ? ` for Problem ${problem_id}` : ' [sandbox]'}${custom_input ? ' [custom input]' : ''}`);
 
   // Custom input: single run, no verdict persistence
   if (custom_input !== null && custom_input !== undefined) {

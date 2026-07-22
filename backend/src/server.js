@@ -121,10 +121,15 @@ const io = new Server(httpServer, {
 setIO(io);
 
 io.on('connection', (socket) => {
-  socket.on('join', (jobId) => {
+  // `cb` is an optional ack — callers that need to guarantee the room join
+  // has actually been processed server-side before doing anything else (e.g.
+  // submitting a job that might finish faster than a fire-and-forget emit
+  // would land) can pass one and await it.
+  socket.on('join', (jobId, cb) => {
     if (typeof jobId === 'string' && jobId.length < 64) {
       socket.join(jobId);
     }
+    if (typeof cb === 'function') cb();
   });
   socket.on('leave', (jobId) => {
     socket.leave(jobId);

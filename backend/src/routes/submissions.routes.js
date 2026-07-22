@@ -33,9 +33,20 @@ const MAX_INPUT_BYTES = 8 * 1024; // 8 KB
 // POST /api/submit — enqueue submission
 router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP, async (req, res) => {
   try {
-    const { source_code, language_id, problem_id, custom_input, contest_id, assignment_id } = req.body;
+    const { source_code, language_id, problem_id, custom_input, contest_id, assignment_id, job_id } = req.body;
 
-    if (!source_code || !language_id || !problem_id) {
+    // custom_input is a signal, not just a payload — even an empty string ("no
+    // stdin") means "this is a custom/sandbox run", so check presence with
+    // != null rather than truthiness (a bare `custom_input || null` below would
+    // otherwise collapse "" to null and silently fall through to the graded
+    // test-case path).
+    const isCustomRun = custom_input != null;
+    // A sandbox/playground run has no problem_id — it's a bare custom_input
+    // execution with no test cases, scoring, or submission record. Any other
+    // submission (graded or practice-on-a-problem) still requires problem_id.
+    const isSandbox = isCustomRun && !problem_id;
+
+    if (!source_code || !language_id || (!problem_id && !isSandbox)) {
       return res.status(400).json({ success: false, error: 'source_code, language_id, and problem_id are required' });
     }
     if (contest_id && !UUID_RE.test(String(contest_id))) {
@@ -50,23 +61,30 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
     if (!ALLOWED_LANGUAGE_IDS.has(Number(language_id))) {
       return res.status(400).json({ success: false, error: 'Unsupported language_id.' });
     }
-    if (!UUID_RE.test(String(problem_id))) {
+    if (!isSandbox && !UUID_RE.test(String(problem_id))) {
       return res.status(400).json({ success: false, error: 'Invalid problem_id format.' });
     }
     if (custom_input && typeof custom_input === 'string' && Buffer.byteLength(custom_input, 'utf8') > MAX_INPUT_BYTES) {
       return res.status(400).json({ success: false, error: 'custom_input exceeds 8 KB limit.' });
     }
+    if (job_id !== undefined && !UUID_RE.test(String(job_id))) {
+      return res.status(400).json({ success: false, error: 'Invalid job_id format.' });
+    }
 
     const user_id = extractUserId(req);
-    const jobId = uuidv4();
+    // Allow the client to supply its own job id (and join the socket room for
+    // it) BEFORE submitting, so a very fast job (e.g. a trivial sandbox run)
+    // can't complete and emit its verdict into a room the client hasn't
+    // joined yet. Falls back to a server-generated id for older callers.
+    const jobId = job_id || uuidv4();
 
     try {
       await submissionsQueue.add('judge-submission', {
-        jobId, source_code, language_id, problem_id, user_id,
-        custom_input: custom_input || null,
-        contest_id: custom_input ? null : (contest_id || null),
+        jobId, source_code, language_id, problem_id: problem_id || null, user_id,
+        custom_input: isCustomRun ? custom_input : null,
+        contest_id: isCustomRun ? null : (contest_id || null),
         // Only graded submits (not custom runs) are recorded against an assignment/exam.
-        assignment_id: custom_input ? null : (assignment_id || null),
+        assignment_id: isCustomRun ? null : (assignment_id || null),
       }, { jobId });
     } catch (queueErr) {
       console.error('Queue add failed:', queueErr.message);
