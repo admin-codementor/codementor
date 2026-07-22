@@ -34,6 +34,7 @@
 // we fail safe to accepted:false with a descriptive message (never throw).
 
 const axios = require('axios');
+const { toB64, fromB64 } = require('./judge0Encoding');
 
 const JUDGE0_URL = process.env.JUDGE0_URL || 'http://localhost:2358';
 const CHECKER_TIMEOUT_MS = 20000;
@@ -92,14 +93,15 @@ exports.runChecker = async ({ checkerCode, checkerLanguageId, input, expected, a
   let res;
   try {
     res = await axios.post(
-      `${JUDGE0_URL}/submissions?base64_encoded=false&wait=true`,
+      `${JUDGE0_URL}/submissions?base64_encoded=true&wait=true`,
       {
-        source_code:     checkerCode,
+        source_code:     toB64(checkerCode),
         language_id:     Number(checkerLanguageId),
-        stdin,
+        stdin:           toB64(stdin),
         cpu_time_limit:  10,
         wall_time_limit: 15,
         memory_limit:    262144,
+        base64_encoded:  true,
       },
       { headers: judge0Headers(), timeout: CHECKER_TIMEOUT_MS }
     );
@@ -111,20 +113,24 @@ exports.runChecker = async ({ checkerCode, checkerLanguageId, input, expected, a
 
   const r = res.data || {};
   const statusId = r.status?.id;
+  const decodedStdout        = fromB64(r.stdout);
+  const decodedStderr        = fromB64(r.stderr);
+  const decodedCompileOutput = fromB64(r.compile_output);
+  const decodedMessage       = fromB64(r.message);
 
   // Judge0 status ids: 3 = Accepted (ran cleanly), 6 = Compilation Error,
   // 5 = TLE, 7-12 = various runtime errors. Anything other than a clean run
   // means the checker itself is broken -> reject with diagnostics.
   if (statusId !== 3) {
     const reason =
-      r.compile_output ? `compile error: ${cap(r.compile_output)}` :
-      r.stderr         ? `runtime error: ${cap(r.stderr)}` :
-      r.message        ? cap(r.message) :
+      decodedCompileOutput ? `compile error: ${cap(decodedCompileOutput)}` :
+      decodedStderr        ? `runtime error: ${cap(decodedStderr)}` :
+      decodedMessage       ? cap(decodedMessage) :
       (r.status?.description || 'unknown checker failure');
     return { accepted: false, message: `Checker did not run cleanly (${reason}).` };
   }
 
-  const stdout = (r.stdout || '').trim();
+  const stdout = (decodedStdout || '').trim();
   if (!stdout) {
     // Ran cleanly (exit 0) but printed nothing. Per the contract we require an
     // explicit "AC" token, so treat empty output as a reject for safety.
@@ -137,5 +143,5 @@ exports.runChecker = async ({ checkerCode, checkerLanguageId, input, expected, a
   }
 
   // Anything else is a rejection; surface the checker's own message.
-  return { accepted: false, message: cap(stdout) || (r.stderr ? cap(r.stderr) : 'Rejected by checker') };
+  return { accepted: false, message: cap(stdout) || (decodedStderr ? cap(decodedStderr) : 'Rejected by checker') };
 };

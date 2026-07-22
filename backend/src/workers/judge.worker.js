@@ -7,6 +7,7 @@ const problemRepo = require('../repositories/problemRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const contestRepo = require('../repositories/contestRepository');
 const submissionRepo = require('../repositories/submissionRepository');
+const { toB64, fromB64 } = require('../utils/judge0Encoding');
 
 const JUDGE0_URL = process.env.JUDGE0_URL || 'http://localhost:2358';
 const BATCH_SIZE  = parseInt(process.env.JUDGE0_BATCH_SIZE || '20', 10);
@@ -86,12 +87,20 @@ const runSingle = async (source_code, language_id, stdin) => {
   const m = getLangMultiplier(language_id);
   try {
     const res = await axios.post(
-      `${JUDGE0_URL}/submissions?base64_encoded=false&wait=true`,
-      { source_code, language_id, stdin, cpu_time_limit: 2 * m, wall_time_limit: 5 * m, memory_limit: 262144 * m },
+      `${JUDGE0_URL}/submissions?base64_encoded=true&wait=true`,
+      {
+        source_code: toB64(source_code), language_id, stdin: toB64(stdin),
+        cpu_time_limit: 2 * m, wall_time_limit: 5 * m, memory_limit: 262144 * m,
+        base64_encoded: true,
+      },
       { headers: judge0Headers(), timeout: 15000 }
     );
     const r = res.data;
-    return sanitizeResult({ status: r.status, time: r.time, memory: r.memory, stdout: r.stdout, stderr: r.stderr, compile_output: r.compile_output, message: r.message });
+    return sanitizeResult({
+      status: r.status, time: r.time, memory: r.memory,
+      stdout: fromB64(r.stdout), stderr: fromB64(r.stderr),
+      compile_output: fromB64(r.compile_output), message: fromB64(r.message),
+    });
   } catch (err) {
     if (err.response?.status === 503) throw new QueueFullError();
     throw err;
@@ -107,8 +116,14 @@ class QueueFullError extends Error {
 const submitBatch = async (submissions) => {
   try {
     const res = await axios.post(
-      `${JUDGE0_URL}/submissions/batch?base64_encoded=false`,
-      { submissions },
+      `${JUDGE0_URL}/submissions/batch?base64_encoded=true`,
+      {
+        submissions: submissions.map(s => ({
+          ...s,
+          source_code: toB64(s.source_code),
+          stdin: toB64(s.stdin),
+        })),
+      },
       { headers: judge0Headers(), timeout: 15000 }
     );
     return res.data.map(t => t.token);
@@ -124,11 +139,19 @@ const pollBatch = async (tokens) => {
   for (let attempt = 0; attempt < POLL_MAX_ATTEMPTS; attempt++) {
     await new Promise(r => setTimeout(r, POLL_INTERVAL_MS));
     const res = await axios.get(
-      `${JUDGE0_URL}/submissions/batch?tokens=${joined}&base64_encoded=false`,
+      `${JUDGE0_URL}/submissions/batch?tokens=${joined}&base64_encoded=true`,
       { headers: judge0Headers(), timeout: 15000 }
     );
     const subs = res.data.submissions;
-    if (subs.every(s => s.status?.id > 2)) return subs;
+    if (subs.every(s => s.status?.id > 2)) {
+      return subs.map(s => ({
+        ...s,
+        stdout: fromB64(s.stdout),
+        stderr: fromB64(s.stderr),
+        compile_output: fromB64(s.compile_output),
+        message: fromB64(s.message),
+      }));
+    }
   }
   throw new Error('Batch polling timed out after 30 s');
 };
