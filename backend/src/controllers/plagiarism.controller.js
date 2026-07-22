@@ -2,8 +2,12 @@ const path = require('path');
 const fs = require('fs');
 const { execFile } = require('child_process');
 const os = require('os');
-const db = require('../config/db');
 const { logAction } = require('../middleware/audit');
+const userRepo = require('../repositories/userRepository');
+const problemRepo = require('../repositories/problemRepository');
+const assignmentRepo = require('../repositories/assignmentRepository');
+const submissionRepo = require('../repositories/submissionRepository');
+const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 
 // Language id → { ext, jplagLang }
 const LANG_MAP = {
@@ -27,17 +31,12 @@ function langMeta(lang) {
 // Write one student's best submission to disk.
 // Returns the file path written, or null if no submission exists.
 async function writeSubmission(assignmentId, userId, problemId, rollno, workdir) {
-  const { rows } = await db.query(
-    `SELECT code, language
-       FROM code_submissions
-      WHERE user_id = $1 AND problem_id = $2 AND verdict = 'Accepted'
-      ORDER BY submitted_at ASC
-      LIMIT 1`,
-    [userId, problemId]
-  );
-  if (!rows.length) return null;
+  const accepted = (await submissionRepo.listByUserAndProblem(userId, problemId))
+    .filter(s => s.verdict === 'Accepted')
+    .sort((a, b) => (a.submittedAt?.toMillis?.() ?? 0) - (b.submittedAt?.toMillis?.() ?? 0));
+  if (!accepted.length) return null;
 
-  const { code, language } = rows[0];
+  const { code, language } = accepted[0];
   const { ext } = langMeta(language);
   const studentDir = path.join(workdir, String(rollno));
   fs.mkdirSync(studentDir, { recursive: true });
@@ -116,14 +115,8 @@ exports.runPlagiarism = async (req, res) => {
   const { id: assignmentId } = req.params;
 
   // 1. Verify assignment exists and belongs to this faculty
-  const { rows: [assignment] } = await db.query(
-    `SELECT a.id, a.faculty_id, a.deadline
-       FROM assignments a
-      WHERE a.id = $1 AND a.faculty_id = $2
-      LIMIT 1`,
-    [assignmentId, req.user.id]
-  );
-  if (!assignment) {
+  const assignment = await assignmentRepo.getById(assignmentId);
+  if (!assignment || assignment.facultyId !== req.user.id) {
     return res.status(404).json({ success: false, error: 'Assignment not found' });
   }
 
@@ -136,25 +129,20 @@ exports.runPlagiarism = async (req, res) => {
   }
 
   // 3. Fetch all problems in assignment
-  const { rows: apRows } = await db.query(
-    `SELECT ap.problem_id, p.title
-       FROM assignment_problems ap
-       JOIN problems p ON p.id = ap.problem_id
-      WHERE ap.assignment_id = $1`,
-    [assignmentId]
-  );
+  const apProblemsMap = await problemRepo.getMapByIds(assignment.problemIds || []);
+  const apRows = (assignment.problemIds || []).map(pid => ({ problem_id: pid, title: apProblemsMap.get(pid)?.title || 'Unknown' }));
   if (!apRows.length) {
     return res.status(400).json({ success: false, error: 'Assignment has no problems' });
   }
 
   // 4. Fetch all enrolled students
-  const { rows: students } = await db.query(
-    `SELECT DISTINCT cs.user_id, u.name, u.email
-       FROM code_submissions cs
-       JOIN users u ON u.id = cs.user_id
-      WHERE cs.problem_id = ANY($1::uuid[])`,
-    [apRows.map(r => r.problem_id)]
-  );
+  const subsPerProblem = await Promise.all(apRows.map(r => submissionRepo.listByProblem(r.problem_id)));
+  const submitterIds = [...new Set(subsPerProblem.flat().map(s => s.userId))];
+  const plagUsersMap = await userRepo.getAllUsersMap();
+  const students = submitterIds.map(uid => {
+    const profile = plagUsersMap.get(uid) || {};
+    return { user_id: uid, name: profile.name || 'Unknown', email: profile.email || '' };
+  });
 
   if (students.length < 2) {
     return res.status(400).json({ success: false, error: 'Need at least 2 student submissions' });
@@ -199,22 +187,17 @@ exports.runPlagiarism = async (req, res) => {
       console.warn('JPlag produced no CSV — check the JPlag version supports --csv-export and the JAR is valid.');
     }
 
-    // 8. Persist to DB (replace old results for this assignment)
-    await db.query('DELETE FROM plagiarism_results WHERE assignment_id = $1', [assignmentId]);
-
-    const upsertPromises = pairs.map(pair => {
-      // student key is rollno prefix (or composite if per-problem)
-      const idA = emailToId[pair.studentA.split('_')[0]] || null;
-      const idB = emailToId[pair.studentB.split('_')[0]] || null;
-      if (!idA || !idB) return Promise.resolve();
-      return db.query(
-        `INSERT INTO plagiarism_results
-           (assignment_id, student_a, student_b, similarity, language)
-         VALUES ($1,$2,$3,$4,$5)`,
-        [assignmentId, idA, idB, pair.similarity * 100, detectedLang]
-      );
-    });
-    await Promise.all(upsertPromises);
+    // 8. Persist (replace old results for this assignment)
+    const toPersist = pairs
+      .map(pair => {
+        // student key is rollno prefix (or composite if per-problem)
+        const idA = emailToId[pair.studentA.split('_')[0]] || null;
+        const idB = emailToId[pair.studentB.split('_')[0]] || null;
+        if (!idA || !idB) return null;
+        return { studentA: idA, studentB: idB, similarity: pair.similarity * 100, language: detectedLang };
+      })
+      .filter(Boolean);
+    await plagiarismResultRepo.replaceForAssignment(assignmentId, toPersist);
 
     logAction(req, 'plagiarism.run', `assignment ${assignmentId} → ${pairs.length} pairs`);
     res.json({
@@ -230,55 +213,46 @@ exports.runPlagiarism = async (req, res) => {
 exports.getPlagiarismResults = async (req, res) => {
   const { id: assignmentId } = req.params;
 
-  const { rows: [assignment] } = await db.query(
-    `SELECT id FROM assignments WHERE id = $1 AND faculty_id = $2`,
-    [assignmentId, req.user.id]
-  );
-  if (!assignment) {
+  const assignment = await assignmentRepo.getById(assignmentId);
+  if (!assignment || assignment.facultyId !== req.user.id) {
     return res.status(404).json({ success: false, error: 'Assignment not found' });
   }
 
-  const { rows } = await db.query(
-    `SELECT pr.id, pr.similarity, pr.language, pr.ran_at,
-            ua.name AS student_a_name, ua.email AS student_a_email,
-            ub.name AS student_b_name, ub.email AS student_b_email
-       FROM plagiarism_results pr
-       JOIN users ua ON ua.id = pr.student_a
-       JOIN users ub ON ub.id = pr.student_b
-      WHERE pr.assignment_id = $1
-      ORDER BY pr.similarity DESC`,
-    [assignmentId]
-  );
+  const rows = await plagiarismResultRepo.listByAssignment(assignmentId);
+  const pairUsersMap = await userRepo.getAllUsersMap();
+  const data = rows.map(r => ({
+    id: r.id, similarity: r.similarity, language: r.language, ran_at: r.ranAt?.toDate?.() ?? r.ranAt,
+    student_a_name: pairUsersMap.get(r.studentA)?.name || 'Unknown',
+    student_a_email: pairUsersMap.get(r.studentA)?.email || null,
+    student_b_name: pairUsersMap.get(r.studentB)?.name || 'Unknown',
+    student_b_email: pairUsersMap.get(r.studentB)?.email || null,
+  }));
 
-  res.json({ success: true, data: rows });
+  res.json({ success: true, data });
 };
 
 // Plagiarism summary across all of this faculty's assignments — for the
 // overview list and a per-assignment trend chart.
 exports.getPlagiarismOverview = async (req, res) => {
   try {
-    const { rows } = await db.query(`
-      SELECT a.id, a.title, a.deadline, a.created_at,
-             COUNT(pr.id) AS pairs,
-             COALESCE(ROUND(AVG(pr.similarity), 1), 0) AS avg_sim,
-             COALESCE(MAX(pr.similarity), 0) AS max_sim,
-             MAX(pr.ran_at) AS last_ran
-        FROM assignments a
-        LEFT JOIN plagiarism_results pr ON pr.assignment_id = a.id
-       WHERE a.faculty_id = $1
-       GROUP BY a.id, a.title, a.deadline, a.created_at
-       ORDER BY a.created_at ASC
-    `, [req.user.id]);
+    const assignments = (await assignmentRepo.listByFacultyId(req.user.id))
+      .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
+    const pairsByAssignment = await Promise.all(assignments.map(a => plagiarismResultRepo.listByAssignment(a.id)));
 
-    const data = rows.map(r => ({
-      id: r.id,
-      title: r.title,
-      deadline: r.deadline,
-      pairs: parseInt(r.pairs) || 0,
-      avgSim: Number(r.avg_sim) || 0,
-      maxSim: Number(r.max_sim) || 0,
-      lastRan: r.last_ran,
-    }));
+    const data = assignments.map((a, i) => {
+      const pairs = pairsByAssignment[i];
+      const sims = pairs.map(r => Number(r.similarity));
+      const ranTimes = pairs.map(r => r.ranAt?.toDate?.() ?? new Date(r.ranAt));
+      return {
+        id: a.id,
+        title: a.title,
+        deadline: a.deadline,
+        pairs: pairs.length,
+        avgSim: sims.length ? Math.round((sims.reduce((s, v) => s + v, 0) / sims.length) * 10) / 10 : 0,
+        maxSim: sims.length ? Math.max(...sims) : 0,
+        lastRan: ranTimes.length ? new Date(Math.max(...ranTimes.map(d => d.getTime()))) : null,
+      };
+    });
     res.json({ success: true, data });
   } catch (error) {
     console.error('Plagiarism Overview Error:', error);
@@ -293,46 +267,33 @@ exports.getPairDiff = async (req, res) => {
     const { id: assignmentId, pairId } = req.params;
 
     // Ownership check.
-    const { rows: [assignment] } = await db.query(
-      `SELECT id FROM assignments WHERE id = $1 AND faculty_id = $2`,
-      [assignmentId, req.user.id]
-    );
-    if (!assignment) return res.status(404).json({ success: false, error: 'Assignment not found' });
+    const assignment = await assignmentRepo.getById(assignmentId);
+    if (!assignment || assignment.facultyId !== req.user.id) {
+      return res.status(404).json({ success: false, error: 'Assignment not found' });
+    }
 
-    const { rows: [pair] } = await db.query(
-      `SELECT pr.student_a, pr.student_b, pr.similarity, pr.language,
-              ua.name AS a_name, ua.email AS a_email,
-              ub.name AS b_name, ub.email AS b_email
-         FROM plagiarism_results pr
-         JOIN users ua ON ua.id = pr.student_a
-         JOIN users ub ON ub.id = pr.student_b
-        WHERE pr.id = $1 AND pr.assignment_id = $2`,
-      [pairId, assignmentId]
-    );
-    if (!pair) return res.status(404).json({ success: false, error: 'Pair not found' });
+    const pair = await plagiarismResultRepo.getById(pairId);
+    if (!pair || pair.assignmentId !== assignmentId) return res.status(404).json({ success: false, error: 'Pair not found' });
+    const diffUsersMap = await userRepo.getAllUsersMap();
+    pair.a_name = diffUsersMap.get(pair.studentA)?.name || 'Unknown';
+    pair.a_email = diffUsersMap.get(pair.studentA)?.email || null;
+    pair.b_name = diffUsersMap.get(pair.studentB)?.name || 'Unknown';
+    pair.b_email = diffUsersMap.get(pair.studentB)?.email || null;
 
-    const { rows: probs } = await db.query(
-      `SELECT ap.problem_id, p.title
-         FROM assignment_problems ap
-         JOIN problems p ON p.id = ap.problem_id
-        WHERE ap.assignment_id = $1`,
-      [assignmentId]
-    );
+    const probsMap = await problemRepo.getMapByIds(assignment.problemIds || []);
+    const probs = (assignment.problemIds || []).map(pid => ({ problem_id: pid, title: probsMap.get(pid)?.title || 'Unknown' }));
 
     const fetchCode = async (userId, problemId) => {
-      const { rows } = await db.query(
-        `SELECT code, language FROM code_submissions
-          WHERE user_id = $1 AND problem_id = $2 AND verdict = 'Accepted'
-          ORDER BY submitted_at ASC LIMIT 1`,
-        [userId, problemId]
-      );
-      return rows[0] || null;
+      const accepted = (await submissionRepo.listByUserAndProblem(userId, problemId))
+        .filter(s => s.verdict === 'Accepted')
+        .sort((a, b) => (a.submittedAt?.toMillis?.() ?? 0) - (b.submittedAt?.toMillis?.() ?? 0));
+      return accepted[0] || null;
     };
 
     const problems = [];
     for (const pr of probs) {
-      const a = await fetchCode(pair.student_a, pr.problem_id);
-      const b = await fetchCode(pair.student_b, pr.problem_id);
+      const a = await fetchCode(pair.studentA, pr.problem_id);
+      const b = await fetchCode(pair.studentB, pr.problem_id);
       if (a || b) {
         problems.push({
           title: pr.title,

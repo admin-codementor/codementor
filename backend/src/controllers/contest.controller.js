@@ -1,4 +1,6 @@
-const db = require('../config/db');
+const userRepo = require('../repositories/userRepository');
+const problemRepo = require('../repositories/problemRepository');
+const contestRepo = require('../repositories/contestRepository');
 
 const VALID_MODES = ['public', 'frozen', 'hidden'];
 
@@ -22,21 +24,13 @@ exports.createContest = async (req, res) => {
       return res.status(400).json({ success: false, error: 'freeze_at is required for frozen mode' });
     }
 
-    const { rows: [contest] } = await db.query(
-      `INSERT INTO contests (faculty_id, title, description, starts_at, ends_at, scoreboard_mode, freeze_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-      [req.user.id, title, description || null, starts_at, ends_at, scoreboard_mode, freeze_at || null]
-    );
+    const contest = await contestRepo.create({
+      facultyId: req.user.id, title, description: description || null,
+      startsAt: starts_at, endsAt: ends_at, scoreboardMode: scoreboard_mode, freezeAt: freeze_at || null,
+      problemIds: problem_ids,
+    });
 
-    for (let i = 0; i < problem_ids.length; i++) {
-      await db.query(
-        `INSERT INTO contest_problems (contest_id, problem_id, sort_order) VALUES ($1,$2,$3)
-         ON CONFLICT DO NOTHING`,
-        [contest.id, problem_ids[i], i]
-      );
-    }
-
-    res.status(201).json({ success: true, data: contest });
+    res.status(201).json({ success: true, data: { id: contest.id } });
   } catch (e) {
     console.error(e);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -54,16 +48,13 @@ exports.updateScoreboardMode = async (req, res) => {
       return res.status(400).json({ success: false, error: 'scoreboard_mode must be public | frozen | hidden' });
     }
 
-    const { rows } = await db.query(
-      `UPDATE contests
-          SET scoreboard_mode = $1, freeze_at = $2
-        WHERE id = $3 AND faculty_id = $4
-        RETURNING id, scoreboard_mode, freeze_at`,
-      [scoreboard_mode, freeze_at || null, id, req.user.id]
-    );
-    if (!rows.length) return res.status(404).json({ success: false, error: 'Contest not found' });
+    const contest = await contestRepo.getById(id);
+    if (!contest || contest.facultyId !== req.user.id) {
+      return res.status(404).json({ success: false, error: 'Contest not found' });
+    }
 
-    res.json({ success: true, data: rows[0] });
+    const updated = await contestRepo.update(id, { scoreboardMode: scoreboard_mode, freezeAt: freeze_at || null });
+    res.json({ success: true, data: { id: updated.id, scoreboard_mode: updated.scoreboardMode, freeze_at: updated.freezeAt } });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Server error' });
   }
@@ -73,20 +64,18 @@ exports.updateScoreboardMode = async (req, res) => {
 
 exports.listContests = async (req, res) => {
   try {
-    const { rows } = await db.query(
-      `SELECT c.id, c.title, c.description, c.starts_at, c.ends_at,
-              c.scoreboard_mode, c.freeze_at, c.created_at,
-              u.name AS host_name,
-              COUNT(DISTINCT cp.problem_id) AS problem_count,
-              COUNT(DISTINCT cr.user_id)    AS registrant_count
-         FROM contests c
-         JOIN users u ON u.id = c.faculty_id
-         LEFT JOIN contest_problems cp ON cp.contest_id = c.id
-         LEFT JOIN contest_registrations cr ON cr.contest_id = c.id
-        GROUP BY c.id, u.name
-        ORDER BY c.starts_at DESC`
-    );
-    res.json({ success: true, data: rows });
+    const contests = await contestRepo.listAll();
+    const usersMap = await userRepo.getAllUsersMap();
+    const data = await Promise.all(contests.map(async (c) => ({
+      id: c.id, title: c.title, description: c.description,
+      starts_at: c.startsAt, ends_at: c.endsAt, scoreboard_mode: c.scoreboardMode, freeze_at: c.freezeAt,
+      created_at: c.createdAt, faculty_id: c.facultyId,
+      problem_count: (c.problemIds || []).length,
+      registrant_count: await contestRepo.getRegistrationCount(c.id),
+      host_name: usersMap.get(c.facultyId)?.name || 'Unknown',
+    })));
+    data.sort((a, b) => new Date(b.starts_at) - new Date(a.starts_at));
+    res.json({ success: true, data });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Server error' });
   }
@@ -97,24 +86,26 @@ exports.listContests = async (req, res) => {
 exports.getContest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { rows: [contest] } = await db.query(
-      `SELECT c.*, u.name AS host_name
-         FROM contests c JOIN users u ON u.id = c.faculty_id
-        WHERE c.id = $1`,
-      [id]
-    );
+    const contest = await contestRepo.getById(id);
     if (!contest) return res.status(404).json({ success: false, error: 'Contest not found' });
+    const hostProfile = await userRepo.getById(contest.facultyId, 'faculty');
 
-    const { rows: problems } = await db.query(
-      `SELECT p.id, p.title, p.difficulty, p.tags, cp.sort_order
-         FROM contest_problems cp
-         JOIN problems p ON p.id = cp.problem_id
-        WHERE cp.contest_id = $1
-        ORDER BY cp.sort_order`,
-      [id]
-    );
+    const problemsMap = await problemRepo.getMapByIds(contest.problemIds || []);
+    const problems = (contest.problemIds || []).map((pid, i) => {
+      const p = problemsMap.get(pid);
+      return { id: pid, title: p?.title || 'Unknown', difficulty: p?.difficulty, tags: p?.tags || [], sort_order: i };
+    });
 
-    res.json({ success: true, data: { ...contest, problems } });
+    res.json({
+      success: true,
+      data: {
+        id: contest.id, title: contest.title, description: contest.description,
+        starts_at: contest.startsAt, ends_at: contest.endsAt,
+        scoreboard_mode: contest.scoreboardMode, freeze_at: contest.freezeAt,
+        faculty_id: contest.facultyId, host_name: hostProfile?.name || 'Unknown',
+        problems,
+      },
+    });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Server error' });
   }
@@ -125,10 +116,7 @@ exports.getContest = async (req, res) => {
 exports.register = async (req, res) => {
   try {
     const { id } = req.params;
-    await db.query(
-      `INSERT INTO contest_registrations (contest_id, user_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
-      [id, req.user.id]
-    );
+    await contestRepo.addRegistration(id, req.user.id);
     res.json({ success: true });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Server error' });
@@ -147,65 +135,53 @@ exports.getScoreboard = async (req, res) => {
     const requesterId = req.user?.id;
     const requesterRole = req.user?.role;
 
-    const { rows: [contest] } = await db.query(
-      'SELECT * FROM contests WHERE id = $1', [id]
-    );
+    const contest = await contestRepo.getById(id);
     if (!contest) return res.status(404).json({ success: false, error: 'Contest not found' });
 
     const now = new Date();
-    const contestOver = now > new Date(contest.ends_at);
+    const contestOver = now > new Date(contest.endsAt);
     const isFaculty = requesterRole === 'faculty' || requesterRole === 'admin'
-                      || String(contest.faculty_id) === String(requesterId);
+                      || String(contest.facultyId) === String(requesterId);
 
     // Hidden mode: students see nothing during contest
-    if (contest.scoreboard_mode === 'hidden' && !isFaculty && !contestOver) {
+    if (contest.scoreboardMode === 'hidden' && !isFaculty && !contestOver) {
       return res.json({ success: true, data: [], hidden: true });
     }
 
     // Cutoff time for frozen mode
     let cutoff = null;
-    if (contest.scoreboard_mode === 'frozen' && !isFaculty && !contestOver) {
-      cutoff = contest.freeze_at ? new Date(contest.freeze_at) : null;
+    if (contest.scoreboardMode === 'frozen' && !isFaculty && !contestOver) {
+      cutoff = contest.freezeAt ? new Date(contest.freezeAt) : null;
     }
 
-    // Build scoreboard — ACM style: sorted by (problems solved DESC, total penalty ASC)
-    const { rows: problems } = await db.query(
-      `SELECT problem_id FROM contest_problems WHERE contest_id = $1 ORDER BY sort_order`,
-      [id]
-    );
-    const problemIds = problems.map(p => p.problem_id);
+    const problemIds = contest.problemIds || [];
 
-    // All accepted submissions (respecting cutoff for frozen)
-    const { rows: allSubs } = await db.query(
-      `SELECT cs.user_id, cs.problem_id, cs.verdict, cs.penalty_minutes, cs.submitted_at,
-              u.name, u.email
-         FROM contest_submissions cs
-         JOIN users u ON u.id = cs.user_id
-        WHERE cs.contest_id = $1
-        ORDER BY cs.submitted_at ASC`,
-      [id]
-    );
+    // All submissions (respecting cutoff for frozen)
+    const allSubs = (await contestRepo.listSubmissions(id))
+      .sort((a, b) => (a.submittedAt?.toMillis?.() ?? 0) - (b.submittedAt?.toMillis?.() ?? 0));
+    const usersMap = await userRepo.getAllUsersMap();
 
     // Aggregate per user
     const board = {};
     for (const sub of allSubs) {
-      const uid = sub.user_id;
+      const uid = sub.userId;
       if (!board[uid]) {
+        const profile = usersMap.get(uid) || {};
         board[uid] = {
-          user_id: uid, name: sub.name, email: sub.email,
+          user_id: uid, name: profile.name || 'Unknown', email: profile.email || null,
           solved: 0, penalty: 0, problems: {},
           is_frozen_row: false,
         };
       }
       const entry = board[uid];
-      const pid   = sub.problem_id;
+      const pid   = sub.problemId;
       if (!entry.problems[pid]) entry.problems[pid] = { accepted: false, attempts: 0, penalty: 0 };
       const p = entry.problems[pid];
       if (p.accepted) continue; // already solved — ignore later subs
 
       // In frozen mode, non-faculty see subs only up to cutoff
       const isOwn = uid === requesterId;
-      const subTime = new Date(sub.submitted_at);
+      const subTime = sub.submittedAt?.toDate?.() ?? new Date(sub.submittedAt);
       if (cutoff && !isOwn && subTime > cutoff) {
         entry.is_frozen_row = true;
         continue;
@@ -214,7 +190,7 @@ exports.getScoreboard = async (req, res) => {
       p.attempts++;
       if (sub.verdict === 'Accepted') {
         p.accepted = true;
-        const minutesFromStart = Math.floor((subTime - new Date(contest.starts_at)) / 60000);
+        const minutesFromStart = Math.floor((subTime - new Date(contest.startsAt)) / 60000);
         p.penalty = (p.attempts - 1) * 20 + minutesFromStart; // 20-min penalty per WA
         entry.solved++;
         entry.penalty += p.penalty;
@@ -225,16 +201,16 @@ exports.getScoreboard = async (req, res) => {
       b.solved !== a.solved ? b.solved - a.solved : a.penalty - b.penalty
     );
 
-    const frozen = contest.scoreboard_mode === 'frozen' && !isFaculty && !contestOver
+    const frozen = contest.scoreboardMode === 'frozen' && !isFaculty && !contestOver
       && cutoff && now > cutoff;
 
     res.json({
       success: true,
       data: rows,
       problem_ids: problemIds,
-      scoreboard_mode: contest.scoreboard_mode,
+      scoreboard_mode: contest.scoreboardMode,
       frozen,
-      freeze_at: contest.freeze_at,
+      freeze_at: contest.freezeAt,
     });
   } catch (e) {
     console.error(e);
@@ -249,21 +225,13 @@ exports.startVirtual = async (req, res) => {
     const { id: contestId } = req.params;
     const userId = req.user.id;
 
-    const { rows: [contest] } = await db.query(
-      'SELECT id, ends_at FROM contests WHERE id = $1', [contestId]
-    );
+    const contest = await contestRepo.getById(contestId);
     if (!contest) return res.status(404).json({ success: false, error: 'Contest not found' });
-    if (new Date() < new Date(contest.ends_at)) {
+    if (new Date() < new Date(contest.endsAt)) {
       return res.status(400).json({ success: false, error: 'Contest is still running — join the live contest instead' });
     }
 
-    const { rows: [vp] } = await db.query(
-      `INSERT INTO virtual_participations (contest_id, user_id)
-       VALUES ($1, $2)
-       ON CONFLICT (contest_id, user_id) DO UPDATE SET started_at = virtual_participations.started_at
-       RETURNING *`,
-      [contestId, userId]
-    );
+    const vp = await contestRepo.startVirtualParticipation(contestId, userId);
     res.json({ success: true, data: vp });
   } catch (e) {
     res.status(500).json({ success: false, error: 'Server error' });
@@ -276,38 +244,28 @@ exports.getVirtualScoreboard = async (req, res) => {
     const { id: contestId } = req.params;
     const userId = req.user.id;
 
-    const { rows: [vp] } = await db.query(
-      'SELECT * FROM virtual_participations WHERE contest_id = $1 AND user_id = $2',
-      [contestId, userId]
-    );
+    const vp = await contestRepo.getVirtualParticipation(contestId, userId);
     if (!vp) return res.status(404).json({ success: false, error: 'No virtual participation found. Start one first.' });
 
-    const { rows: problems } = await db.query(
-      `SELECT problem_id FROM contest_problems WHERE contest_id = $1 ORDER BY sort_order`,
-      [contestId]
-    );
+    const contest = await contestRepo.getById(contestId);
+    const problemIds = contest?.problemIds || [];
 
-    const { rows: subs } = await db.query(
-      `SELECT problem_id, verdict, penalty_minutes, virtual_elapsed_minutes, submitted_at
-         FROM contest_submissions
-        WHERE contest_id = $1 AND user_id = $2 AND is_virtual = TRUE
-        ORDER BY submitted_at ASC`,
-      [contestId, userId]
-    );
+    const subs = (await contestRepo.listSubmissionsByUser(contestId, userId, { virtualOnly: true }))
+      .sort((a, b) => (a.submittedAt?.toMillis?.() ?? 0) - (b.submittedAt?.toMillis?.() ?? 0));
 
     const board = {};
     let totalSolved = 0;
     let totalPenalty = 0;
 
     for (const sub of subs) {
-      const pid = sub.problem_id;
+      const pid = sub.problemId;
       if (!board[pid]) board[pid] = { accepted: false, attempts: 0, penalty: 0, elapsed: 0 };
       const p = board[pid];
       if (p.accepted) continue;
       p.attempts++;
       if (sub.verdict === 'Accepted') {
         p.accepted = true;
-        p.elapsed  = sub.virtual_elapsed_minutes || 0;
+        p.elapsed  = sub.virtualElapsedMinutes || 0;
         p.penalty  = (p.attempts - 1) * 20 + p.elapsed;
         totalSolved++;
         totalPenalty += p.penalty;
@@ -317,8 +275,8 @@ exports.getVirtualScoreboard = async (req, res) => {
     res.json({
       success: true,
       data: {
-        started_at: vp.started_at,
-        problem_ids: problems.map(p => p.problem_id),
+        started_at: vp.startedAt,
+        problem_ids: problemIds,
         problems: board,
         solved: totalSolved,
         penalty: totalPenalty,

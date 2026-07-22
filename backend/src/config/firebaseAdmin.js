@@ -6,4 +6,4 @@ const serviceAccount = require(path.join(__dirname, '../../firebase-service-acco
 
 const firebaseApp = getApps().length ? getApp() : initializeApp({ credential: cert(serviceAccount) });
 
-module.exports = { firebaseAuth: getAuth(firebaseApp) };
+module.exports = { firebaseApp, firebaseAuth: getAuth(firebaseApp) };

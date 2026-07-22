@@ -1,6 +1,7 @@
-const db = require('../config/db');
+const { v4: uuidv4 } = require('uuid');
 const jwt = require('jsonwebtoken');
 const { firebaseAuth } = require('../config/firebaseAdmin');
+const userRepo = require('../repositories/userRepository');
 
 const { resolvePermissions } = require('../middleware/permissions');
 
@@ -15,10 +16,12 @@ const generateTokens = (user) => {
 
 // POST /api/auth/firebase  (public)  body { id_token, name?, role?, department?, section?, year?, roll_no? }
 // Verifies a Firebase ID token (issued by the frontend's Firebase SDK after
-// email/password or Google sign-in), then upserts the local `users` row by
-// firebase_uid — linking by email on first sign-in — and issues the app's
-// normal access/refresh tokens so every existing `protect`-gated route keeps
-// working unchanged.
+// email/password or Google sign-in), then upserts the user's profile document
+// in Firestore (`students/{id}` or `faculty/{id}`) — looked up by firebaseUid,
+// falling back to email on first sign-in — and issues the app's normal
+// access/refresh tokens so every existing `protect`-gated route keeps working
+// unchanged. Firestore is now the sole store for user data — no Postgres
+// row is created or read anywhere in this flow.
 exports.firebaseLogin = async (req, res) => {
   try {
     const { id_token, name, role, department, section, year, roll_no } = req.body;
@@ -39,19 +42,14 @@ exports.firebaseLogin = async (req, res) => {
       return res.status(401).json({ success: false, error: 'Firebase account has no email' });
     }
 
-    const cols = 'id, name, email, role, department, permissions, totp_secret, totp_enabled';
+    let user = await userRepo.getByFirebaseUid(uid);
 
-    let user;
-    const byUid = await db.query(`SELECT ${cols} FROM users WHERE firebase_uid = $1`, [uid]);
+    if (!user) {
+      user = await userRepo.getByEmail(email);
 
-    if (byUid.rows.length > 0) {
-      user = byUid.rows[0];
-    } else {
-      const byEmail = await db.query(`SELECT ${cols} FROM users WHERE email = $1`, [email]);
-
-      if (byEmail.rows.length > 0) {
-        user = byEmail.rows[0];
-        await db.query('UPDATE users SET firebase_uid = $1 WHERE id = $2', [uid, user.id]);
+      if (user) {
+        await userRepo.update(user.id, user.role, { firebaseUid: uid });
+        user.firebaseUid = uid;
       } else {
         const displayName = (typeof name === 'string' && name.trim()) || decoded.name || email.split('@')[0];
 
@@ -60,26 +58,26 @@ exports.firebaseLogin = async (req, res) => {
         const yrNum = parseInt(year, 10);
         const yr   = yrNum >= 1 && yrNum <= 6 ? yrNum : null;
         const roll = typeof roll_no === 'string' && roll_no.trim() ? roll_no.trim() : null;
+        const newRole = role === 'faculty' ? 'faculty' : 'student';
+        const id = uuidv4();
 
-        const inserted = await db.query(
-          `INSERT INTO users (name, email, role, department, section, year, roll_no, firebase_uid)
-           VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-           RETURNING ${cols}`,
-          [displayName, email, role === 'faculty' ? 'faculty' : 'student', dept, sec, yr, roll, uid]
-        );
-        user = inserted.rows[0];
+        const profileData = {
+          name: displayName, email, role: newRole,
+          department: dept, section: sec, year: yr, rollNo: roll,
+          firebaseUid: uid, rating: 1200, totpSecret: null, totpEnabled: false,
+          ...(newRole === 'faculty' ? { permissions: {} } : {}),
+        };
+        user = await userRepo.create(id, profileData);
       }
     }
 
-    // Same fail2ban-adjacent lockout the password flow uses isn't applicable
-    // here (Firebase already verified identity) — just reset it on sign-in.
-    await db.query(
-      'UPDATE users SET failed_login_attempts = 0, locked_until = NULL, last_login_at = NOW() WHERE id = $1',
-      [user.id]
-    );
+    // Firebase already verified identity — 2FA gate and last-login bookkeeping
+    // live entirely in Firestore now.
+    const totpEnabled = user.totpEnabled === true;
 
-    // 2FA: if enabled, do NOT issue tokens yet — require the TOTP step (same as password login).
-    if (user.totp_enabled) {
+    await userRepo.update(user.id, user.role, { lastLoginAt: new Date() });
+
+    if (totpEnabled) {
       return res.json({ success: true, twofa_required: true, user_id: user.id });
     }
 

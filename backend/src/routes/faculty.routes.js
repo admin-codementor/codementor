@@ -6,7 +6,8 @@ const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../m
 const facultyController = require('../controllers/faculty.controller');
 const plagiarismController = require('../controllers/plagiarism.controller');
 const { logAction } = require('../middleware/audit');
-const db = require('../config/db');
+const userRepo = require('../repositories/userRepository');
+const auditLogRepo = require('../repositories/auditLogRepository');
 
 const router = express.Router();
 
@@ -113,13 +114,11 @@ router.get('/faculty-list',
   authorize('admin'),
   async (req, res) => {
     try {
-      const { rows } = await db.query(
-        `SELECT id, name, email, role, permissions, created_at
-           FROM users WHERE role = 'faculty' ORDER BY name ASC`
-      );
-      const data = rows.map(u => ({
+      const faculty = (await userRepo.listByRole('faculty'))
+        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+      const data = faculty.map(u => ({
         id: u.id, name: u.name, email: u.email, role: u.role,
-        created_at: u.created_at,
+        created_at: u.createdAt,
         permissions: resolvePermissions(u),
       }));
       res.json({ success: true, data, allPermissions: ALL_PERMISSIONS });
@@ -133,12 +132,9 @@ router.get('/permissions/:userId',
   authorize('admin'),
   async (req, res) => {
     try {
-      const { rows } = await db.query(
-        'SELECT id, name, email, role, permissions FROM users WHERE id = $1 AND role = $2',
-        [req.params.userId, 'faculty']
-      );
-      if (!rows.length) return res.status(404).json({ success: false, error: 'Faculty user not found' });
-      res.json({ success: true, data: { ...rows[0], permissions: resolvePermissions(rows[0]) } });
+      const user = await userRepo.getById(req.params.userId, 'faculty');
+      if (!user) return res.status(404).json({ success: false, error: 'Faculty user not found' });
+      res.json({ success: true, data: { ...user, permissions: resolvePermissions(user) } });
     } catch (e) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -161,14 +157,13 @@ router.patch('/permissions/:userId',
           .map(p => [p, Boolean(incoming[p])])
       );
 
-      const { rows } = await db.query(
-        `UPDATE users SET permissions = $1 WHERE id = $2 AND role = 'faculty' RETURNING id, name, email, permissions`,
-        [JSON.stringify(sanitized), req.params.userId]
-      );
-      if (!rows.length) return res.status(404).json({ success: false, error: 'Faculty user not found' });
+      const existing = await userRepo.getById(req.params.userId, 'faculty');
+      if (!existing) return res.status(404).json({ success: false, error: 'Faculty user not found' });
+
+      await userRepo.update(req.params.userId, 'faculty', { permissions: sanitized });
 
       logAction(req, 'permissions.update', `faculty ${req.params.userId}: ${Object.keys(sanitized).filter(k => sanitized[k]).join(',') || 'none'}`);
-      res.json({ success: true, data: rows[0] });
+      res.json({ success: true, data: { id: existing.id, name: existing.name, email: existing.email, permissions: sanitized } });
     } catch (e) {
       res.status(500).json({ success: false, error: e.message });
     }
@@ -181,16 +176,16 @@ router.get('/audit-logs',
   async (req, res) => {
     try {
       const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
-      const { rows } = await db.query(
-        `SELECT al.id, al.action, al.detail, al.ip, al.created_at,
-                u.name AS user_name, u.email AS user_email
-           FROM audit_logs al
-           LEFT JOIN users u ON u.id = al.user_id
-          ORDER BY al.created_at DESC
-          LIMIT $1`,
-        [limit]
-      );
-      res.json({ success: true, data: rows });
+      const rows = await auditLogRepo.listRecent(limit);
+      const usersMap = await userRepo.getAllUsersMap();
+      const data = rows.map(r => {
+        const u = usersMap.get(r.userId);
+        return {
+          id: r.id, action: r.action, detail: r.detail, ip: r.ip, created_at: r.createdAt,
+          user_name: u?.name || null, user_email: u?.email || null,
+        };
+      });
+      res.json({ success: true, data });
     } catch (e) {
       res.status(500).json({ success: false, error: e.message });
     }

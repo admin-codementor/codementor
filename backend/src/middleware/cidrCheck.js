@@ -1,4 +1,4 @@
-const db = require('../config/db');
+const assignmentRepo = require('../repositories/assignmentRepository');
 
 // Convert IPv4 address string to a 32-bit integer.
 function ipToInt(ip) {
@@ -65,12 +65,9 @@ async function enforceExamIP(req, res, next) {
   const { assignment_id } = req.body;
   if (!assignment_id) return next(); // not an assignment/exam submission — skip
 
-  let rows;
+  let assignment;
   try {
-    ({ rows } = await db.query(
-      'SELECT allowed_cidrs, is_exam, deadline FROM assignments WHERE id = $1',
-      [assignment_id]
-    ));
+    assignment = await assignmentRepo.getById(assignment_id);
   } catch (e) {
     console.error('Exam access check DB error:', e.message);
     return res.status(503).json({
@@ -79,9 +76,11 @@ async function enforceExamIP(req, res, next) {
     });
   }
 
-  if (!rows.length) return next(); // unknown assignment — let the controller handle it
+  if (!assignment) return next(); // unknown assignment — let the controller handle it
 
-  const { allowed_cidrs, is_exam, deadline } = rows[0];
+  const allowed_cidrs = assignment.allowedCidrs;
+  const is_exam = assignment.isExam;
+  const deadline = assignment.deadline?.toDate?.() ?? assignment.deadline;
 
   // 1. Exam window — closed after the deadline.
   if (is_exam && deadline && new Date() > new Date(deadline)) {

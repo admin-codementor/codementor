@@ -1,5 +1,7 @@
 const PDFDocument = require('pdfkit');
-const db = require('../config/db');
+const userRepo = require('../repositories/userRepository');
+const problemRepo = require('../repositories/problemRepository');
+const submissionRepo = require('../repositories/submissionRepository');
 
 // ── Colours / typography to match the dark-themed brand on a printable light page ──
 const COLORS = {
@@ -148,11 +150,8 @@ const renderProblemBody = async (doc, problem, index) => {
   bodyText(doc, problem.description);
 
   // Fetch public sample test cases.
-  const tcResult = await db.query(
-    'SELECT input_data, expected_output FROM test_cases WHERE problem_id = $1 AND is_public = true ORDER BY created_at ASC',
-    [problem.id]
-  );
-  const samples = tcResult.rows;
+  const samples = (await problemRepo.getPublicTestCases(problem.id))
+    .map(t => ({ input_data: t.inputData, expected_output: t.expectedOutput }));
 
   if (samples.length > 0) {
     sectionHeading(doc, 'Sample Input / Output');
@@ -177,16 +176,16 @@ exports.exportProblemPdf = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const problemResult = await db.query(
-      'SELECT id, title, description, difficulty, tags, time_limit, memory_limit FROM problems WHERE id = $1',
-      [id]
-    );
+    const p = await problemRepo.getById(id);
 
-    if (problemResult.rows.length === 0) {
+    if (!p) {
       return res.status(404).json({ success: false, error: 'Problem not found' });
     }
 
-    const problem = problemResult.rows[0];
+    const problem = {
+      id: p.id, title: p.title, description: p.description, difficulty: p.difficulty,
+      tags: p.tags || [], time_limit: p.timeLimit, memory_limit: p.memoryLimit,
+    };
 
     const doc = new PDFDocument({ size: 'A4', margin: 56, bufferPages: true });
 
@@ -265,57 +264,77 @@ const simpleTable = (doc, cols, rows) => {
 exports.exportClassReport = async (req, res) => {
   try {
     // ── Gather data ──────────────────────────────────────────────────────────
-    const { rows: [stats] } = await db.query(`
-      SELECT
-        (SELECT COUNT(*) FROM users WHERE role = 'student') AS total_students,
-        (SELECT COUNT(DISTINCT user_id) FROM code_submissions WHERE submitted_at >= NOW() - INTERVAL '7 days') AS active_7d,
-        COUNT(*) AS total_subs,
-        SUM(CASE WHEN verdict = 'Accepted' THEN 1 ELSE 0 END) AS total_ac,
-        COUNT(DISTINCT CASE WHEN verdict = 'Accepted' THEN problem_id END) AS problems_solved
-      FROM code_submissions
-    `);
-    const totalSubs = parseInt(stats.total_subs) || 0;
-    const acRate = totalSubs ? Math.round((parseInt(stats.total_ac) / totalSubs) * 100) : 0;
+    // Roster + department/section from Firestore; submissions from Firestore too.
+    const studentsMap = await userRepo.getMapByRole('student');
+    const studentIds = [...studentsMap.keys()];
+    const idSet = new Set(studentIds);
 
-    const { rows: topStudents } = await db.query(`
-      SELECT u.name, COALESCE(u.department, '—') AS department, COALESCE(u.section, '—') AS section,
-             COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) AS solved
-        FROM users u JOIN code_submissions s ON s.user_id = u.id
-       WHERE u.role = 'student'
-       GROUP BY u.id, u.name, u.department, u.section
-      HAVING COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) > 0
-       ORDER BY solved DESC LIMIT 10
-    `);
+    const allSubs = await submissionRepo.listAll();
+    const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
 
-    const { rows: topics } = await db.query(`
-      SELECT topic, solved_count, failed_count FROM (
-        SELECT unnest(p.tags) AS topic,
-          SUM(CASE WHEN s.verdict = 'Accepted' THEN 1 ELSE 0 END) AS solved_count,
-          SUM(CASE WHEN s.verdict != 'Accepted' THEN 1 ELSE 0 END) AS failed_count
-        FROM code_submissions s JOIN problems p ON s.problem_id = p.id
-        GROUP BY unnest(p.tags)
-      ) t WHERE failed_count > 0 ORDER BY failed_count DESC LIMIT 8
-    `);
+    const sevenDaysAgo = Date.now() - 7 * 86400000;
+    const active7d = new Set(allSubs.filter(s => subMillis(s) >= sevenDaysAgo).map(s => s.userId)).size;
+    const totalSubs = allSubs.length;
+    const totalAc = allSubs.filter(s => s.verdict === 'Accepted').length;
+    const problemsSolved = new Set(allSubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId)).size;
+    const stats = { total_students: studentIds.length, active_7d: active7d, problems_solved: problemsSolved };
+    const acRate = totalSubs ? Math.round((totalAc / totalSubs) * 100) : 0;
 
-    const { rows: cohorts } = await db.query(`
-      SELECT COALESCE(u.department, 'Unassigned') AS label,
-             COUNT(DISTINCT u.id) AS students,
-             COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) AS solved,
-             COUNT(s.id) AS total_subs,
-             SUM(CASE WHEN s.verdict = 'Accepted' THEN 1 ELSE 0 END) AS accepted
-        FROM users u LEFT JOIN code_submissions s ON s.user_id = u.id
-       WHERE u.role = 'student'
-       GROUP BY COALESCE(u.department, 'Unassigned')
-       ORDER BY solved DESC
-    `);
+    const perStudent = new Map(studentIds.map(id => [id, { solved: new Set(), total: 0, accepted: 0, lastSub: 0 }]));
+    for (const s of allSubs) {
+      const stat = perStudent.get(s.userId);
+      if (!stat) continue;
+      stat.total += 1;
+      if (s.verdict === 'Accepted') { stat.accepted += 1; stat.solved.add(s.problemId); }
+      const t = subMillis(s);
+      if (t > stat.lastSub) stat.lastSub = t;
+    }
 
-    const { rows: [atRisk] } = await db.query(`
-      SELECT COUNT(*) AS count FROM (
-        SELECT u.id, MAX(s.submitted_at) AS last_sub
-          FROM users u LEFT JOIN code_submissions s ON s.user_id = u.id
-         WHERE u.role = 'student' GROUP BY u.id
-      ) t WHERE last_sub IS NULL OR last_sub < NOW() - INTERVAL '14 days'
-    `);
+    const topStudents = studentIds
+      .map(id => {
+        const profile = studentsMap.get(id) || {};
+        const stat = perStudent.get(id);
+        return {
+          name: profile.name || 'Unknown',
+          department: profile.department || '—', section: profile.section || '—',
+          solved: stat.solved.size,
+        };
+      })
+      .filter(s => s.solved > 0)
+      .sort((a, b) => b.solved - a.solved)
+      .slice(0, 10);
+
+    const pdfTopicsProblemsMap = await problemRepo.getMapByIds([...new Set(allSubs.map(s => s.problemId))]);
+    const pdfTopicCounts = {};
+    for (const s of allSubs) {
+      const tags = pdfTopicsProblemsMap.get(s.problemId)?.tags || [];
+      for (const tag of tags) {
+        if (!pdfTopicCounts[tag]) pdfTopicCounts[tag] = { topic: tag, solved_count: 0, failed_count: 0 };
+        if (s.verdict === 'Accepted') pdfTopicCounts[tag].solved_count += 1;
+        else pdfTopicCounts[tag].failed_count += 1;
+      }
+    }
+    const topics = Object.values(pdfTopicCounts)
+      .filter(t => t.failed_count > 0)
+      .sort((a, b) => b.failed_count - a.failed_count)
+      .slice(0, 8);
+
+    const cohortGroups = new Map();
+    for (const id of studentIds) {
+      const label = studentsMap.get(id)?.department || 'Unassigned';
+      if (!cohortGroups.has(label)) cohortGroups.set(label, { label, students: 0, solved: 0, total_subs: 0, accepted: 0 });
+      const g = cohortGroups.get(label);
+      const stat = perStudent.get(id);
+      g.students += 1;
+      g.solved += stat.solved.size;
+      g.total_subs += stat.total;
+      g.accepted += stat.accepted;
+    }
+    const cohorts = [...cohortGroups.values()].sort((a, b) => b.solved - a.solved);
+
+    const fourteenDaysAgo = Date.now() - 14 * 86400000;
+    const atRiskCount = studentIds.filter(id => perStudent.get(id).lastSub < fourteenDaysAgo).length;
+    const atRisk = { count: atRiskCount };
 
     // ── Render ─────────────────────────────────────────────────────────────────
     const doc = new PDFDocument({ size: 'A4', margin: 56, bufferPages: true });
@@ -402,17 +421,19 @@ exports.exportQuestionPaper = async (req, res) => {
     const paperTitle = (typeof title === 'string' && title.trim()) ? title.trim() : 'Question Paper';
 
     // Fetch all requested problems, then re-order to match the requested order.
-    const result = await db.query(
-      'SELECT id, title, description, difficulty, tags, time_limit, memory_limit FROM problems WHERE id = ANY($1::uuid[])',
-      [problem_ids]
-    );
+    const byId = await problemRepo.getMapByIds(problem_ids);
 
-    if (result.rows.length === 0) {
+    if (byId.size === 0) {
       return res.status(404).json({ success: false, error: 'No matching problems found' });
     }
 
-    const byId = new Map(result.rows.map((r) => [r.id, r]));
-    const problems = problem_ids.map((pid) => byId.get(pid)).filter(Boolean);
+    const problems = problem_ids
+      .map((pid) => byId.get(pid))
+      .filter(Boolean)
+      .map(p => ({
+        id: p.id, title: p.title, description: p.description, difficulty: p.difficulty,
+        tags: p.tags || [], time_limit: p.timeLimit, memory_limit: p.memoryLimit,
+      }));
 
     const doc = new PDFDocument({ size: 'A4', margin: 56, bufferPages: true });
 

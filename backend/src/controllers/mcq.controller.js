@@ -1,5 +1,6 @@
-const db = require('../config/db');
 const { logAction } = require('../middleware/audit');
+const userRepo = require('../repositories/userRepository');
+const mcqRepo = require('../repositories/mcqRepository');
 
 const CATEGORIES = ['aptitude', 'technical', 'verbal', 'logical', 'general'];
 
@@ -13,11 +14,11 @@ exports.createTest = async (req, res) => {
     const cat = CATEGORIES.includes(category) ? category : 'aptitude';
     const dur = Math.min(Math.max(parseInt(duration_minutes, 10) || 30, 1), 300);
 
-    const { rows: [t] } = await db.query(
-      `INSERT INTO mcq_tests (faculty_id, title, description, category, duration_minutes)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [req.user.id, title.trim(), (description || '').slice(0, 2000) || null, cat, dur]
-    );
+    const t = await mcqRepo.create({
+      facultyId: req.user.id, title: title.trim(),
+      description: (description || '').slice(0, 2000) || null,
+      category: cat, durationMinutes: dur, isPublished: false,
+    });
     logAction(req, 'mcq.create', `test "${title.trim()}"`);
     res.status(201).json({ success: true, data: { id: t.id } });
   } catch (e) {
@@ -26,13 +27,11 @@ exports.createTest = async (req, res) => {
   }
 };
 
-// Ownership guard (admins bypass).
-async function ownsTest(req, testId) {
-  const { rows } = await db.query(
-    `SELECT id FROM mcq_tests WHERE id = $1 AND (faculty_id = $2 OR $3 = 'admin')`,
-    [testId, req.user.id, req.user.role]
-  );
-  return rows.length > 0;
+// Ownership guard (admins bypass). Returns the test or null.
+async function ownedTest(req, testId) {
+  const test = await mcqRepo.getById(testId);
+  if (!test || (test.facultyId !== req.user.id && req.user.role !== 'admin')) return null;
+  return test;
 }
 
 // ── Faculty: replace a test's questions in bulk ─────────────────────────────────
@@ -40,7 +39,7 @@ exports.setQuestions = async (req, res) => {
   try {
     const { id } = req.params;
     const { questions } = req.body;
-    if (!(await ownsTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
+    if (!(await ownedTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
     if (!Array.isArray(questions) || questions.length === 0) {
       return res.status(400).json({ success: false, error: 'At least one question is required.' });
     }
@@ -62,16 +61,15 @@ exports.setQuestions = async (req, res) => {
       }
     }
 
-    await db.query('DELETE FROM mcq_questions WHERE test_id = $1', [id]);
-    for (const [i, q] of questions.entries()) {
-      await db.query(
-        `INSERT INTO mcq_questions (test_id, question_text, options, correct_index, marks, topic, explanation, position)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-        [id, q.question_text.trim(), JSON.stringify(q.options.map(o => String(o))),
-         q.correct_index, Math.max(parseInt(q.marks, 10) || 1, 1),
-         (q.topic || '').slice(0, 60) || null, (q.explanation || '').slice(0, 1000) || null, i]
-      );
-    }
+    const normalized = questions.map(q => ({
+      question_text: q.question_text.trim(),
+      options: q.options.map(o => String(o)),
+      correct_index: q.correct_index,
+      marks: Math.max(parseInt(q.marks, 10) || 1, 1),
+      topic: (q.topic || '').slice(0, 60) || null,
+      explanation: (q.explanation || '').slice(0, 1000) || null,
+    }));
+    await mcqRepo.replaceQuestions(id, normalized);
     res.json({ success: true, data: { count: questions.length } });
   } catch (e) {
     console.error('MCQ setQuestions error:', e.message);
@@ -82,15 +80,15 @@ exports.setQuestions = async (req, res) => {
 // ── Faculty: list own tests ─────────────────────────────────────────────────────
 exports.listTests = async (req, res) => {
   try {
-    const { rows } = await db.query(`
-      SELECT t.id, t.title, t.category, t.duration_minutes, t.is_published, t.created_at,
-             (SELECT COUNT(*) FROM mcq_questions q WHERE q.test_id = t.id)::int AS question_count,
-             (SELECT COUNT(*) FROM mcq_attempts a WHERE a.test_id = t.id AND a.submitted_at IS NOT NULL)::int AS attempt_count
-        FROM mcq_tests t
-       WHERE t.faculty_id = $1 OR $2 = 'admin'
-       ORDER BY t.created_at DESC
-    `, [req.user.id, req.user.role]);
-    res.json({ success: true, data: rows });
+    const tests = req.user.role === 'admin' ? await mcqRepo.listAll() : await mcqRepo.listByFaculty(req.user.id);
+    const data = await Promise.all(tests.map(async (t) => ({
+      id: t.id, title: t.title, category: t.category, duration_minutes: t.durationMinutes,
+      is_published: t.isPublished, created_at: t.createdAt,
+      question_count: await mcqRepo.getQuestionCount(t.id),
+      attempt_count: await mcqRepo.getAttemptCount(t.id),
+    })));
+    data.sort((a, b) => (b.created_at?.toMillis?.() ?? 0) - (a.created_at?.toMillis?.() ?? 0));
+    res.json({ success: true, data });
   } catch (e) {
     console.error('MCQ listTests error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -101,12 +99,9 @@ exports.listTests = async (req, res) => {
 exports.getTestFaculty = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!(await ownsTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
-    const { rows: [test] } = await db.query('SELECT * FROM mcq_tests WHERE id = $1', [id]);
-    const { rows: questions } = await db.query(
-      'SELECT id, question_text, options, correct_index, marks, topic, explanation, position FROM mcq_questions WHERE test_id = $1 ORDER BY position ASC',
-      [id]
-    );
+    const test = await ownedTest(req, id);
+    if (!test) return res.status(404).json({ success: false, error: 'Test not found' });
+    const questions = await mcqRepo.getQuestions(id);
     res.json({ success: true, data: { test, questions } });
   } catch (e) {
     console.error('MCQ getTestFaculty error:', e.message);
@@ -118,13 +113,13 @@ exports.getTestFaculty = async (req, res) => {
 exports.publishTest = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!(await ownsTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
+    if (!(await ownedTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
     const publish = req.body.is_published === true;
     if (publish) {
-      const { rows: [{ count }] } = await db.query('SELECT COUNT(*)::int AS count FROM mcq_questions WHERE test_id = $1', [id]);
+      const count = await mcqRepo.getQuestionCount(id);
       if (count === 0) return res.status(400).json({ success: false, error: 'Add questions before publishing.' });
     }
-    await db.query('UPDATE mcq_tests SET is_published = $1 WHERE id = $2', [publish, id]);
+    await mcqRepo.update(id, { isPublished: publish });
     res.json({ success: true, data: { is_published: publish } });
   } catch (e) {
     console.error('MCQ publishTest error:', e.message);
@@ -136,8 +131,8 @@ exports.publishTest = async (req, res) => {
 exports.deleteTest = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!(await ownsTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
-    await db.query('DELETE FROM mcq_tests WHERE id = $1', [id]);
+    if (!(await ownedTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
+    await mcqRepo.remove(id);
     logAction(req, 'mcq.delete', `test ${id}`);
     res.json({ success: true });
   } catch (e) {
@@ -150,38 +145,27 @@ exports.deleteTest = async (req, res) => {
 exports.getResults = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!(await ownsTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
+    if (!(await ownedTest(req, id))) return res.status(404).json({ success: false, error: 'Test not found' });
 
-    const { rows: attempts } = await db.query(`
-      SELECT a.user_id, a.score, a.total, a.submitted_at,
-             u.name, u.email, u.roll_no, u.department, u.section
-        FROM mcq_attempts a
-        JOIN users u ON u.id = a.user_id
-       WHERE a.test_id = $1 AND a.submitted_at IS NOT NULL
-       ORDER BY a.score DESC NULLS LAST, a.submitted_at ASC
-    `, [id]);
+    const attempts = (await mcqRepo.listSubmittedAttempts(id))
+      .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || (a.submittedAt?.toMillis?.() ?? 0) - (b.submittedAt?.toMillis?.() ?? 0));
+    const attemptsUsersMap = await userRepo.getAllUsersMap();
 
     // Per-question accuracy (how many got each question right).
-    const { rows: questions } = await db.query(
-      'SELECT id, question_text, correct_index, topic, position FROM mcq_questions WHERE test_id = $1 ORDER BY position ASC',
-      [id]
-    );
-    const { rows: respRows } = await db.query(
-      'SELECT responses FROM mcq_attempts WHERE test_id = $1 AND submitted_at IS NOT NULL', [id]
-    );
+    const questions = await mcqRepo.getQuestions(id);
     const perQ = {};
     for (const q of questions) perQ[q.id] = { correct: 0, answered: 0 };
-    for (const r of respRows) {
-      const resp = r.responses || {};
+    for (const a of attempts) {
+      const resp = a.responses || {};
       for (const q of questions) {
         if (resp[q.id] != null) {
           perQ[q.id].answered += 1;
-          if (resp[q.id] === q.correct_index) perQ[q.id].correct += 1;
+          if (resp[q.id] === q.correctIndex) perQ[q.id].correct += 1;
         }
       }
     }
     const questionStats = questions.map(q => ({
-      id: q.id, question_text: q.question_text, topic: q.topic,
+      id: q.id, question_text: q.questionText, topic: q.topic,
       answered: perQ[q.id].answered, correct: perQ[q.id].correct,
       accuracy: perQ[q.id].answered ? Math.round((perQ[q.id].correct / perQ[q.id].answered) * 100) : 0,
     }));
@@ -192,11 +176,14 @@ exports.getResults = async (req, res) => {
     res.json({
       success: true,
       data: {
-        attempts: attempts.map(a => ({
-          userId: a.user_id, name: a.name, email: a.email, rollNo: a.roll_no,
-          department: a.department, section: a.section,
-          score: a.score, total: a.total, submittedAt: a.submitted_at,
-        })),
+        attempts: attempts.map(a => {
+          const profile = attemptsUsersMap.get(a.userId) || {};
+          return {
+            userId: a.userId, name: profile.name || 'Unknown', email: profile.email || null,
+            rollNo: profile.rollNo || null, department: profile.department || null, section: profile.section || null,
+            score: a.score, total: a.total, submittedAt: a.submittedAt,
+          };
+        }),
         summary: { attempts: attempts.length, avgScore: avg, maxScore: scores.length ? Math.max(...scores) : 0 },
         questionStats,
       },
@@ -210,23 +197,19 @@ exports.getResults = async (req, res) => {
 // ── Student: list published tests (with own attempt status) ─────────────────────
 exports.listAvailable = async (req, res) => {
   try {
-    const { rows } = await db.query(`
-      SELECT t.id, t.title, t.description, t.category, t.duration_minutes,
-             (SELECT COUNT(*) FROM mcq_questions q WHERE q.test_id = t.id)::int AS question_count,
-             a.submitted_at, a.score, a.total
-        FROM mcq_tests t
-        LEFT JOIN mcq_attempts a ON a.test_id = t.id AND a.user_id = $1
-       WHERE t.is_published = true
-       ORDER BY t.created_at DESC
-    `, [req.user.id]);
-    res.json({
-      success: true,
-      data: rows.map(r => ({
-        id: r.id, title: r.title, description: r.description, category: r.category,
-        durationMinutes: r.duration_minutes, questionCount: r.question_count,
-        attempted: !!r.submitted_at, score: r.score, total: r.total,
-      })),
-    });
+    const tests = await mcqRepo.listPublished();
+    const data = await Promise.all(tests.map(async (t) => {
+      const [attempt, questionCount] = await Promise.all([
+        mcqRepo.getAttempt(t.id, req.user.id), mcqRepo.getQuestionCount(t.id),
+      ]);
+      return {
+        id: t.id, title: t.title, description: t.description, category: t.category,
+        durationMinutes: t.durationMinutes, questionCount,
+        attempted: !!attempt?.submittedAt, score: attempt?.score ?? null, total: attempt?.total ?? null,
+      };
+    }));
+    data.sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+    res.json({ success: true, data });
   } catch (e) {
     console.error('MCQ listAvailable error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -237,31 +220,24 @@ exports.listAvailable = async (req, res) => {
 exports.startTest = async (req, res) => {
   try {
     const { id } = req.params;
-    const { rows: [test] } = await db.query('SELECT id, title, category, duration_minutes, is_published FROM mcq_tests WHERE id = $1', [id]);
-    if (!test || !test.is_published) return res.status(404).json({ success: false, error: 'Test not available' });
+    const test = await mcqRepo.getById(id);
+    if (!test || !test.isPublished) return res.status(404).json({ success: false, error: 'Test not available' });
 
-    const { rows: [existing] } = await db.query(
-      'SELECT submitted_at FROM mcq_attempts WHERE test_id = $1 AND user_id = $2', [id, req.user.id]
-    );
-    if (existing && existing.submitted_at) {
+    const existing = await mcqRepo.getAttempt(id, req.user.id);
+    if (existing?.submittedAt) {
       return res.status(409).json({ success: false, error: 'You have already submitted this test.' });
     }
 
     // Record start time (idempotent).
-    await db.query(
-      `INSERT INTO mcq_attempts (test_id, user_id) VALUES ($1, $2)
-       ON CONFLICT (test_id, user_id) DO NOTHING`,
-      [id, req.user.id]
-    );
+    await mcqRepo.startAttempt(id, req.user.id);
 
-    const { rows: questions } = await db.query(
-      'SELECT id, question_text, options, marks, topic, position FROM mcq_questions WHERE test_id = $1 ORDER BY position ASC',
-      [id]
-    );
+    const questions = (await mcqRepo.getQuestions(id)).map(q => ({
+      id: q.id, question_text: q.questionText, options: q.options, marks: q.marks, topic: q.topic, position: q.position,
+    }));
     res.json({
       success: true,
       data: {
-        test: { id: test.id, title: test.title, category: test.category, durationMinutes: test.duration_minutes },
+        test: { id: test.id, title: test.title, category: test.category, durationMinutes: test.durationMinutes },
         questions, // no correct_index / explanation
       },
     });
@@ -280,19 +256,15 @@ exports.submitTest = async (req, res) => {
       return res.status(400).json({ success: false, error: 'responses object is required.' });
     }
 
-    const { rows: [test] } = await db.query('SELECT id, is_published FROM mcq_tests WHERE id = $1', [id]);
-    if (!test || !test.is_published) return res.status(404).json({ success: false, error: 'Test not available' });
+    const test = await mcqRepo.getById(id);
+    if (!test || !test.isPublished) return res.status(404).json({ success: false, error: 'Test not available' });
 
-    const { rows: [existing] } = await db.query(
-      'SELECT submitted_at FROM mcq_attempts WHERE test_id = $1 AND user_id = $2', [id, req.user.id]
-    );
-    if (existing && existing.submitted_at) {
+    const existing = await mcqRepo.getAttempt(id, req.user.id);
+    if (existing?.submittedAt) {
       return res.status(409).json({ success: false, error: 'Already submitted.' });
     }
 
-    const { rows: questions } = await db.query(
-      'SELECT id, correct_index, marks, explanation FROM mcq_questions WHERE test_id = $1', [id]
-    );
+    const questions = await mcqRepo.getQuestions(id);
     let score = 0, total = 0;
     const review = [];
     const cleanResp = {};
@@ -301,18 +273,12 @@ exports.submitTest = async (req, res) => {
       const sel = responses[q.id];
       const selected = Number.isInteger(sel) ? sel : null;
       cleanResp[q.id] = selected;
-      const correct = selected === q.correct_index;
+      const correct = selected === q.correctIndex;
       if (correct) score += q.marks;
-      review.push({ questionId: q.id, selected, correctIndex: q.correct_index, correct, explanation: q.explanation });
+      review.push({ questionId: q.id, selected, correctIndex: q.correctIndex, correct, explanation: q.explanation });
     }
 
-    await db.query(
-      `INSERT INTO mcq_attempts (test_id, user_id, started_at, submitted_at, score, total, responses)
-       VALUES ($1, $2, NOW(), NOW(), $3, $4, $5)
-       ON CONFLICT (test_id, user_id)
-       DO UPDATE SET submitted_at = NOW(), score = $3, total = $4, responses = $5`,
-      [id, req.user.id, score, total, JSON.stringify(cleanResp)]
-    );
+    await mcqRepo.submitAttempt(id, req.user.id, { score, total, responses: cleanResp });
 
     res.json({ success: true, data: { score, total, review } });
   } catch (e) {

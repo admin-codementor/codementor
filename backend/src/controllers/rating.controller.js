@@ -1,4 +1,6 @@
-const db = require('../config/db');
+const userRepo = require('../repositories/userRepository');
+const ratingHistoryRepo = require('../repositories/ratingHistoryRepository');
+const contestRepo = require('../repositories/contestRepository');
 
 // ── Elo / Codeforces-style rating engine ──────────────────────────────────────
 //
@@ -55,20 +57,16 @@ const computeEloUpdates = (participants) => {
 // First Accepted submission per (user, problem) counts; earlier WAs add 20-min
 // penalties. Only non-virtual submissions are counted toward official rating.
 const buildStandings = async (contestId, contestStartsAt) => {
-  const { rows: subs } = await db.query(
-    `SELECT cs.user_id, cs.problem_id, cs.verdict, cs.submitted_at
-       FROM contest_submissions cs
-      WHERE cs.contest_id = $1 AND cs.is_virtual = FALSE
-      ORDER BY cs.submitted_at ASC`,
-    [contestId]
-  );
+  const subs = (await contestRepo.listSubmissions(contestId))
+    .filter(s => s.isVirtual !== true)
+    .sort((a, b) => (a.submittedAt?.toMillis?.() ?? 0) - (b.submittedAt?.toMillis?.() ?? 0));
 
   const board = {};
   for (const sub of subs) {
-    const uid = sub.user_id;
+    const uid = sub.userId;
     if (!board[uid]) board[uid] = { user_id: uid, solved: 0, penalty: 0, problems: {} };
     const entry = board[uid];
-    const pid = sub.problem_id;
+    const pid = sub.problemId;
     if (!entry.problems[pid]) entry.problems[pid] = { accepted: false, attempts: 0 };
     const p = entry.problems[pid];
     if (p.accepted) continue;
@@ -76,7 +74,8 @@ const buildStandings = async (contestId, contestStartsAt) => {
     p.attempts++;
     if (sub.verdict === 'Accepted') {
       p.accepted = true;
-      const minutesFromStart = Math.floor((new Date(sub.submitted_at) - new Date(contestStartsAt)) / 60000);
+      const subTime = sub.submittedAt?.toDate?.() ?? new Date(sub.submittedAt);
+      const minutesFromStart = Math.floor((subTime - new Date(contestStartsAt)) / 60000);
       const penalty = (p.attempts - 1) * 20 + minutesFromStart;
       entry.solved++;
       entry.penalty += penalty;
@@ -112,62 +111,42 @@ exports.recomputeForContest = async (req, res) => {
   try {
     const { id: contestId } = req.params;
 
-    const { rows: [contest] } = await db.query(
-      'SELECT id, starts_at FROM contests WHERE id = $1',
-      [contestId]
-    );
+    const contest = await contestRepo.getById(contestId);
     if (!contest) return res.status(404).json({ success: false, error: 'Contest not found' });
 
-    const { rows: [existing] } = await db.query(
-      'SELECT COUNT(*)::int AS cnt FROM rating_history WHERE contest_id = $1',
-      [contestId]
-    );
-    if (existing.cnt > 0) {
+    const existingCount = await ratingHistoryRepo.countByContest(contestId);
+    if (existingCount > 0) {
       return res.status(409).json({
         success: false,
         error: 'Ratings have already been computed for this contest. Delete its rating_history rows to recompute.',
       });
     }
 
-    const standings = await buildStandings(contestId, contest.starts_at);
+    const standings = await buildStandings(contestId, contest.startsAt);
     if (standings.length === 0) {
       return res.status(400).json({ success: false, error: 'No submissions to rate for this contest.' });
     }
 
-    // Seed each participant with their current users.rating.
+    // Seed each participant with their current rating.
     const userIds = standings.map(s => s.user_id);
-    const { rows: ratingRows } = await db.query(
-      'SELECT id, rating FROM users WHERE id = ANY($1)',
-      [userIds]
-    );
-    const ratingMap = new Map(ratingRows.map(r => [String(r.id), r.rating]));
+    const profiles = (await Promise.all(userIds.map(id => userRepo.getById(id)))).filter(Boolean);
+    const ratingMap = new Map(profiles.map(p => [p.id, p.rating ?? 1200]));
 
     const participants = standings.map(s => ({
       user_id: s.user_id,
-      rating: ratingMap.has(String(s.user_id)) ? ratingMap.get(String(s.user_id)) : 1200,
+      rating: ratingMap.has(s.user_id) ? ratingMap.get(s.user_id) : 1200,
       rank: s.rank,
     }));
 
     const updates = computeEloUpdates(participants);
 
-    // Persist new ratings + history rows atomically.
-    const client = await db.pool.connect();
-    try {
-      await client.query('BEGIN');
-      for (const u of updates) {
-        await client.query('UPDATE users SET rating = $1 WHERE id = $2', [u.new_rating, u.user_id]);
-        await client.query(
-          `INSERT INTO rating_history (user_id, contest_id, old_rating, new_rating, rank)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [u.user_id, contestId, u.old_rating, u.new_rating, u.rank]
-        );
-      }
-      await client.query('COMMIT');
-    } catch (txErr) {
-      await client.query('ROLLBACK');
-      throw txErr;
-    } finally {
-      client.release();
+    // Persist new ratings + history rows (both Firestore now).
+    for (const u of updates) {
+      const profile = profiles.find(p => p.id === u.user_id);
+      await userRepo.update(u.user_id, profile?.role, { rating: u.new_rating });
+      await ratingHistoryRepo.create({
+        userId: u.user_id, contestId, oldRating: u.old_rating, newRating: u.new_rating, rank: u.rank,
+      });
     }
 
     const results = updates
@@ -186,20 +165,14 @@ exports.getUserRating = async (req, res) => {
   try {
     const { userId } = req.params;
 
-    const { rows: [user] } = await db.query(
-      'SELECT id, name, rating FROM users WHERE id = $1',
-      [userId]
-    );
-    if (!user) return res.status(404).json({ success: false, error: 'User not found' });
+    const profile = await userRepo.getById(userId);
+    if (!profile) return res.status(404).json({ success: false, error: 'User not found' });
+    const user = { id: profile.id, name: profile.name, rating: profile.rating ?? 1200 };
 
-    const { rows: history } = await db.query(
-      `SELECT rh.id, rh.contest_id, c.title AS contest_title,
-              rh.old_rating, rh.new_rating, rh.rank, rh.created_at
-         FROM rating_history rh
-         LEFT JOIN contests c ON c.id = rh.contest_id
-        WHERE rh.user_id = $1
-        ORDER BY rh.created_at ASC`,
-      [userId]
+    const history = await ratingHistoryRepo.listByUser(userId);
+    const contestIds = [...new Set(history.map(h => h.contestId).filter(Boolean))];
+    const contestTitleMap = new Map(
+      (await Promise.all(contestIds.map(id => contestRepo.getById(id)))).filter(Boolean).map(c => [c.id, c.title])
     );
 
     res.json({
@@ -210,13 +183,13 @@ exports.getUserRating = async (req, res) => {
         rating: user.rating,
         history: history.map(h => ({
           id: h.id,
-          contest_id: h.contest_id,
-          contest_title: h.contest_title,
-          old_rating: h.old_rating,
-          new_rating: h.new_rating,
-          delta: h.new_rating - h.old_rating,
+          contest_id: h.contestId,
+          contest_title: contestTitleMap.get(h.contestId) || 'Untitled contest',
+          old_rating: h.oldRating,
+          new_rating: h.newRating,
+          delta: h.newRating - h.oldRating,
           rank: h.rank,
-          created_at: h.created_at,
+          created_at: h.createdAt?.toDate?.() ?? h.createdAt,
         })),
       },
     });
@@ -229,23 +202,25 @@ exports.getUserRating = async (req, res) => {
 // ── Rating leaderboard ─────────────────────────────────────────────────────────
 exports.getRatingLeaderboard = async (req, res) => {
   try {
-    const { rows } = await db.query(
-      `SELECT u.id, u.name, u.rating,
-              COUNT(DISTINCT rh.contest_id) AS contests_participated
-         FROM users u
-         LEFT JOIN rating_history rh ON rh.user_id = u.id
-        GROUP BY u.id, u.name, u.rating
-        ORDER BY u.rating DESC, u.name ASC
-        LIMIT 100`
+    const usersMap = await userRepo.getAllUsersMap();
+    const ids = [...usersMap.keys()];
+
+    // Count distinct contests participated, grouped by user, from Firestore.
+    const allHistoryDocs = await Promise.all(ids.map(id => ratingHistoryRepo.listByUser(id)));
+    const contestsParticipatedMap = new Map(
+      ids.map((id, i) => [id, new Set(allHistoryDocs[i].map(h => h.contestId)).size])
     );
 
-    const data = rows.map((r, index) => ({
-      id: r.id,
-      rank: index + 1,
-      name: r.name,
-      rating: r.rating,
-      contestsParticipated: parseInt(r.contests_participated, 10) || 0,
-    }));
+    const data = ids
+      .map(id => ({
+        id,
+        name: usersMap.get(id)?.name || 'Unknown',
+        rating: usersMap.get(id)?.rating ?? 1200,
+        contestsParticipated: contestsParticipatedMap.get(id) || 0,
+      }))
+      .sort((a, b) => b.rating - a.rating || a.name.localeCompare(b.name))
+      .slice(0, 100)
+      .map((r, index) => ({ ...r, rank: index + 1 }));
 
     res.json({ success: true, data });
   } catch (e) {

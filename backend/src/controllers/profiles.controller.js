@@ -1,15 +1,17 @@
-const db = require('../config/db');
 const { ALL_PLATFORMS, LIVE_PLATFORMS, fetchPlatform } = require('../utils/codingPlatforms');
+const userRepo = require('../repositories/userRepository');
+const codingProfileRepo = require('../repositories/codingProfileRepository');
 
 // ── List the current user's saved profiles ──────────────────────────────────────
 exports.getMine = async (req, res) => {
   try {
-    const { rows } = await db.query(
-      `SELECT platform, handle, solved, rating, max_rating, extra, sync_status, last_synced
-         FROM coding_profiles WHERE user_id = $1 ORDER BY platform`,
-      [req.user.id]
-    );
-    res.json({ success: true, data: rows, livePlatforms: LIVE_PLATFORMS, allPlatforms: ALL_PLATFORMS });
+    const profiles = await codingProfileRepo.listByUser(req.user.id);
+    const data = profiles.map(p => ({
+      platform: p.platform, handle: p.handle, solved: p.solved || 0,
+      rating: p.rating ?? null, max_rating: p.maxRating ?? null, extra: p.extra || {},
+      sync_status: p.syncStatus || 'pending', last_synced: p.lastSynced || null,
+    }));
+    res.json({ success: true, data, livePlatforms: LIVE_PLATFORMS, allPlatforms: ALL_PLATFORMS });
   } catch (e) {
     console.error('Profiles getMine error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -27,17 +29,11 @@ exports.setHandle = async (req, res) => {
     handle = typeof handle === 'string' ? handle.trim().slice(0, 80) : '';
 
     if (!handle) {
-      await db.query('DELETE FROM coding_profiles WHERE user_id = $1 AND platform = $2', [req.user.id, platform]);
+      await codingProfileRepo.remove(req.user.id, platform);
       return res.json({ success: true, data: { platform, removed: true } });
     }
 
-    await db.query(
-      `INSERT INTO coding_profiles (user_id, platform, handle, sync_status)
-       VALUES ($1, $2, $3, 'pending')
-       ON CONFLICT (user_id, platform)
-       DO UPDATE SET handle = $3, sync_status = 'pending'`,
-      [req.user.id, platform, handle]
-    );
+    await codingProfileRepo.upsert(req.user.id, platform, { handle, syncStatus: 'pending' });
     res.json({ success: true, data: { platform, handle } });
   } catch (e) {
     console.error('Profiles setHandle error:', e.message);
@@ -48,30 +44,22 @@ exports.setHandle = async (req, res) => {
 // ── Sync the current user's live-platform stats ──────────────────────────────────
 exports.syncMine = async (req, res) => {
   try {
-    const { rows } = await db.query(
-      'SELECT platform, handle FROM coding_profiles WHERE user_id = $1', [req.user.id]
-    );
+    const profiles = await codingProfileRepo.listByUser(req.user.id);
     const results = [];
-    for (const p of rows) {
+    for (const p of profiles) {
       if (!LIVE_PLATFORMS.includes(p.platform)) {
         results.push({ platform: p.platform, status: 'link-only' });
         continue;
       }
       try {
         const stats = await fetchPlatform(p.platform, p.handle);
-        await db.query(
-          `UPDATE coding_profiles
-              SET solved = $1, rating = $2, max_rating = $3, extra = $4,
-                  sync_status = 'ok', last_synced = NOW()
-            WHERE user_id = $5 AND platform = $6`,
-          [stats.solved || 0, stats.rating, stats.max_rating, JSON.stringify(stats.extra || {}), req.user.id, p.platform]
-        );
+        await codingProfileRepo.upsert(req.user.id, p.platform, {
+          solved: stats.solved || 0, rating: stats.rating ?? null, maxRating: stats.max_rating ?? null,
+          extra: stats.extra || {}, syncStatus: 'ok', lastSynced: new Date(),
+        });
         results.push({ platform: p.platform, status: 'ok', solved: stats.solved, rating: stats.rating });
       } catch (err) {
-        await db.query(
-          `UPDATE coding_profiles SET sync_status = 'error', last_synced = NOW() WHERE user_id = $1 AND platform = $2`,
-          [req.user.id, p.platform]
-        );
+        await codingProfileRepo.upsert(req.user.id, p.platform, { syncStatus: 'error', lastSynced: new Date() });
         results.push({ platform: p.platform, status: 'error', error: err.message });
       }
     }
@@ -85,35 +73,41 @@ exports.syncMine = async (req, res) => {
 // ── Unified leaderboard (aggregated across platforms), optional cohort filter ────
 exports.getLeaderboard = async (req, res) => {
   try {
-    const params = [];
-    const conds = [`u.role = 'student'`];
-    if (req.query.department) { params.push(req.query.department); conds.push(`u.department = $${params.length}`); }
-    if (req.query.section)    { params.push(String(req.query.section).toUpperCase()); conds.push(`u.section = $${params.length}`); }
     const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 300);
 
-    const { rows } = await db.query(`
-      SELECT u.id, u.name, u.department, u.section,
-             COALESCE(SUM(cp.solved), 0)::int AS total_solved,
-             MAX(CASE WHEN cp.platform = 'codeforces' THEN cp.rating END)::int AS cf_rating,
-             COUNT(cp.id)::int AS platforms,
-             jsonb_object_agg(cp.platform, cp.solved) FILTER (WHERE cp.platform IS NOT NULL) AS by_platform
-        FROM users u
-        JOIN coding_profiles cp ON cp.user_id = u.id
-       WHERE ${conds.join(' AND ')}
-       GROUP BY u.id, u.name, u.department, u.section
-       ORDER BY total_solved DESC, cf_rating DESC NULLS LAST
-       LIMIT ${limit}
-    `, params);
+    const studentsMap = await userRepo.getMapByRole('student');
+    let students = [...studentsMap.values()];
+    if (req.query.department) students = students.filter(s => s.department === req.query.department);
+    if (req.query.section) students = students.filter(s => s.section === String(req.query.section).toUpperCase());
+    const ids = new Set(students.map(s => s.id));
+    if (ids.size === 0) return res.json({ success: true, data: [] });
 
-    res.json({
-      success: true,
-      data: rows.map((r, i) => ({
-        rank: i + 1,
-        userId: r.id, name: r.name, department: r.department, section: r.section,
-        totalSolved: r.total_solved, cfRating: r.cf_rating, platforms: r.platforms,
-        byPlatform: r.by_platform || {},
-      })),
-    });
+    const allProfiles = (await codingProfileRepo.listAll()).filter(p => ids.has(p.userId));
+    const byUser = new Map();
+    for (const p of allProfiles) {
+      if (!byUser.has(p.userId)) byUser.set(p.userId, { totalSolved: 0, cfRating: null, platforms: 0, byPlatform: {} });
+      const agg = byUser.get(p.userId);
+      agg.totalSolved += p.solved || 0;
+      agg.platforms += 1;
+      agg.byPlatform[p.platform] = p.solved || 0;
+      if (p.platform === 'codeforces') agg.cfRating = p.rating ?? null;
+    }
+
+    const data = [...byUser.entries()]
+      .map(([userId, agg]) => {
+        const profile = studentsMap.get(userId) || {};
+        return {
+          userId, name: profile.name || 'Unknown',
+          department: profile.department || null, section: profile.section || null,
+          totalSolved: agg.totalSolved, cfRating: agg.cfRating, platforms: agg.platforms,
+          byPlatform: agg.byPlatform,
+        };
+      })
+      .sort((a, b) => b.totalSolved - a.totalSolved || (b.cfRating ?? -1) - (a.cfRating ?? -1))
+      .slice(0, limit)
+      .map((r, i) => ({ rank: i + 1, ...r }));
+
+    res.json({ success: true, data });
   } catch (e) {
     console.error('Profiles leaderboard error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });

@@ -1,10 +1,32 @@
-const db = require('../config/db');
 const { Parser } = require('json2csv');
 const { getGeminiClient } = require('./ai.controller');
 const { logAction } = require('../middleware/audit');
 const { scopeDept, canSeeDepartment } = require('../middleware/role.middleware');
 const { cached } = require('../utils/cache');
 const { computeStrengthsWeaknesses } = require('../utils/topicScores');
+const userRepo = require('../repositories/userRepository');
+const problemRepo = require('../repositories/problemRepository');
+const assignmentRepo = require('../repositories/assignmentRepository');
+const ratingHistoryRepo = require('../repositories/ratingHistoryRepository');
+const topicMasteryRepo = require('../repositories/topicMasteryRepository');
+const codingProfileRepo = require('../repositories/codingProfileRepository');
+const contestRepo = require('../repositories/contestRepository');
+const submissionRepo = require('../repositories/submissionRepository');
+const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
+
+// Firestore Timestamp | Date | ISO-string | null -> 'YYYY-MM-DD' (or null).
+const toDateOnly = (value) => {
+  if (!value) return null;
+  const d = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return d.toISOString().split('T')[0];
+};
+
+// Firestore Timestamp | Date | ISO-string | null -> full ISO string (or null).
+const toISO = (value) => {
+  if (!value) return null;
+  const d = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return d.toISOString();
+};
 
 // Whitelisted cohort dimensions → real column names (guards against SQL injection
 // when the dimension is interpolated into GROUP BY / WHERE).
@@ -13,43 +35,25 @@ const COHORT_DIMS = { department: 'department', year: 'year', section: 'section'
 exports.getDashboardData = async (req, res) => {
   try {
     // 1. Total Students
-    const studentsRes = await db.query("SELECT COUNT(*) as count FROM users WHERE role = 'student'");
-    const totalStudents = parseInt(studentsRes.rows[0].count) || 0;
+    const totalStudents = (await userRepo.listByRole('student')).length;
 
-    // 2. Active Students — submitted at least once in the last 7 days
-    const activeRes = await db.query(`
-      SELECT COUNT(DISTINCT user_id) as count
-      FROM code_submissions
-      WHERE submitted_at >= NOW() - INTERVAL '7 days'
-    `);
-    const activeStudents = parseInt(activeRes.rows[0].count) || 0;
+    // 2-4. Active students (7d), total submissions/AC rate, unique problems solved.
+    const allSubs = await submissionRepo.listAll();
+    const sevenDaysAgo = Date.now() - 7 * 86400000;
+    const activeStudents = new Set(
+      allSubs.filter(s => (s.submittedAt?.toMillis?.() ?? 0) >= sevenDaysAgo).map(s => s.userId)
+    ).size;
 
-    // 3. Class Overview: Total Submissions and AC Rate
-    const statsRes = await db.query(`
-      SELECT
-        COUNT(*) as total_subs,
-        SUM(CASE WHEN verdict = 'Accepted' THEN 1 ELSE 0 END) as total_ac
-      FROM code_submissions
-    `);
-    const totalSubs = parseInt(statsRes.rows[0].total_subs) || 0;
-    const acRate = totalSubs > 0 ? Math.round((parseInt(statsRes.rows[0].total_ac) / totalSubs) * 100) : 0;
+    const totalSubs = allSubs.length;
+    const totalAccepted = allSubs.filter(s => s.verdict === 'Accepted').length;
+    const acRate = totalSubs > 0 ? Math.round((totalAccepted / totalSubs) * 100) : 0;
 
-    // 4. Problems solved (unique accepted problems across all students)
-    const solvedRes = await db.query(`
-      SELECT COUNT(DISTINCT problem_id) as count
-      FROM code_submissions
-      WHERE verdict = 'Accepted'
-    `);
-    const problemsSolved = parseInt(solvedRes.rows[0].count) || 0;
+    const problemsSolved = new Set(allSubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId)).size;
 
     // 5. Assignments List (for this faculty member)
-    const assignRes = await db.query(`
-      SELECT id, title, deadline, created_at
-      FROM assignments
-      WHERE faculty_id = $1
-      ORDER BY deadline ASC
-    `, [req.user.id]);
-    const assignments = assignRes.rows;
+    const assignments = (await assignmentRepo.listByFacultyId(req.user.id))
+      .sort((a, b) => (a.deadline?.toMillis?.() ?? new Date(a.deadline).getTime()) - (b.deadline?.toMillis?.() ?? new Date(b.deadline).getTime()))
+      .map(a => ({ id: a.id, title: a.title, deadline: a.deadline, created_at: a.createdAt }));
 
     res.json({
       success: true,
@@ -84,19 +88,10 @@ exports.createAssignment = async (req, res) => {
       }
     }
 
-    const newAssign = await db.query(
-      `INSERT INTO assignments (faculty_id, title, deadline, allowed_cidrs, is_exam)
-       VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-      [req.user.id, title, deadline, cidrs, is_exam === true]
-    );
-    const assignId = newAssign.rows[0].id;
-
-    for (const pid of problem_ids) {
-      await db.query(
-        `INSERT INTO assignment_problems (assignment_id, problem_id) VALUES ($1, $2)`,
-        [assignId, pid]
-      );
-    }
+    await assignmentRepo.create({
+      facultyId: req.user.id, title, deadline, allowedCidrs: cidrs, isExam: is_exam === true,
+      problemIds: problem_ids,
+    });
 
     res.json({ success: true, message: 'Assignment created successfully' });
   } catch (error) {
@@ -105,42 +100,42 @@ exports.createAssignment = async (req, res) => {
   }
 };
 
-// Verify the requesting faculty owns the assignment (admins bypass). Returns true
-// if access is allowed; otherwise sends a 404 and returns false.
+// Verify the requesting faculty owns the assignment (admins bypass). Returns the
+// assignment if access is allowed; otherwise sends a 404 and returns null.
 async function assertAssignmentAccess(req, res, assignmentId) {
-  const { rows } = await db.query(
-    `SELECT 1 FROM assignments WHERE id = $1 AND (faculty_id = $2 OR $3 = 'admin')`,
-    [assignmentId, req.user.id, req.user.role]
-  );
-  if (!rows.length) {
+  const assignment = await assignmentRepo.getById(assignmentId);
+  if (!assignment || (assignment.facultyId !== req.user.id && req.user.role !== 'admin')) {
     res.status(404).json({ success: false, error: 'Assignment not found' });
-    return false;
+    return null;
   }
-  return true;
+  return assignment;
 }
 
 exports.getAssignmentSubmissions = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!(await assertAssignmentAccess(req, res, id))) return;
+    const assignment = await assertAssignmentAccess(req, res, id);
+    if (!assignment) return;
 
-    const subsRes = await db.query(`
-      SELECT
-        u.name as student_name,
-        u.email,
-        p.title as problem_title,
-        s.verdict,
-        s.runtime,
-        s.submitted_at
-      FROM code_submissions s
-      JOIN users u ON s.user_id = u.id
-      JOIN problems p ON s.problem_id = p.id
-      JOIN assignment_problems ap ON p.id = ap.problem_id
-      WHERE ap.assignment_id = $1
-      ORDER BY s.submitted_at DESC
-    `, [id]);
+    const subs = (await Promise.all((assignment.problemIds || []).map(pid => submissionRepo.listByProblem(pid))))
+      .flat()
+      .sort((a, b) => (b.submittedAt?.toMillis?.() ?? 0) - (a.submittedAt?.toMillis?.() ?? 0));
 
-    res.json({ success: true, data: subsRes.rows });
+    const usersMap = await userRepo.getAllUsersMap();
+    const problemsMap = await problemRepo.getMapByIds(subs.map(s => s.problemId));
+    const data = subs.map(s => {
+      const profile = usersMap.get(s.userId) || {};
+      return {
+        student_name: profile.name || 'Unknown',
+        email: profile.email || null,
+        problem_title: problemsMap.get(s.problemId)?.title || 'Unknown',
+        verdict: s.verdict,
+        runtime: s.runtime,
+        submitted_at: s.submittedAt?.toDate?.() ?? s.submittedAt,
+      };
+    });
+
+    res.json({ success: true, data });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -150,35 +145,42 @@ exports.getAssignmentSubmissions = async (req, res) => {
 exports.exportMarksCSV = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!(await assertAssignmentAccess(req, res, id))) return;
+    const assignment = await assertAssignmentAccess(req, res, id);
+    if (!assignment) return;
 
-    const subsRes = await db.query(`
-      SELECT
-        u.roll_no  as "Roll No",
-        u.name     as "Student Name",
-        u.email    as "Email",
-        u.department as "Department",
-        u.section  as "Section",
-        p.title    as "Problem",
-        MAX(CASE WHEN s.verdict = 'Accepted' THEN 100 ELSE 0 END) as "Score",
-        MIN(CASE WHEN s.verdict = 'Accepted' THEN s.submitted_at END) as "Solved At",
-        EXISTS (
-          SELECT 1 FROM plagiarism_results pr
-          WHERE pr.assignment_id = $1 AND (pr.student_a = u.id OR pr.student_b = u.id)
-        ) as "Plagiarism Flag"
-      FROM users u
-      JOIN code_submissions s ON u.id = s.user_id
-      JOIN problems p ON s.problem_id = p.id
-      JOIN assignment_problems ap ON p.id = ap.problem_id
-      WHERE ap.assignment_id = $1
-      GROUP BY u.roll_no, u.name, u.email, u.department, u.section, p.title, u.id
-    `, [id]);
+    const subs = (await Promise.all((assignment.problemIds || []).map(pid => submissionRepo.listByProblem(pid)))).flat();
+    const plagiarismPairs = await plagiarismResultRepo.listByAssignment(id);
+    const flaggedUserIds = new Set(plagiarismPairs.flatMap(p => [p.studentA, p.studentB]));
 
-    const rows = subsRes.rows.map(r => ({
-      ...r,
-      'Solved At': r['Solved At'] ? new Date(r['Solved At']).toISOString().replace('T', ' ').slice(0, 16) : '',
-      'Plagiarism Flag': r['Plagiarism Flag'] ? 'FLAGGED' : '',
-    }));
+    // Group by (user, problem): max score (Accepted -> 100), earliest Accepted time.
+    const grouped = new Map(); // `${userId}|${problemId}` -> { score, solvedAt }
+    for (const s of subs) {
+      const key = `${s.userId}|${s.problemId}`;
+      if (!grouped.has(key)) grouped.set(key, { userId: s.userId, problemId: s.problemId, score: 0, solvedAt: null });
+      const g = grouped.get(key);
+      if (s.verdict === 'Accepted') {
+        g.score = 100;
+        const t = s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
+        if (!g.solvedAt || t < g.solvedAt) g.solvedAt = t;
+      }
+    }
+
+    const usersMap = await userRepo.getAllUsersMap();
+    const problemsMap = await problemRepo.getMapByIds([...grouped.values()].map(g => g.problemId));
+    const rows = [...grouped.values()].map(g => {
+      const profile = usersMap.get(g.userId) || {};
+      return {
+        'Roll No': profile.rollNo || null,
+        'Student Name': profile.name || 'Unknown',
+        'Email': profile.email || null,
+        'Department': profile.department || null,
+        'Section': profile.section || null,
+        'Problem': problemsMap.get(g.problemId)?.title || 'Unknown',
+        'Score': g.score,
+        'Solved At': g.solvedAt ? g.solvedAt.toISOString().replace('T', ' ').slice(0, 16) : '',
+        'Plagiarism Flag': flaggedUserIds.has(g.userId) ? 'FLAGGED' : '',
+      };
+    });
 
     const fields = ['Roll No', 'Student Name', 'Email', 'Department', 'Section', 'Problem', 'Score', 'Solved At', 'Plagiarism Flag'];
     const parser = new Parser({ fields });
@@ -207,9 +209,7 @@ exports.createProblem = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Description must be ≤ 20000 characters.' });
     }
 
-    const stubsJson = (stubs && typeof stubs === 'object' && !Array.isArray(stubs))
-      ? JSON.stringify(stubs)
-      : '{}';
+    const stubsObj = (stubs && typeof stubs === 'object' && !Array.isArray(stubs)) ? stubs : {};
     const mode   = ['acm', 'oi'].includes(scoring_mode) ? scoring_mode : 'acm';
     const mScore = Number.isInteger(max_score) && max_score > 0 ? max_score : 100;
 
@@ -222,28 +222,15 @@ exports.createProblem = async (req, res) => {
       ? checker_language_id
       : null;
 
-    const pRes = await db.query(
-      `INSERT INTO problems (title, description, difficulty, tags, created_by, stubs,
-                             scoring_mode, max_score, editorial, editorial_visible_at,
-                             uses_checker, checker_code, checker_language_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING id`,
-      [title, description, difficulty, tags, req.user.id, stubsJson,
-       mode, mScore, editorial || null, editorial_visible_at || null,
-       usesChecker, checkerCode, checkerLangId]
-    );
-    const pid = pRes.rows[0].id;
+    const problem = await problemRepo.create({
+      title, description, difficulty, tags: tags || [], createdBy: req.user.id, stubs: stubsObj,
+      scoringMode: mode, maxScore: mScore, editorial: editorial || null,
+      editorialVisibleAt: editorial_visible_at || null,
+      usesChecker, checkerCode, checkerLanguageId: checkerLangId,
+      timeLimit: 2, memoryLimit: 256,
+    }, test_cases || []);
 
-    if (test_cases && test_cases.length > 0) {
-      for (const tc of test_cases) {
-        await db.query(
-          `INSERT INTO test_cases (problem_id, input_data, expected_output, is_public, score)
-           VALUES ($1, $2, $3, $4, $5)`,
-          [pid, tc.input, tc.output, tc.is_public || false, tc.score || 0]
-        );
-      }
-    }
-
-    res.json({ success: true, message: 'Problem added successfully', data: { id: pid } });
+    res.json({ success: true, message: 'Problem added successfully', data: { id: problem.id } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -257,44 +244,26 @@ exports.updateProblem = async (req, res) => {
             editorial, editorial_visible_at,
             uses_checker, checker_code, checker_language_id } = req.body;
 
-    const stubsJson = (stubs && typeof stubs === 'object' && !Array.isArray(stubs))
-      ? JSON.stringify(stubs)
-      : null;
-    const mode   = ['acm', 'oi'].includes(scoring_mode) ? scoring_mode : null;
-    const mScore = Number.isInteger(max_score) && max_score > 0 ? max_score : null;
-
-    // Special judge config — only update fields the client actually sent
-    // (typeof check) so COALESCE preserves existing values otherwise.
-    const usesChecker = typeof uses_checker === 'boolean' ? uses_checker : null;
-    const checkerCode = typeof checker_code === 'string' ? checker_code : null;
-    const checkerLangId = Number.isInteger(checker_language_id) && checker_language_id > 0
-      ? checker_language_id
-      : null;
-
-    const result = await db.query(`
-      UPDATE problems
-      SET title                = COALESCE($1, title),
-          description          = COALESCE($2, description),
-          difficulty           = COALESCE($3, difficulty),
-          tags                 = COALESCE($4, tags),
-          stubs                = COALESCE($5::jsonb, stubs),
-          scoring_mode         = COALESCE($6, scoring_mode),
-          max_score            = COALESCE($7, max_score),
-          editorial            = COALESCE($8, editorial),
-          editorial_visible_at = COALESCE($9::timestamp, editorial_visible_at),
-          uses_checker         = COALESCE($10, uses_checker),
-          checker_code         = COALESCE($11, checker_code),
-          checker_language_id  = COALESCE($12, checker_language_id)
-      WHERE id = $13 AND created_by = $14
-      RETURNING id
-    `, [title, description, difficulty, tags, stubsJson, mode, mScore,
-        editorial || null, editorial_visible_at || null,
-        usesChecker, checkerCode, checkerLangId, id, req.user.id]);
-
-    if (result.rows.length === 0) {
+    const existing = await problemRepo.getById(id);
+    if (!existing || existing.createdBy !== req.user.id) {
       return res.status(404).json({ success: false, error: 'Problem not found or not authorized' });
     }
 
+    const partial = {};
+    if (title !== undefined) partial.title = title;
+    if (description !== undefined) partial.description = description;
+    if (difficulty !== undefined) partial.difficulty = difficulty;
+    if (tags !== undefined) partial.tags = tags;
+    if (stubs && typeof stubs === 'object' && !Array.isArray(stubs)) partial.stubs = stubs;
+    if (['acm', 'oi'].includes(scoring_mode)) partial.scoringMode = scoring_mode;
+    if (Number.isInteger(max_score) && max_score > 0) partial.maxScore = max_score;
+    if (editorial !== undefined) partial.editorial = editorial || null;
+    if (editorial_visible_at !== undefined) partial.editorialVisibleAt = editorial_visible_at || null;
+    if (typeof uses_checker === 'boolean') partial.usesChecker = uses_checker;
+    if (typeof checker_code === 'string') partial.checkerCode = checker_code;
+    if (Number.isInteger(checker_language_id) && checker_language_id > 0) partial.checkerLanguageId = checker_language_id;
+
+    await problemRepo.update(id, partial);
     res.json({ success: true, message: 'Problem updated' });
   } catch (error) {
     console.error(error);
@@ -305,14 +274,12 @@ exports.updateProblem = async (req, res) => {
 exports.deleteProblem = async (req, res) => {
   try {
     const { id } = req.params;
-    const result = await db.query(
-      `DELETE FROM problems WHERE id = $1 AND created_by = $2 RETURNING id`,
-      [id, req.user.id]
-    );
-
-    if (result.rows.length === 0) {
+    const existing = await problemRepo.getById(id);
+    if (!existing || existing.createdBy !== req.user.id) {
       return res.status(404).json({ success: false, error: 'Problem not found or not authorized' });
     }
+
+    await problemRepo.remove(id);
 
     logAction(req, 'problem.delete', `problem ${id}`);
     res.json({ success: true, message: 'Problem deleted' });
@@ -379,39 +346,39 @@ Output strictly valid JSON matching this schema:
 
 exports.getStudents = async (req, res) => {
   try {
-    const { rows } = await db.query(`
-      SELECT
-        u.id,
-        u.name,
-        u.email,
-        u.department, u.section, u.year, u.roll_no,
-        u.created_at as joined_date,
-        COUNT(s.id) as total_submissions,
-        SUM(CASE WHEN s.verdict = 'Accepted' THEN 1 ELSE 0 END) as accepted_submissions,
-        COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) as problems_solved
-      FROM users u
-      LEFT JOIN code_submissions s ON u.id = s.user_id
-      WHERE u.role = 'student'
-      GROUP BY u.id, u.name, u.email, u.department, u.section, u.year, u.roll_no, u.created_at
-      ORDER BY problems_solved DESC, u.name ASC
-    `);
+    const studentsMap = await userRepo.getMapByRole('student');
+    const studentIds = [...studentsMap.keys()];
+    if (studentIds.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
 
-    const students = rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      email: r.email,
-      department: r.department || null,
-      section: r.section || null,
-      year: r.year || null,
-      rollNo: r.roll_no || null,
-      joinedDate: r.joined_date.toISOString().split('T')[0],
-      totalSubmissions: parseInt(r.total_submissions) || 0,
-      acceptedSubmissions: parseInt(r.accepted_submissions) || 0,
-      problemsSolved: parseInt(r.problems_solved) || 0,
-      acRate: parseInt(r.total_submissions) > 0
-        ? Math.round((parseInt(r.accepted_submissions) / parseInt(r.total_submissions)) * 100)
-        : 0
-    }));
+    const allSubs = await submissionRepo.listAll();
+    const statsByStudent = new Map(studentIds.map(id => [id, { total: 0, accepted: 0, solved: new Set() }]));
+    for (const s of allSubs) {
+      const stat = statsByStudent.get(s.userId);
+      if (!stat) continue;
+      stat.total += 1;
+      if (s.verdict === 'Accepted') { stat.accepted += 1; stat.solved.add(s.problemId); }
+    }
+
+    const students = studentIds.map(id => {
+      const profile = studentsMap.get(id) || {};
+      const stat = statsByStudent.get(id);
+      return {
+        id,
+        name: profile.name || 'Unknown',
+        email: profile.email || null,
+        department: profile.department || null,
+        section: profile.section || null,
+        year: profile.year || null,
+        rollNo: profile.rollNo || null,
+        joinedDate: toDateOnly(profile.createdAt),
+        totalSubmissions: stat.total,
+        acceptedSubmissions: stat.accepted,
+        problemsSolved: stat.solved.size,
+        acRate: stat.total > 0 ? Math.round((stat.accepted / stat.total) * 100) : 0
+      };
+    }).sort((a, b) => b.problemsSolved - a.problemsSolved || a.name.localeCompare(b.name));
 
     res.json({ success: true, data: students });
   } catch (error) {
@@ -420,31 +387,44 @@ exports.getStudents = async (req, res) => {
   }
 };
 
+// Firestore Timestamp | Date | ISO-string | null -> epoch millis (or 0).
+const toMillis = (value) => {
+  if (!value) return 0;
+  return (typeof value.toDate === 'function' ? value.toDate() : new Date(value)).getTime();
+};
+
 exports.getAtRiskStudents = async (req, res) => {
   try {
-    const { rows } = await db.query(`
-      SELECT u.id, u.name, u.email, u.department, u.section, u.roll_no, u.last_login_at,
-             MAX(s.submitted_at) AS last_submission,
-             COUNT(s.id) AS total_subs,
-             SUM(CASE WHEN s.verdict = 'Accepted' THEN 1 ELSE 0 END) AS accepted
-        FROM users u
-        LEFT JOIN code_submissions s ON s.user_id = u.id
-       WHERE u.role = 'student'
-       GROUP BY u.id, u.name, u.email, u.department, u.section, u.roll_no, u.last_login_at
-    `);
+    const studentsMap = await userRepo.getMapByRole('student');
+    const studentIds = [...studentsMap.keys()];
+    if (studentIds.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
+
+    const allSubs = await submissionRepo.listAll();
+    const statsByStudent = new Map(studentIds.map(id => [id, { total: 0, accepted: 0, lastSub: 0 }]));
+    for (const s of allSubs) {
+      const stat = statsByStudent.get(s.userId);
+      if (!stat) continue;
+      stat.total += 1;
+      if (s.verdict === 'Accepted') stat.accepted += 1;
+      const t = s.submittedAt?.toMillis?.() ?? 0;
+      if (t > stat.lastSub) stat.lastSub = t;
+    }
 
     const now = Date.now();
     const DAY = 86400000;
     const INACTIVE_DAYS = 14;
 
     const flagged = [];
-    for (const r of rows) {
-      const lastLogin = r.last_login_at ? new Date(r.last_login_at).getTime() : 0;
-      const lastSub   = r.last_submission ? new Date(r.last_submission).getTime() : 0;
-      const lastActive = Math.max(lastLogin, lastSub);
+    for (const id of studentIds) {
+      const profile = studentsMap.get(id) || {};
+      const stat = statsByStudent.get(id);
+      const lastLogin = toMillis(profile.lastLoginAt);
+      const lastActive = Math.max(lastLogin, stat.lastSub);
       const inactiveDays = lastActive ? Math.floor((now - lastActive) / DAY) : null;
-      const totalSubs = parseInt(r.total_subs) || 0;
-      const accepted  = parseInt(r.accepted) || 0;
+      const totalSubs = stat.total;
+      const accepted  = stat.accepted;
       const acRate = totalSubs > 0 ? Math.round((accepted / totalSubs) * 100) : 0;
 
       const reasons = [];
@@ -454,8 +434,8 @@ exports.getAtRiskStudents = async (req, res) => {
 
       if (reasons.length) {
         flagged.push({
-          id: r.id, name: r.name, email: r.email,
-          department: r.department || null, section: r.section || null, rollNo: r.roll_no || null,
+          id, name: profile.name || 'Unknown', email: profile.email || null,
+          department: profile.department || null, section: profile.section || null, rollNo: profile.rollNo || null,
           inactiveDays, totalSubmissions: totalSubs, acRate,
           reasons,
           severity: (inactiveDays ?? 999),
@@ -490,14 +470,15 @@ exports.generateRandomTests = async (req, res) => {
     }
 
     // Ownership check
-    const { rows: [own] } = await db.query('SELECT 1 FROM problems WHERE id = $1 AND created_by = $2', [id, req.user.id]);
-    if (!own) return res.status(404).json({ success: false, error: 'Problem not found' });
+    const own = await problemRepo.getById(id);
+    if (!own || own.createdBy !== req.user.id) return res.status(404).json({ success: false, error: 'Problem not found' });
 
     const { runOnJudge0 } = require('../utils/judge0Run');
     const n = Math.min(Math.max(parseInt(count, 10) || 5, 1), 25);
 
     const created = [];
     const failures = [];
+    const newTestCases = [];
     for (let i = 0; i < n; i++) {
       // 1. Generate a random input (seed = i so runs are reproducible per request).
       const gen = await runOnJudge0({ source_code: generator_code, language_id: generator_language_id, stdin: String(i + 1) });
@@ -508,19 +489,17 @@ exports.generateRandomTests = async (req, res) => {
       if (!ref.ok) { failures.push({ i, stage: 'reference', msg: ref.message || ref.stderr }); continue; }
       const expected = ref.stdout;
       // First couple may be public samples if requested.
-      const isPublic = make_public && created.length < 2;
-      await db.query(
-        `INSERT INTO test_cases (problem_id, input_data, expected_output, is_public) VALUES ($1,$2,$3,$4)`,
-        [id, input, expected, isPublic]
-      );
+      const isPublic = make_public && newTestCases.length < 2;
+      newTestCases.push({ input, output: expected, is_public: isPublic });
       created.push({ i });
     }
+    if (newTestCases.length) await problemRepo.addTestCases(id, newTestCases);
 
     if (persist_config) {
-      await db.query(
-        `UPDATE problems SET generator_code = $1, generator_language_id = $2, reference_code = $3, reference_language_id = $4 WHERE id = $5`,
-        [generator_code, generator_language_id, reference_code, reference_language_id, id]
-      );
+      await problemRepo.update(id, {
+        generatorCode: generator_code, generatorLanguageId: generator_language_id,
+        referenceCode: reference_code, referenceLanguageId: reference_language_id,
+      });
     }
 
     res.json({ success: true, data: { created: created.length, requested: n, failures } });
@@ -535,25 +514,22 @@ exports.getProblemTestHeatmap = async (req, res) => {
     const { id } = req.params;
 
     // Latest submission per student (that recorded per-test results).
-    const { rows } = await db.query(`
-      SELECT DISTINCT ON (user_id) test_results
-        FROM code_submissions
-       WHERE problem_id = $1 AND test_results IS NOT NULL
-       ORDER BY user_id, submitted_at DESC
-    `, [id]);
+    const problemSubs = (await submissionRepo.listByProblem(id))
+      .filter(s => Array.isArray(s.testResults))
+      .sort((a, b) => (b.submittedAt?.toMillis?.() ?? 0) - (a.submittedAt?.toMillis?.() ?? 0));
+    const latestPerUser = new Map();
+    for (const s of problemSubs) {
+      if (!latestPerUser.has(s.userId)) latestPerUser.set(s.userId, s);
+    }
 
     // How many public test cases the problem exposes (for labelling).
-    const { rows: [tc] } = await db.query(
-      `SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE is_public)::int AS public
-         FROM test_cases WHERE problem_id = $1`,
-      [id]
-    );
+    const allTestCases = await problemRepo.getTestCases(id);
+    const tc = { total: allTestCases.length, public: allTestCases.filter(t => t.isPublic).length };
 
     const attempts = [];
     const failures = [];
-    for (const r of rows) {
-      const arr = Array.isArray(r.test_results) ? r.test_results : [];
-      arr.forEach((passed, i) => {
+    for (const s of latestPerUser.values()) {
+      s.testResults.forEach((passed, i) => {
         attempts[i] = (attempts[i] || 0) + 1;
         if (!passed) failures[i] = (failures[i] || 0) + 1;
       });
@@ -567,7 +543,7 @@ exports.getProblemTestHeatmap = async (req, res) => {
       failRate: att > 0 ? Math.round(((failures[i] || 0) / att) * 100) : 0,
     }));
 
-    res.json({ success: true, data: { studentsAnalyzed: rows.length, totalTests: tc?.total || heatmap.length, heatmap } });
+    res.json({ success: true, data: { studentsAnalyzed: latestPerUser.size, totalTests: tc?.total || heatmap.length, heatmap } });
   } catch (error) {
     console.error('Test Heatmap Error:', error);
     res.status(500).json({ success: false, error: 'Failed to build test heatmap' });
@@ -576,25 +552,22 @@ exports.getProblemTestHeatmap = async (req, res) => {
 
 exports.getProblems = async (req, res) => {
   try {
-    const { rows } = await db.query(`
-      SELECT p.id, p.title, p.difficulty, p.tags, p.created_at,
-        COUNT(s.id) as total_submissions,
-        SUM(CASE WHEN s.verdict = 'Accepted' THEN 1 ELSE 0 END) as accepted_count
-      FROM problems p
-      LEFT JOIN code_submissions s ON p.id = s.problem_id
-      WHERE p.created_by = $1
-      GROUP BY p.id, p.title, p.difficulty, p.tags, p.created_at
-      ORDER BY p.created_at DESC
-    `, [req.user.id]);
+    const mine = (await problemRepo.getAll()).filter(p => p.createdBy === req.user.id);
+    const subsPerProblem = await Promise.all(mine.map(p => submissionRepo.listByProblem(p.id)));
 
-    const problems = rows.map(r => ({
-      ...r,
-      totalSubmissions: parseInt(r.total_submissions) || 0,
-      acceptedCount: parseInt(r.accepted_count) || 0,
-      acceptanceRate: parseInt(r.total_submissions) > 0
-        ? Math.round((parseInt(r.accepted_count) / parseInt(r.total_submissions)) * 100)
-        : 0
-    }));
+    const problems = mine
+      .map((p, i) => {
+        const subs = subsPerProblem[i];
+        const total = subs.length;
+        const accepted = subs.filter(s => s.verdict === 'Accepted').length;
+        return {
+          id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [], created_at: p.createdAt,
+          totalSubmissions: total,
+          acceptedCount: accepted,
+          acceptanceRate: total > 0 ? Math.round((accepted / total) * 100) : 0,
+        };
+      })
+      .sort((a, b) => (b.created_at?.toMillis?.() ?? 0) - (a.created_at?.toMillis?.() ?? 0));
 
     res.json({ success: true, data: problems });
   } catch (error) {
@@ -606,32 +579,22 @@ exports.getProblems = async (req, res) => {
 exports.getAssignmentProgress = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!(await assertAssignmentAccess(req, res, id))) return;
+    const assignment = await assertAssignmentAccess(req, res, id);
+    if (!assignment) return;
 
     // Get all problems in this assignment
-    const problemsResult = await db.query(`
-      SELECT p.id, p.title, p.difficulty
-      FROM problems p
-      JOIN assignment_problems ap ON p.id = ap.problem_id
-      WHERE ap.assignment_id = $1
-    `, [id]);
+    const assignmentProblemsMap = await problemRepo.getMapByIds(assignment.problemIds || []);
+    const problemsResult = { rows: [...assignmentProblemsMap.values()].map(p => ({ id: p.id, title: p.title, difficulty: p.difficulty })) };
 
     // Get all students
-    const studentsResult = await db.query(
-      "SELECT id, name, email FROM users WHERE role = 'student' ORDER BY name ASC"
-    );
+    const students = (await userRepo.listByRole('student'))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
 
     // Get all accepted submissions for this assignment's problems
-    const solvedResult = await db.query(`
-      SELECT DISTINCT s.user_id, s.problem_id
-      FROM code_submissions s
-      JOIN assignment_problems ap ON s.problem_id = ap.problem_id
-      WHERE ap.assignment_id = $1 AND s.verdict = 'Accepted'
-    `, [id]);
+    const subs = (await Promise.all((assignment.problemIds || []).map(pid => submissionRepo.listByProblem(pid)))).flat();
+    const solvedSet = new Set(subs.filter(s => s.verdict === 'Accepted').map(s => `${s.userId}:${s.problemId}`));
 
-    const solvedSet = new Set(solvedResult.rows.map(r => `${r.user_id}:${r.problem_id}`));
-
-    const progress = studentsResult.rows.map(student => ({
+    const progress = students.map(student => ({
       student: { id: student.id, name: student.name, email: student.email },
       solved: problemsResult.rows.filter(p => solvedSet.has(`${student.id}:${p.id}`)).length,
       total: problemsResult.rows.length,
@@ -657,123 +620,113 @@ exports.getAssignmentProgress = async (req, res) => {
 
 exports.getClassAnalytics = async (req, res) => {
   try {
-    // Topic weakness: which tags have the most failed attempts class-wide
-    const topicResult = await db.query(`
-      SELECT topic, solved_count, failed_count
-      FROM (
-        SELECT unnest(p.tags) as topic,
-          SUM(CASE WHEN s.verdict = 'Accepted' THEN 1 ELSE 0 END) as solved_count,
-          SUM(CASE WHEN s.verdict != 'Accepted' THEN 1 ELSE 0 END) as failed_count
-        FROM code_submissions s
-        JOIN problems p ON s.problem_id = p.id
-        GROUP BY unnest(p.tags)
-      ) t
-      ORDER BY failed_count DESC
-      LIMIT 10
-    `);
+    // Single full-collection read — every aggregate below is derived from
+    // this one array in application code (Firestore has no server-side
+    // GROUP BY). See submissionRepository.js header for the scale caveat.
+    const allSubs = await submissionRepo.listAll();
+    const allProblemIds = [...new Set(allSubs.map(s => s.problemId))];
+    const problemsMap = await problemRepo.getMapByIds(allProblemIds);
+    const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
+    const subDate = (s) => s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
+
+    // Topic weakness / mastery: which tags have the most failed attempts class-wide.
+    const topicCounts = {};
+    for (const s of allSubs) {
+      const tags = problemsMap.get(s.problemId)?.tags || [];
+      for (const tag of tags) {
+        if (!topicCounts[tag]) topicCounts[tag] = { topic: tag, solved: 0, failed: 0 };
+        if (s.verdict === 'Accepted') topicCounts[tag].solved += 1;
+        else topicCounts[tag].failed += 1;
+      }
+    }
+    const topicWeakness = Object.values(topicCounts).sort((a, b) => b.failed - a.failed).slice(0, 10);
+    const topicMastery = Object.values(topicCounts)
+      .sort((a, b) => (b.solved + b.failed) - (a.solved + a.failed))
+      .slice(0, 8);
 
     // Submissions over last 30 days
-    const timelineResult = await db.query(`
-      SELECT DATE(submitted_at) as date, COUNT(*) as count
-      FROM code_submissions
-      WHERE submitted_at >= NOW() - INTERVAL '30 days'
-      GROUP BY DATE(submitted_at)
-      ORDER BY date ASC
-    `);
+    const thirtyDaysAgo = Date.now() - 30 * 86400000;
+    const timelineCounts = {};
+    for (const s of allSubs) {
+      if (subMillis(s) < thirtyDaysAgo) continue;
+      const date = subDate(s).toISOString().split('T')[0];
+      timelineCounts[date] = (timelineCounts[date] || 0) + 1;
+    }
+    const submissionsTimeline = Object.entries(timelineCounts).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
 
     // Difficulty distribution of solved problems
-    const diffResult = await db.query(`
-      SELECT p.difficulty, COUNT(DISTINCT s.id) as count
-      FROM code_submissions s
-      JOIN problems p ON s.problem_id = p.id
-      WHERE s.verdict = 'Accepted'
-      GROUP BY p.difficulty
-    `);
+    const diffCounts = {};
+    for (const s of allSubs) {
+      if (s.verdict !== 'Accepted') continue;
+      const d = problemsMap.get(s.problemId)?.difficulty || 'Unknown';
+      diffCounts[d] = (diffCounts[d] || 0) + 1;
+    }
+    const difficultyDistribution = Object.entries(diffCounts).map(([difficulty, count]) => ({ difficulty, count }));
 
-    // Verdict distribution: count of every verdict across all submissions
-    const verdictResult = await db.query(`
-      SELECT verdict, COUNT(*) as count
-      FROM code_submissions
-      WHERE verdict IS NOT NULL
-      GROUP BY verdict
-      ORDER BY count DESC
-    `);
+    // Verdict distribution
+    const verdictCounts = {};
+    for (const s of allSubs) { if (s.verdict) verdictCounts[s.verdict] = (verdictCounts[s.verdict] || 0) + 1; }
+    const verdictDistribution = Object.entries(verdictCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+
+    // Student roster + per-student submission aggregates.
+    const studentsMap = await userRepo.getMapByRole('student');
+    const studentIds = [...studentsMap.keys()];
+    const perStudent = new Map(studentIds.map(id => [id, { solved: new Set(), total: 0, accepted: 0 }]));
+    for (const s of allSubs) {
+      const stat = perStudent.get(s.userId);
+      if (!stat) continue;
+      stat.total += 1;
+      if (s.verdict === 'Accepted') { stat.accepted += 1; stat.solved.add(s.problemId); }
+    }
 
     // Top students by distinct problems solved (accepted)
-    const topStudentsResult = await db.query(`
-      SELECT u.name,
-        COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) as solved
-      FROM users u
-      JOIN code_submissions s ON u.id = s.user_id
-      WHERE u.role = 'student'
-      GROUP BY u.id, u.name
-      HAVING COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) > 0
-      ORDER BY solved DESC
-      LIMIT 10
-    `);
-
-    // Topic mastery: solved vs failed attempts per tag (class-wide)
-    const topicMasteryResult = await db.query(`
-      SELECT topic, solved_count, failed_count
-      FROM (
-        SELECT unnest(p.tags) as topic,
-          SUM(CASE WHEN s.verdict = 'Accepted' THEN 1 ELSE 0 END) as solved_count,
-          SUM(CASE WHEN s.verdict != 'Accepted' THEN 1 ELSE 0 END) as failed_count
-        FROM code_submissions s
-        JOIN problems p ON s.problem_id = p.id
-        GROUP BY unnest(p.tags)
-      ) t
-      ORDER BY (solved_count + failed_count) DESC
-      LIMIT 8
-    `);
+    const topStudents = studentIds
+      .map(id => ({ name: studentsMap.get(id)?.name || 'Unknown', solved: perStudent.get(id).solved.size }))
+      .filter(r => r.solved > 0)
+      .sort((a, b) => b.solved - a.solved)
+      .slice(0, 10);
 
     // Cohort comparison: avg problems solved + AC rate per department and per section.
-    const cohortQuery = (dim) => `
-      SELECT COALESCE(u.${dim}, 'Unassigned') AS label,
-             COUNT(DISTINCT u.id) AS students,
-             COALESCE(SUM(CASE WHEN s.verdict = 'Accepted' THEN 1 ELSE 0 END), 0) AS accepted,
-             COUNT(s.id) AS total_subs,
-             COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) AS solved
-        FROM users u
-        LEFT JOIN code_submissions s ON s.user_id = u.id
-       WHERE u.role = 'student'
-       GROUP BY COALESCE(u.${dim}, 'Unassigned')
-       ORDER BY solved DESC`;
-    const [byDept, bySection] = await Promise.all([
-      db.query(cohortQuery('department')),
-      db.query(cohortQuery('section')),
-    ]);
-    const mapCohort = (rows) => rows.map(r => ({
-      label: r.label,
-      students: parseInt(r.students) || 0,
-      solved: parseInt(r.solved) || 0,
-      acRate: parseInt(r.total_subs) > 0 ? Math.round((parseInt(r.accepted) / parseInt(r.total_subs)) * 100) : 0,
-      avgSolved: parseInt(r.students) > 0 ? Math.round((parseInt(r.solved) / parseInt(r.students)) * 10) / 10 : 0,
-    }));
+    const groupByDim = (dim) => {
+      const groups = new Map();
+      for (const id of studentIds) {
+        const label = studentsMap.get(id)?.[dim] || 'Unassigned';
+        if (!groups.has(label)) groups.set(label, { label, students: 0, accepted: 0, total_subs: 0, solved: 0 });
+        const g = groups.get(label);
+        const stat = perStudent.get(id);
+        g.students += 1;
+        g.accepted += stat.accepted;
+        g.total_subs += stat.total;
+        g.solved += stat.solved.size;
+      }
+      return [...groups.values()]
+        .sort((a, b) => b.solved - a.solved)
+        .map(g => ({
+          label: g.label, students: g.students, solved: g.solved,
+          acRate: g.total_subs > 0 ? Math.round((g.accepted / g.total_subs) * 100) : 0,
+          avgSolved: g.students > 0 ? Math.round((g.solved / g.students) * 10) / 10 : 0,
+        }));
+    };
+    const byDepartment = groupByDim('department');
+    const bySection = groupByDim('section');
 
     // Weekly trend (last 12 weeks): submission volume + acceptance rate over time.
-    const weeklyResult = await db.query(`
-      SELECT to_char(date_trunc('week', submitted_at), 'YYYY-MM-DD') AS week,
-             COUNT(*) AS total,
-             SUM(CASE WHEN verdict = 'Accepted' THEN 1 ELSE 0 END) AS accepted
-        FROM code_submissions
-       WHERE submitted_at >= NOW() - INTERVAL '12 weeks'
-       GROUP BY 1 ORDER BY 1 ASC
-    `);
-    const weeklyTrend = weeklyResult.rows.map(r => {
-      const total = parseInt(r.total) || 0;
-      const accepted = parseInt(r.accepted) || 0;
-      return { week: r.week, total, accepted, acRate: total ? Math.round((accepted / total) * 100) : 0 };
-    });
+    const twelveWeeksAgo = Date.now() - 12 * 7 * 86400000;
+    const weekStart = (d) => { const wd = new Date(d); const day = (wd.getUTCDay() + 6) % 7; wd.setUTCDate(wd.getUTCDate() - day); return wd.toISOString().split('T')[0]; };
+    const weeklyCounts = {};
+    for (const s of allSubs) {
+      const ms = subMillis(s);
+      if (ms < twelveWeeksAgo) continue;
+      const week = weekStart(subDate(s));
+      if (!weeklyCounts[week]) weeklyCounts[week] = { total: 0, accepted: 0 };
+      weeklyCounts[week].total += 1;
+      if (s.verdict === 'Accepted') weeklyCounts[week].accepted += 1;
+    }
+    const weeklyTrend = Object.entries(weeklyCounts)
+      .map(([week, { total, accepted }]) => ({ week, total, accepted, acRate: total ? Math.round((accepted / total) * 100) : 0 }))
+      .sort((a, b) => a.week.localeCompare(b.week));
 
     // Distribution of students by number of distinct problems solved (a "score" histogram).
-    const solvedDistResult = await db.query(`
-      SELECT COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) AS solved
-        FROM users u
-        LEFT JOIN code_submissions s ON s.user_id = u.id
-       WHERE u.role = 'student'
-       GROUP BY u.id
-    `);
     const buckets = [
       { range: '0',      min: 0,  max: 0 },
       { range: '1–2',    min: 1,  max: 2 },
@@ -782,34 +735,31 @@ exports.getClassAnalytics = async (req, res) => {
       { range: '11–20',  min: 11, max: 20 },
       { range: '21+',    min: 21, max: Infinity },
     ].map(b => ({ ...b, students: 0 }));
-    for (const r of solvedDistResult.rows) {
-      const v = parseInt(r.solved) || 0;
+    for (const id of studentIds) {
+      const v = perStudent.get(id).solved.size;
       const b = buckets.find(b => v >= b.min && v <= b.max);
       if (b) b.students += 1;
     }
     const solvedDistribution = buckets.map(({ range, students }) => ({ range, students }));
 
     // Submission heatmap: day-of-week × hour-of-day over the last 60 days.
-    const heatmapResult = await db.query(`
-      SELECT EXTRACT(DOW  FROM submitted_at)::int AS dow,
-             EXTRACT(HOUR FROM submitted_at)::int AS hour,
-             COUNT(*) AS count
-        FROM code_submissions
-       WHERE submitted_at >= NOW() - INTERVAL '60 days'
-       GROUP BY 1, 2
-    `);
-    const submissionHeatmap = heatmapResult.rows.map(r => ({
-      dow: r.dow, hour: r.hour, count: parseInt(r.count) || 0,
-    }));
+    const sixtyDaysAgo = Date.now() - 60 * 86400000;
+    const heatmapCounts = {};
+    for (const s of allSubs) {
+      if (subMillis(s) < sixtyDaysAgo) continue;
+      const d = subDate(s);
+      const key = `${d.getDay()}|${d.getHours()}`;
+      heatmapCounts[key] = (heatmapCounts[key] || 0) + 1;
+    }
+    const submissionHeatmap = Object.entries(heatmapCounts).map(([key, count]) => {
+      const [dow, hour] = key.split('|').map(Number);
+      return { dow, hour, count };
+    });
 
     // Language distribution across all submissions.
-    const langResult = await db.query(`
-      SELECT language AS name, COUNT(*) AS value
-        FROM code_submissions
-       WHERE language IS NOT NULL AND language <> ''
-       GROUP BY language ORDER BY value DESC
-    `);
-    const languageDistribution = langResult.rows.map(r => ({ name: r.name, value: parseInt(r.value) || 0 }));
+    const langCounts = {};
+    for (const s of allSubs) { if (s.language) langCounts[s.language] = (langCounts[s.language] || 0) + 1; }
+    const languageDistribution = Object.entries(langCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
 
     // ── Auto-generated plain-language insights (so non-technical viewers get the takeaway) ──
     const insights = [];
@@ -824,11 +774,10 @@ exports.getClassAnalytics = async (req, res) => {
         });
       }
     }
-    if (topicResult.rows.length) {
-      const t = topicResult.rows[0];
-      const failed = parseInt(t.failed_count) || 0;
-      if (failed > 0) {
-        insights.push({ tone: 'warning', text: `"${t.topic}" is the most-failed topic — ${failed} failed attempts class-wide.` });
+    if (topicWeakness.length) {
+      const t = topicWeakness[0];
+      if (t.failed > 0) {
+        insights.push({ tone: 'warning', text: `"${t.topic}" is the most-failed topic — ${t.failed} failed attempts class-wide.` });
       }
     }
     if (submissionHeatmap.length) {
@@ -844,27 +793,14 @@ exports.getClassAnalytics = async (req, res) => {
     res.json({
       success: true,
       data: {
-        topicWeakness: topicResult.rows,
-        submissionsTimeline: timelineResult.rows.map(r => ({
-          date: r.date.toISOString().split('T')[0],
-          count: parseInt(r.count)
-        })),
-        difficultyDistribution: diffResult.rows,
-        verdictDistribution: verdictResult.rows.map(r => ({
-          name: r.verdict,
-          value: parseInt(r.count) || 0
-        })),
-        topStudents: topStudentsResult.rows.map(r => ({
-          name: r.name,
-          solved: parseInt(r.solved) || 0
-        })),
-        topicMastery: topicMasteryResult.rows.map(r => ({
-          topic: r.topic,
-          solved: parseInt(r.solved_count) || 0,
-          failed: parseInt(r.failed_count) || 0
-        })),
-        byDepartment: mapCohort(byDept.rows),
-        bySection: mapCohort(bySection.rows),
+        topicWeakness,
+        submissionsTimeline,
+        difficultyDistribution,
+        verdictDistribution,
+        topStudents,
+        topicMastery,
+        byDepartment,
+        bySection,
         weeklyTrend,
         solvedDistribution,
         submissionHeatmap,
@@ -887,34 +823,45 @@ exports.getCohorts = async (req, res) => {
   try {
     const dim = COHORT_DIMS[req.query.dimension] || 'department';
     const dept = scopeDept(req); // null = admin (all); else restrict to own dept
-    const params = [];
-    let where = `u.role = 'student'`;
-    if (dept !== null) { params.push(dept); where += ` AND u.department = $${params.length}`; }
+
+    const studentsMap = await userRepo.getMapByRole('student');
+    let students = [...studentsMap.values()];
+    if (dept !== null) students = students.filter(s => (s.department || null) === dept);
+    const ids = students.map(s => s.id);
 
     const key = `analytics:cohorts:${dept ?? 'all'}:${dim}`;
     const data = await cached(key, 120, async () => {
-      const { rows } = await db.query(
-        `SELECT cohort,
-                COUNT(*)::int                                          AS students,
-                ROUND(AVG(solved))::int                                AS avg_solved,
-                CASE WHEN SUM(subs) > 0
-                     THEN ROUND(100.0 * SUM(ac) / SUM(subs))::int ELSE 0 END AS ac_rate
-           FROM (
-             SELECT u.id,
-                    COALESCE(u.${dim}::text, 'Unassigned')                    AS cohort,
-                    COUNT(DISTINCT CASE WHEN s.verdict='Accepted' THEN s.problem_id END) AS solved,
-                    COUNT(s.id)                                               AS subs,
-                    SUM(CASE WHEN s.verdict='Accepted' THEN 1 ELSE 0 END)     AS ac
-               FROM users u
-               LEFT JOIN code_submissions s ON s.user_id = u.id
-              WHERE ${where}
-              GROUP BY u.id, cohort
-           ) t
-          GROUP BY cohort
-          ORDER BY cohort ASC`,
-        params,
-      );
-      return rows;
+      if (ids.length === 0) return [];
+      const idSet = new Set(ids);
+      const allSubs = (await submissionRepo.listAll()).filter(s => idSet.has(s.userId));
+      const perStudent = new Map(ids.map(id => [id, { solved: new Set(), subs: 0, ac: 0 }]));
+      for (const s of allSubs) {
+        const stat = perStudent.get(s.userId);
+        stat.subs += 1;
+        if (s.verdict === 'Accepted') { stat.ac += 1; stat.solved.add(s.problemId); }
+      }
+
+      // Group by cohort (department/section/year) using the Firestore-sourced
+      // dimension — Postgres no longer knows about this column.
+      const cohorts = new Map();
+      for (const id of ids) {
+        const cohort = studentsMap.get(id)?.[dim] || 'Unassigned';
+        if (!cohorts.has(cohort)) cohorts.set(cohort, { cohort, students: 0, solvedSum: 0, subsSum: 0, acSum: 0 });
+        const c = cohorts.get(cohort);
+        const stat = perStudent.get(id);
+        c.students += 1;
+        c.solvedSum += stat.solved.size;
+        c.subsSum += stat.subs;
+        c.acSum += stat.ac;
+      }
+      return [...cohorts.values()]
+        .map(c => ({
+          cohort: c.cohort,
+          students: c.students,
+          avg_solved: c.students > 0 ? Math.round(c.solvedSum / c.students) : 0,
+          ac_rate: c.subsSum > 0 ? Math.round((100 * c.acSum) / c.subsSum) : 0,
+        }))
+        .sort((a, b) => a.cohort.localeCompare(b.cohort));
     });
 
     res.json({ success: true, data, dimension: dim });
@@ -932,7 +879,6 @@ exports.getCohortStudents = async (req, res) => {
     const value = String(req.query.value ?? 'Unassigned');
     const page = Math.max(1, parseInt(req.query.page) || 1);
     const limit = Math.min(Math.max(parseInt(req.query.limit) || 20, 1), 100);
-    const offset = (page - 1) * limit;
     const dept = scopeDept(req);
 
     // A scoped faculty/HOD may only inspect their own department's cohorts.
@@ -940,44 +886,37 @@ exports.getCohortStudents = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Outside your department scope.' });
     }
 
-    const params = [value];
-    let where = `u.role = 'student' AND COALESCE(u.${dim}::text, 'Unassigned') = $1`;
-    if (dept !== null) { params.push(dept); where += ` AND u.department = $${params.length}`; }
+    const studentsMap = await userRepo.getMapByRole('student');
+    let students = [...studentsMap.values()].filter(s => (s[dim] || 'Unassigned') === value);
+    if (dept !== null) students = students.filter(s => (s.department || null) === dept);
 
-    const countRes = await db.query(`SELECT COUNT(*)::int AS n FROM users u WHERE ${where}`, params);
-    const total = countRes.rows[0]?.n || 0;
+    const total = students.length;
+    const ids = students.map(s => s.id);
+    const idSet = new Set(ids);
 
-    params.push(limit, offset);
-    const { rows } = await db.query(
-      `SELECT u.id, u.name, u.roll_no, u.department, u.section, u.year,
-              COUNT(DISTINCT CASE WHEN s.verdict='Accepted' THEN s.problem_id END)::int AS solved,
-              COUNT(s.id)::int                                                          AS subs,
-              SUM(CASE WHEN s.verdict='Accepted' THEN 1 ELSE 0 END)::int                AS ac
-         FROM users u
-         LEFT JOIN code_submissions s ON s.user_id = u.id
-        WHERE ${where}
-        GROUP BY u.id
-        ORDER BY solved DESC, u.name ASC
-        LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params,
-    );
+    const allSubs = ids.length ? (await submissionRepo.listAll()).filter(s => idSet.has(s.userId)) : [];
+    const statsMap = new Map(ids.map(id => [id, { solved: new Set(), subs: 0, ac: 0 }]));
+    for (const s of allSubs) {
+      const stat = statsMap.get(s.userId);
+      stat.subs += 1;
+      if (s.verdict === 'Accepted') { stat.ac += 1; stat.solved.add(s.problemId); }
+    }
 
-    res.json({
-      success: true,
-      total,
-      page,
-      limit,
-      data: rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        rollNo: r.roll_no,
-        department: r.department,
-        section: r.section,
-        year: r.year,
-        solved: r.solved,
-        acRate: r.subs > 0 ? Math.round((r.ac / r.subs) * 100) : 0,
-      })),
-    });
+    const merged = students
+      .map(s => {
+        const st = statsMap.get(s.id);
+        return {
+          id: s.id, name: s.name, rollNo: s.rollNo || null,
+          department: s.department || null, section: s.section || null, year: s.year || null,
+          solved: st.solved.size,
+          acRate: st.subs > 0 ? Math.round((st.ac / st.subs) * 100) : 0,
+        };
+      })
+      .sort((a, b) => b.solved - a.solved || a.name.localeCompare(b.name));
+
+    const pageData = merged.slice((page - 1) * limit, (page - 1) * limit + limit);
+
+    res.json({ success: true, total, page, limit, data: pageData });
   } catch (error) {
     console.error('getCohortStudents error:', error);
     res.status(500).json({ success: false, error: 'Failed to load cohort students' });
@@ -988,16 +927,19 @@ exports.getStudentDetail = async (req, res) => {
   try {
     const { id } = req.params;
 
-    const { rows: [student] } = await db.query(
-      `SELECT id, name, email, department, section, year, roll_no, rating, last_login_at, created_at
-         FROM users WHERE id = $1 AND role = 'student'`,
-      [id]
-    );
-    if (!student) return res.status(404).json({ success: false, error: 'Student not found' });
+    const profile = await userRepo.getById(id, 'student');
+    if (!profile) return res.status(404).json({ success: false, error: 'Student not found' });
     // Strict department isolation: HOD/faculty may only drill into their own dept.
-    if (!canSeeDepartment(req, student.department)) {
+    if (!canSeeDepartment(req, profile.department)) {
       return res.status(403).json({ success: false, error: 'Outside your department scope.' });
     }
+
+    const student = {
+      id: profile.id, name: profile.name, email: profile.email,
+      department: profile.department, section: profile.section, year: profile.year,
+      roll_no: profile.rollNo, rating: profile.rating ?? 1200,
+      last_login_at: profile.lastLoginAt, created_at: profile.createdAt,
+    };
 
     const data = await cached(`student-profile:${id}`, 120, () => buildStudentProfile(id, student));
     res.json({ success: true, data });
@@ -1010,148 +952,115 @@ exports.getStudentDetail = async (req, res) => {
 // Runs every query for one student's full profile bundle. Pulled out of the route
 // handler so the (department-check-free) result can be Redis-cached by id alone.
 async function buildStudentProfile(id, student) {
-  const [
-    curveRes, topicRes, verdictRes, totalsRes, difficultyRes,
-    velocityRes, heatmapRes, ratingRes, langRes, masteryRes, codingProfilesRes,
-  ] = await Promise.all([
-    // Learning curve: cumulative distinct problems solved over time
-    // (keyed by the date each problem was *first* accepted).
-    db.query(`
-      SELECT to_char(DATE(first_ac), 'YYYY-MM-DD') AS date, COUNT(*) AS solved
-        FROM (
-          SELECT problem_id, MIN(submitted_at) AS first_ac
-            FROM code_submissions
-           WHERE user_id = $1 AND verdict = 'Accepted'
-           GROUP BY problem_id
-        ) t
-       GROUP BY DATE(first_ac) ORDER BY DATE(first_ac) ASC
-    `, [id]),
-
-    // Topic mastery for this student: solved vs attempted per tag.
-    db.query(`
-      SELECT topic,
-             COUNT(DISTINCT CASE WHEN verdict = 'Accepted' THEN problem_id END) AS solved,
-             COUNT(*) AS attempts
-        FROM (
-          SELECT unnest(p.tags) AS topic, s.problem_id, s.verdict
-            FROM code_submissions s JOIN problems p ON p.id = s.problem_id
-           WHERE s.user_id = $1
-        ) x
-       GROUP BY topic ORDER BY attempts DESC LIMIT 15
-    `, [id]),
-
-    // Verdict mix for this student.
-    db.query(`
-      SELECT verdict AS name, COUNT(*) AS value
-        FROM code_submissions WHERE user_id = $1 AND verdict IS NOT NULL
-       GROUP BY verdict ORDER BY value DESC
-    `, [id]),
-
-    // Totals.
-    db.query(`
-      SELECT COUNT(*) AS total,
-             SUM(CASE WHEN verdict = 'Accepted' THEN 1 ELSE 0 END) AS accepted,
-             COUNT(DISTINCT CASE WHEN verdict = 'Accepted' THEN problem_id END) AS solved
-        FROM code_submissions WHERE user_id = $1
-    `, [id]),
-
-    // Difficulty progression: accepted problems by difficulty tier.
-    db.query(`
-      SELECT p.difficulty, COUNT(DISTINCT s.problem_id) AS solved
-        FROM code_submissions s JOIN problems p ON p.id = s.problem_id
-       WHERE s.user_id = $1 AND s.verdict = 'Accepted'
-       GROUP BY p.difficulty
-    `, [id]),
-
-    // Submission velocity: submissions per week, last ~12 weeks.
-    db.query(`
-      SELECT to_char(DATE_TRUNC('week', submitted_at), 'YYYY-MM-DD') AS week, COUNT(*) AS count
-        FROM code_submissions
-       WHERE user_id = $1 AND submitted_at >= NOW() - INTERVAL '12 weeks'
-       GROUP BY DATE_TRUNC('week', submitted_at)
-       ORDER BY DATE_TRUNC('week', submitted_at) ASC
-    `, [id]),
-
-    // Activity heatmap, last 12 months (same shape as the student dashboard's).
-    db.query(`
-      SELECT DATE(submitted_at) AS date, COUNT(*) AS count
-        FROM code_submissions
-       WHERE user_id = $1 AND submitted_at >= NOW() - INTERVAL '12 months'
-       GROUP BY DATE(submitted_at)
-       ORDER BY date ASC
-    `, [id]),
-
-    // Contest rating history (previously only visible to the student themselves).
-    db.query(`
-      SELECT rh.contest_id, c.title AS contest_title,
-             rh.old_rating, rh.new_rating, rh.rank, rh.created_at
-        FROM rating_history rh
-        LEFT JOIN contests c ON c.id = rh.contest_id
-       WHERE rh.user_id = $1
-       ORDER BY rh.created_at ASC
-    `, [id]),
-
-    // Language usage, ranked.
-    db.query(`
-      SELECT language, COUNT(*) AS count
-        FROM code_submissions WHERE user_id = $1 AND language IS NOT NULL
-       GROUP BY language ORDER BY count DESC
-    `, [id]),
-
-    // Topic mastery table (solved/failed/hint counts) — the strengths/weaknesses source.
-    db.query(`
-      SELECT topic, solved_count, failed_count, hint_usage_count
-        FROM student_topic_mastery WHERE user_id = $1
-    `, [id]),
-
-    // Third-party coding platform profiles (LeetCode/Codeforces/etc.) — broadens the
-    // skill picture beyond in-house submissions.
-    db.query(`
-      SELECT platform, handle, solved, rating, max_rating, extra, sync_status, last_synced
-        FROM coding_profiles WHERE user_id = $1 ORDER BY platform
-    `, [id]),
+  const [subs, ratingRows, masteryRes, codingProfilesRes] = await Promise.all([
+    submissionRepo.listByUser(id),
+    ratingHistoryRepo.listByUser(id),
+    topicMasteryRepo.listByUser(id),
+    codingProfileRepo.listByUser(id),
   ]);
+  const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
+  const subDate = (s) => s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
 
+  const problemsMap = await problemRepo.getMapByIds([...new Set(subs.map(s => s.problemId))]);
+
+  // Learning curve: cumulative distinct problems solved over time (keyed by
+  // the date each problem was *first* accepted).
+  const firstAcceptedByProblem = new Map();
+  for (const s of subs) {
+    if (s.verdict !== 'Accepted') continue;
+    const t = subMillis(s);
+    if (!firstAcceptedByProblem.has(s.problemId) || t < firstAcceptedByProblem.get(s.problemId)) {
+      firstAcceptedByProblem.set(s.problemId, t);
+    }
+  }
+  const solvedByDate = {};
+  for (const t of firstAcceptedByProblem.values()) {
+    const date = new Date(t).toISOString().split('T')[0];
+    solvedByDate[date] = (solvedByDate[date] || 0) + 1;
+  }
   let cum = 0;
-  const learningCurve = curveRes.rows.map(r => {
-    cum += parseInt(r.solved) || 0;
-    return { date: r.date, solved: cum };
-  });
+  const learningCurve = Object.entries(solvedByDate)
+    .sort((a, b) => a[0].localeCompare(b[0]))
+    .map(([date, n]) => { cum += n; return { date, solved: cum }; });
 
-  const topicBreakdown = topicRes.rows.map(r => ({
-    topic: r.topic, solved: parseInt(r.solved) || 0, attempts: parseInt(r.attempts) || 0,
+  // Topic mastery for this student: solved vs attempted per tag.
+  const topicAgg = {};
+  for (const s of subs) {
+    const tags = problemsMap.get(s.problemId)?.tags || [];
+    for (const tag of tags) {
+      if (!topicAgg[tag]) topicAgg[tag] = { topic: tag, solvedSet: new Set(), attempts: 0 };
+      topicAgg[tag].attempts += 1;
+      if (s.verdict === 'Accepted') topicAgg[tag].solvedSet.add(s.problemId);
+    }
+  }
+  const topicBreakdown = Object.values(topicAgg)
+    .map(t => ({ topic: t.topic, solved: t.solvedSet.size, attempts: t.attempts }))
+    .sort((a, b) => b.attempts - a.attempts)
+    .slice(0, 15);
+
+  const verdictCounts = {};
+  for (const s of subs) { if (s.verdict) verdictCounts[s.verdict] = (verdictCounts[s.verdict] || 0) + 1; }
+  const verdictBreakdown = Object.entries(verdictCounts).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+
+  const total = subs.length;
+  const accepted = subs.filter(s => s.verdict === 'Accepted').length;
+  const solvedProblemIds = new Set(subs.filter(s => s.verdict === 'Accepted').map(s => s.problemId));
+
+  // Difficulty progression: accepted problems by difficulty tier.
+  const difficultyCounts = {};
+  for (const pid of solvedProblemIds) {
+    const d = problemsMap.get(pid)?.difficulty || 'Unknown';
+    difficultyCounts[d] = (difficultyCounts[d] || 0) + 1;
+  }
+  const difficultyProgression = Object.entries(difficultyCounts).map(([difficulty, solved]) => ({ difficulty, solved }));
+
+  // Submission velocity: submissions per week, last ~12 weeks.
+  const twelveWeeksAgo = Date.now() - 12 * 7 * 86400000;
+  const weekStart = (d) => { const wd = new Date(d); const day = (wd.getUTCDay() + 6) % 7; wd.setUTCDate(wd.getUTCDate() - day); return wd.toISOString().split('T')[0]; };
+  const velocityCounts = {};
+  for (const s of subs) {
+    const ms = subMillis(s);
+    if (ms < twelveWeeksAgo) continue;
+    const week = weekStart(subDate(s));
+    velocityCounts[week] = (velocityCounts[week] || 0) + 1;
+  }
+  const submissionVelocity = Object.entries(velocityCounts).map(([week, count]) => ({ week, count })).sort((a, b) => a.week.localeCompare(b.week));
+
+  // Activity heatmap, last 12 months.
+  const twelveMonthsAgo = Date.now() - 365 * 86400000;
+  const heatmapCounts = {};
+  for (const s of subs) {
+    const ms = subMillis(s);
+    if (ms < twelveMonthsAgo) continue;
+    const date = subDate(s).toISOString().split('T')[0];
+    heatmapCounts[date] = (heatmapCounts[date] || 0) + 1;
+  }
+  const activityHeatmap = Object.entries(heatmapCounts).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
+
+  const contestIds = [...new Set(ratingRows.map(r => r.contestId).filter(Boolean))];
+  const contestTitleMap = new Map(
+    (await Promise.all(contestIds.map(cid => contestRepo.getById(cid)))).filter(Boolean).map(c => [c.id, c.title])
+  );
+
+  const ratingHistory = ratingRows.map(r => ({
+    contestId: r.contestId, contestTitle: contestTitleMap.get(r.contestId) || 'Untitled contest',
+    oldRating: r.oldRating, newRating: r.newRating, rank: r.rank,
+    createdAt: r.createdAt?.toDate?.() ?? r.createdAt,
   }));
 
-  const verdictBreakdown = verdictRes.rows.map(r => ({ name: r.name, value: parseInt(r.value) || 0 }));
+  const langCounts = {};
+  for (const s of subs) { if (s.language) langCounts[s.language] = (langCounts[s.language] || 0) + 1; }
+  const languages = Object.entries(langCounts).map(([language, count]) => ({ language, count })).sort((a, b) => b.count - a.count);
 
-  const totals = totalsRes.rows[0];
-  const total = parseInt(totals.total) || 0;
-  const accepted = parseInt(totals.accepted) || 0;
+  const { strengths, weaknesses } = computeStrengthsWeaknesses(masteryRes.map(m => ({
+    topic: m.topic, solved_count: m.solvedCount, failed_count: m.failedCount, hint_usage_count: m.hintUsageCount,
+  })));
 
-  const difficultyProgression = difficultyRes.rows.map(r => ({
-    difficulty: r.difficulty || 'Unknown', solved: parseInt(r.solved) || 0,
-  }));
-
-  const submissionVelocity = velocityRes.rows.map(r => ({ week: r.week, count: parseInt(r.count) || 0 }));
-
-  const activityHeatmap = heatmapRes.rows.map(r => ({
-    date: r.date.toISOString().split('T')[0], count: parseInt(r.count) || 0,
-  }));
-
-  const ratingHistory = ratingRes.rows.map(r => ({
-    contestId: r.contest_id, contestTitle: r.contest_title || 'Untitled contest',
-    oldRating: r.old_rating, newRating: r.new_rating, rank: r.rank, createdAt: r.created_at,
-  }));
-
-  const languages = langRes.rows.map(r => ({ language: r.language, count: parseInt(r.count) || 0 }));
-
-  const { strengths, weaknesses } = computeStrengthsWeaknesses(masteryRes.rows);
-
-  const codingProfiles = codingProfilesRes.rows.map(r => ({
+  const codingProfiles = codingProfilesRes.map(r => ({
     platform: r.platform, handle: r.handle,
     solved: parseInt(r.solved) || 0,
-    rating: r.rating, maxRating: r.max_rating,
-    syncStatus: r.sync_status, lastSynced: r.last_synced,
+    rating: r.rating, maxRating: r.maxRating,
+    syncStatus: r.syncStatus, lastSynced: r.lastSynced,
   }));
   const externalSolved = codingProfiles.reduce((sum, p) => sum + p.solved, 0);
 
@@ -1168,12 +1077,12 @@ async function buildStudentProfile(id, student) {
     student: {
       id: student.id, name: student.name, email: student.email,
       department: student.department, section: student.section, year: student.year,
-      rollNo: student.roll_no, rating: student.rating, lastLoginAt: student.last_login_at,
-      joinedDate: student.created_at,
+      rollNo: student.roll_no, rating: student.rating, lastLoginAt: toISO(student.last_login_at),
+      joinedDate: toDateOnly(student.created_at),
     },
     totals: {
       total, accepted,
-      solved: parseInt(totals.solved) || 0,
+      solved: solvedProblemIds.size,
       acRate: total ? Math.round((accepted / total) * 100) : 0,
     },
     learningCurve,
@@ -1227,31 +1136,30 @@ exports.getCohortTopics = async (req, res) => {
     const dim = ALLOWED[String(req.query.dim || 'department')];
     if (!dim) return res.status(400).json({ success: false, error: 'Invalid dimension' });
 
-    const { rows } = await db.query(`
-      SELECT cohort, topic,
-             SUM(CASE WHEN verdict = 'Accepted' THEN 1 ELSE 0 END) AS accepted,
-             COUNT(*) AS attempts
-        FROM (
-          SELECT COALESCE(u.${dim}::text, 'Unassigned') AS cohort,
-                 unnest(p.tags) AS topic,
-                 s.verdict
-            FROM code_submissions s
-            JOIN users u ON u.id = s.user_id AND u.role = 'student'
-            JOIN problems p ON p.id = s.problem_id
-        ) x
-       GROUP BY cohort, topic
-    `);
+    // Roster + cohort dimension from Firestore; submissions from Postgres,
+    // tags hydrated from Firestore, aggregated by cohort here since neither
+    // dimension lives in SQL anymore.
+    const studentsMap = await userRepo.getMapByRole('student');
+    const studentIds = new Set(studentsMap.keys());
+    const subs = (await submissionRepo.listAll()).filter(s => studentIds.has(s.userId));
+    const cohortTopicsProblemsMap = await problemRepo.getMapByIds(subs.map(s => s.problemId));
 
     // Pick the most-attempted topics (radar axes) and the most-active cohorts (series).
     const topicTotals = {};
     const cohortTotals = {};
     const cell = {}; // `${cohort}|${topic}` -> { accepted, attempts }
-    for (const r of rows) {
-      const accepted = parseInt(r.accepted) || 0;
-      const attempts = parseInt(r.attempts) || 0;
-      topicTotals[r.topic] = (topicTotals[r.topic] || 0) + attempts;
-      cohortTotals[r.cohort] = (cohortTotals[r.cohort] || 0) + attempts;
-      cell[`${r.cohort}|${r.topic}`] = { accepted, attempts };
+    for (const r of subs) {
+      const cohort = studentsMap.get(r.userId)?.[dim] || 'Unassigned';
+      const tags = cohortTopicsProblemsMap.get(r.problemId)?.tags || [];
+      const accepted = r.verdict === 'Accepted' ? 1 : 0;
+      for (const topic of tags) {
+        topicTotals[topic] = (topicTotals[topic] || 0) + 1;
+        cohortTotals[cohort] = (cohortTotals[cohort] || 0) + 1;
+        const key = `${cohort}|${topic}`;
+        if (!cell[key]) cell[key] = { accepted: 0, attempts: 0 };
+        cell[key].accepted += accepted;
+        cell[key].attempts += 1;
+      }
     }
     const topTopics = Object.entries(topicTotals).sort((a, b) => b[1] - a[1]).slice(0, 8).map(e => e[0]);
     const topCohorts = Object.entries(cohortTotals).sort((a, b) => b[1] - a[1]).slice(0, 6).map(e => e[0]);

@@ -1,5 +1,9 @@
-const db = require('../config/db');
 const { computeStrengthsWeaknesses } = require('../utils/topicScores');
+const userRepo = require('../repositories/userRepository');
+const problemRepo = require('../repositories/problemRepository');
+const assignmentRepo = require('../repositories/assignmentRepository');
+const topicMasteryRepo = require('../repositories/topicMasteryRepository');
+const submissionRepo = require('../repositories/submissionRepository');
 
 // Calculate consecutive-day submission streak from heatmap rows
 const calculateStreak = (heatmapRows) => {
@@ -27,117 +31,88 @@ const calculateStreak = (heatmapRows) => {
   return streak;
 };
 
+const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
+const subDate = (s) => s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
+
 exports.getDashboardData = async (req, res) => {
   try {
     const userId = req.user.id;
+    const mySubs = await submissionRepo.listByUser(userId);
 
     // 1. Total Submissions & AC Rate
-    const statsResult = await db.query(`
-      SELECT
-        COUNT(*) as total_submissions,
-        SUM(CASE WHEN verdict = 'Accepted' THEN 1 ELSE 0 END) as total_accepted
-      FROM code_submissions
-      WHERE user_id = $1
-    `, [userId]);
-
-    const totalSubs = parseInt(statsResult.rows[0].total_submissions) || 0;
-    const totalAccepted = parseInt(statsResult.rows[0].total_accepted) || 0;
+    const totalSubs = mySubs.length;
+    const totalAccepted = mySubs.filter(s => s.verdict === 'Accepted').length;
     const acRate = totalSubs > 0 ? Math.round((totalAccepted / totalSubs) * 100) : 0;
 
     // 2. Problems Solved (Unique)
-    const solvedResult = await db.query(`
-      SELECT COUNT(DISTINCT problem_id) as problems_solved
-      FROM code_submissions
-      WHERE user_id = $1 AND verdict = 'Accepted'
-    `, [userId]);
-    const problemsSolved = parseInt(solvedResult.rows[0].problems_solved) || 0;
+    const problemsSolved = new Set(mySubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId)).size;
 
     // 3. Languages Used
-    const langResult = await db.query(`
-      SELECT language, COUNT(*) as count
-      FROM code_submissions
-      WHERE user_id = $1
-      GROUP BY language
-      ORDER BY count DESC
-    `, [userId]);
-    const languages = langResult.rows;
+    const langCounts = {};
+    for (const s of mySubs) { if (s.language) langCounts[s.language] = (langCounts[s.language] || 0) + 1; }
+    const languages = Object.entries(langCounts).map(([language, count]) => ({ language, count })).sort((a, b) => b.count - a.count);
 
     // 4. Heatmap Data (last 12 months)
-    const heatmapResult = await db.query(`
-      SELECT DATE(submitted_at) as date, COUNT(*) as count
-      FROM code_submissions
-      WHERE user_id = $1 AND submitted_at >= NOW() - INTERVAL '12 months'
-      GROUP BY DATE(submitted_at)
-      ORDER BY date ASC
-    `, [userId]);
-    const heatmap = heatmapResult.rows.map(r => ({
-      date: r.date.toISOString().split('T')[0],
-      count: parseInt(r.count)
-    }));
+    const twelveMonthsAgo = Date.now() - 365 * 86400000;
+    const heatmapCounts = {};
+    for (const s of mySubs) {
+      const ms = subMillis(s);
+      if (ms < twelveMonthsAgo) continue;
+      const date = subDate(s).toISOString().split('T')[0];
+      heatmapCounts[date] = (heatmapCounts[date] || 0) + 1;
+    }
+    const heatmap = Object.entries(heatmapCounts).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
 
     // 5. Real streak calculation
     const streak = calculateStreak(heatmap);
 
-    // 6. Real rank from leaderboard
-    const rankResult = await db.query(`
-      SELECT rank FROM (
-        SELECT
-          u.id,
-          ROW_NUMBER() OVER (
-            ORDER BY COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) DESC
-          ) AS rank
-        FROM users u
-        LEFT JOIN code_submissions s ON u.id = s.user_id
-        WHERE u.role = 'student'
-        GROUP BY u.id
-      ) ranked
-      WHERE id = $1
-    `, [userId]);
-    const rank = rankResult.rows.length > 0 ? parseInt(rankResult.rows[0].rank) : 0;
+    // 6. Real rank from leaderboard — student roster comes from Firestore.
+    const studentIds = (await userRepo.listByRole('student')).map(u => u.id);
+    const allSubs = await submissionRepo.listAll();
+    const solvedCountByUser = {};
+    for (const s of allSubs) {
+      if (s.verdict !== 'Accepted') continue;
+      if (!solvedCountByUser[s.userId]) solvedCountByUser[s.userId] = new Set();
+      solvedCountByUser[s.userId].add(s.problemId);
+    }
+    const ranked = studentIds
+      .map(id => ({ id, solved: solvedCountByUser[id]?.size || 0 }))
+      .sort((a, b) => b.solved - a.solved);
+    const rank = ranked.findIndex(r => r.id === userId) + 1;
 
     // 6b. Contest rating (Elo)
-    const ratingResult = await db.query(`SELECT rating FROM users WHERE id = $1`, [userId]);
-    const rating = ratingResult.rows.length > 0 && ratingResult.rows[0].rating != null
-      ? parseInt(ratingResult.rows[0].rating, 10)
-      : 1200;
+    const myProfile = await userRepo.getById(userId, req.user.role);
+    const rating = myProfile?.rating != null ? parseInt(myProfile.rating, 10) : 1200;
 
     // 7. Topics Analytics from mastery table (with fallback to submissions)
-    const topicsResult = await db.query(`
-      SELECT topic, solved_count, failed_count
-      FROM student_topic_mastery
-      WHERE user_id = $1
-    `, [userId]);
+    const masteryRows = await topicMasteryRepo.listByUser(userId);
 
-    let masteredTopics = topicsResult.rows.map(r => ({
+    let masteredTopics = masteryRows.map(r => ({
       topic: r.topic,
-      mastery: Math.min(100, parseInt(r.solved_count) * 20)
+      mastery: Math.min(100, (r.solvedCount || 0) * 20)
     }));
 
     // Fallback: derive from submissions if mastery table is empty
     if (masteredTopics.length === 0) {
-      const fallbackResult = await db.query(`
-        SELECT unnest(p.tags) as topic, COUNT(DISTINCT s.problem_id) as solved_count
-        FROM code_submissions s
-        JOIN problems p ON s.problem_id = p.id
-        WHERE s.user_id = $1 AND s.verdict = 'Accepted'
-        GROUP BY unnest(p.tags)
-      `, [userId]);
-      masteredTopics = fallbackResult.rows.map(r => ({
-        topic: r.topic,
-        mastery: Math.min(100, parseInt(r.solved_count) * 20)
+      const acceptedProblemIds = [...new Set(mySubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId))];
+      const problemsMap = await problemRepo.getMapByIds(acceptedProblemIds);
+      const solvedCountByTopic = {};
+      for (const pid of acceptedProblemIds) {
+        const tags = problemsMap.get(pid)?.tags || [];
+        for (const tag of tags) solvedCountByTopic[tag] = (solvedCountByTopic[tag] || 0) + 1;
+      }
+      masteredTopics = Object.entries(solvedCountByTopic).map(([topic, solved_count]) => ({
+        topic, mastery: Math.min(100, solved_count * 20),
       }));
     }
 
     // Recent submissions for the dashboard widget
-    const recentResult = await db.query(`
-      SELECT s.verdict, s.language, s.submitted_at AS created_at,
-             p.title AS problem_title, p.id AS problem_id
-        FROM code_submissions s
-        JOIN problems p ON p.id = s.problem_id
-       WHERE s.user_id = $1
-       ORDER BY s.submitted_at DESC
-       LIMIT 5
-    `, [userId]);
+    const recentRows = [...mySubs].sort((a, b) => subMillis(b) - subMillis(a)).slice(0, 5);
+    const recentProblemsMap = await problemRepo.getMapByIds(recentRows.map(r => r.problemId));
+    const recentSubmissions = recentRows.map(r => ({
+      verdict: r.verdict, language: r.language, created_at: subDate(r),
+      problem_id: r.problemId, problem_title: recentProblemsMap.get(r.problemId)?.title || 'Unknown',
+    }));
 
     res.json({
       success: true,
@@ -146,7 +121,7 @@ exports.getDashboardData = async (req, res) => {
         languages,
         heatmap,
         topics: masteredTopics,
-        recentSubmissions: recentResult.rows
+        recentSubmissions
       }
     });
 
@@ -160,51 +135,28 @@ exports.getAssignments = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const { rows } = await db.query(`
-      SELECT
-        a.id as assignment_id,
-        a.title as assignment_title,
-        a.deadline,
-        a.is_exam,
-        p.id as problem_id,
-        p.title as problem_title,
-        p.difficulty,
-        EXISTS (
-          SELECT 1 FROM code_submissions cs
-          WHERE cs.user_id = $1 AND cs.problem_id = p.id AND cs.verdict = 'Accepted'
-        ) as is_solved
-      FROM assignments a
-      JOIN assignment_problems ap ON a.id = ap.assignment_id
-      JOIN problems p ON ap.problem_id = p.id
-      ORDER BY a.deadline ASC
-    `, [userId]);
+    const assignments = await assignmentRepo.getAll();
+    const allProblemIds = [...new Set(assignments.flatMap(a => a.problemIds || []))];
+    const problemsMap = await problemRepo.getMapByIds(allProblemIds);
 
-    const assignmentsMap = new Map();
-    rows.forEach(r => {
-      if (!assignmentsMap.has(r.assignment_id)) {
-        assignmentsMap.set(r.assignment_id, {
-          id: r.assignment_id,
-          title: r.assignment_title,
-          deadline: r.deadline,
-          isExam: r.is_exam === true,
-          problems: []
+    const solvedSet = new Set(
+      (await submissionRepo.listByUser(userId)).filter(s => s.verdict === 'Accepted').map(s => s.problemId)
+    );
+
+    const data = assignments
+      .sort((a, b) => (a.deadline?.toMillis?.() ?? new Date(a.deadline).getTime()) - (b.deadline?.toMillis?.() ?? new Date(b.deadline).getTime()))
+      .map(a => {
+        const problems = (a.problemIds || []).map(pid => {
+          const p = problemsMap.get(pid);
+          return { id: pid, title: p?.title || 'Unknown', difficulty: p?.difficulty || null, is_solved: solvedSet.has(pid) };
         });
-      }
-      assignmentsMap.get(r.assignment_id).problems.push({
-        id: r.problem_id,
-        title: r.problem_title,
-        difficulty: r.difficulty,
-        is_solved: r.is_solved
+        return {
+          id: a.id, title: a.title, deadline: a.deadline, isExam: a.isExam === true,
+          problems, total: problems.length, solved: problems.filter(p => p.is_solved).length,
+        };
       });
-    });
 
-    const assignments = Array.from(assignmentsMap.values()).map(a => ({
-      ...a,
-      total: a.problems.length,
-      solved: a.problems.filter(p => p.is_solved).length
-    }));
-
-    res.json({ success: true, data: assignments });
+    res.json({ success: true, data });
   } catch (error) {
     console.error('Get Assignments Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch assignments' });
@@ -213,22 +165,20 @@ exports.getAssignments = async (req, res) => {
 
 exports.getNotifications = async (req, res) => {
   try {
-    const userId = req.user.id;
-
     // Return assignments due within 48 hours as notifications
-    const { rows } = await db.query(`
-      SELECT a.id, a.title, a.deadline
-      FROM assignments a
-      WHERE a.deadline BETWEEN NOW() AND NOW() + INTERVAL '48 hours'
-      ORDER BY a.deadline ASC
-      LIMIT 10
-    `);
+    const now = Date.now();
+    const in48h = now + 48 * 3600000;
+    const toMs = (d) => d?.toMillis?.() ?? new Date(d).getTime();
+    const dueSoon = (await assignmentRepo.getAll())
+      .filter(a => { const t = toMs(a.deadline); return t >= now && t <= in48h; })
+      .sort((a, b) => toMs(a.deadline) - toMs(b.deadline))
+      .slice(0, 10);
 
-    const notifications = rows.map(r => ({
-      id: r.id,
+    const notifications = dueSoon.map(a => ({
+      id: a.id,
       type: 'deadline',
-      message: `Assignment "${r.title}" is due soon`,
-      deadline: r.deadline
+      message: `Assignment "${a.title}" is due soon`,
+      deadline: a.deadline
     }));
 
     res.json({ success: true, data: notifications });
@@ -241,25 +191,23 @@ exports.getNotifications = async (req, res) => {
 exports.getRecommendations = async (req, res) => {
   const userId = req.user.id;
   try {
+    const mySubs = await submissionRepo.listByUser(userId);
+
     // ── Adaptive difficulty: pick a target band from recent performance ──────────
     // Recent acceptance rate (last 20 submissions) gauges whether to push or ease.
-    const recentRes = await db.query(`
-      SELECT verdict FROM code_submissions
-      WHERE user_id = $1 ORDER BY submitted_at DESC LIMIT 20
-    `, [userId]);
-    const recentTotal = recentRes.rows.length;
-    const recentAcc = recentRes.rows.filter(r => r.verdict === 'Accepted').length;
+    const recentSubs = [...mySubs].sort((a, b) => subMillis(b) - subMillis(a)).slice(0, 20);
+    const recentTotal = recentSubs.length;
+    const recentAcc = recentSubs.filter(s => s.verdict === 'Accepted').length;
     const recentAcRate = recentTotal > 0 ? recentAcc / recentTotal : 0;
 
     // Distinct solved problems per difficulty → current demonstrated level.
-    const diffRes = await db.query(`
-      SELECT lower(p.difficulty) AS difficulty, COUNT(DISTINCT s.problem_id) AS solved
-      FROM code_submissions s JOIN problems p ON p.id = s.problem_id
-      WHERE s.user_id = $1 AND s.verdict = 'Accepted'
-      GROUP BY lower(p.difficulty)
-    `, [userId]);
+    const solvedProblemIds = new Set(mySubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId));
+    const solvedProblemsMap = await problemRepo.getMapByIds([...solvedProblemIds]);
     const solved = { easy: 0, medium: 0, hard: 0 };
-    diffRes.rows.forEach(r => { if (solved[r.difficulty] !== undefined) solved[r.difficulty] = parseInt(r.solved) || 0; });
+    for (const p of solvedProblemsMap.values()) {
+      const d = (p.difficulty || '').toLowerCase();
+      if (solved[d] !== undefined) solved[d] += 1;
+    }
 
     // Decide the ordered target difficulty band.
     let band;
@@ -273,38 +221,35 @@ exports.getRecommendations = async (req, res) => {
     const level = band[0];
 
     // Weak topics to bias toward (fall back to a sentinel so the array is never empty).
-    const weakTopicsResult = await db.query(`
-      SELECT topic FROM student_topic_mastery
-      WHERE user_id = $1 AND solved_count < 3
-      ORDER BY failed_count DESC LIMIT 5
-    `, [userId]);
-    const weakTopics = weakTopicsResult.rows.map(r => r.topic);
-    const weakParam = weakTopics.length ? weakTopics : ['__none__'];
+    const weakTopics = (await topicMasteryRepo.listByUser(userId))
+      .filter(r => (r.solvedCount || 0) < 3)
+      .sort((a, b) => (b.failedCount || 0) - (a.failedCount || 0))
+      .slice(0, 5)
+      .map(r => r.topic);
 
     // Unsolved problems in the target band, weak topics first, then band preference.
-    let { rows: problems } = await db.query(`
-      SELECT p.id, p.title, p.difficulty, p.tags
-      FROM problems p
-      WHERE lower(p.difficulty) = ANY($2::text[])
-        AND p.id NOT IN (
-          SELECT DISTINCT problem_id FROM code_submissions WHERE user_id = $1 AND verdict = 'Accepted'
-        )
-      ORDER BY
-        (CASE WHEN p.tags && $3::text[] THEN 0 ELSE 1 END),
-        array_position($2::text[], lower(p.difficulty)),
-        RANDOM()
-      LIMIT 6
-    `, [userId, band, weakParam]);
+    const allProblems = (await problemRepo.getAll()).filter(p => !solvedProblemIds.has(p.id));
+    const shuffle = (arr) => arr.map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+
+    const inBand = shuffle(allProblems.filter(p => band.includes((p.difficulty || '').toLowerCase())));
+    let problems = inBand
+      .map(p => ({ p, hasWeakTag: weakTopics.length && (p.tags || []).some(t => weakTopics.includes(t)) }))
+      .sort((a, b) => {
+        if (a.hasWeakTag !== b.hasWeakTag) return a.hasWeakTag ? -1 : 1;
+        const ai = band.indexOf((a.p.difficulty || '').toLowerCase());
+        const bi = band.indexOf((b.p.difficulty || '').toLowerCase());
+        return ai - bi;
+      })
+      .slice(0, 6)
+      .map(({ p }) => ({ id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [] }));
 
     // Fallback: any unsolved, easiest first.
     if (problems.length === 0) {
-      const r = await db.query(`
-        SELECT p.id, p.title, p.difficulty, p.tags FROM problems p
-        WHERE p.id NOT IN (SELECT DISTINCT problem_id FROM code_submissions WHERE user_id = $1 AND verdict = 'Accepted')
-        ORDER BY CASE lower(difficulty) WHEN 'easy' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, RANDOM()
-        LIMIT 6
-      `, [userId]);
-      problems = r.rows;
+      const order = { easy: 1, medium: 2, hard: 3 };
+      problems = shuffle(allProblems)
+        .sort((a, b) => (order[(a.difficulty || '').toLowerCase()] || 4) - (order[(b.difficulty || '').toLowerCase()] || 4))
+        .slice(0, 6)
+        .map(p => ({ id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [] }));
     }
 
     res.json({ success: true, data: problems, level, recentAcRate: Math.round(recentAcRate * 100) });
@@ -316,34 +261,38 @@ exports.getRecommendations = async (req, res) => {
 
 exports.getLeaderboard = async (req, res) => {
   try {
-    const { rows } = await db.query(`
-      SELECT
-        u.id,
-        u.name,
-        u.rating,
-        u.department,
-        u.section,
-        COUNT(DISTINCT CASE WHEN s.verdict = 'Accepted' THEN s.problem_id END) as solved_count,
-        COUNT(s.id) as total_submissions
-      FROM users u
-      LEFT JOIN code_submissions s ON u.id = s.user_id
-      WHERE u.role = 'student'
-      GROUP BY u.id, u.name, u.rating, u.department, u.section
-      ORDER BY solved_count DESC, u.name ASC
-      LIMIT 100
-    `);
+    const studentsMap = await userRepo.getMapByRole('student');
+    const studentIds = [...studentsMap.keys()];
+    if (studentIds.length === 0) {
+      return res.json({ success: true, data: [] });
+    }
 
-    const leaderboard = rows.map((r, index) => ({
-      id: r.id,
-      rank: index + 1,
-      name: r.name,
-      rating: r.rating != null ? parseInt(r.rating, 10) : 1200,
-      department: r.department || null,
-      section: r.section || null,
-      score: parseInt(r.solved_count) * 10,
-      solvedCount: parseInt(r.solved_count),
-      totalSubmissions: parseInt(r.total_submissions)
-    }));
+    const allSubs = await submissionRepo.listAll();
+    const statsByUser = new Map(studentIds.map(id => [id, { solved: new Set(), total: 0 }]));
+    for (const s of allSubs) {
+      const stat = statsByUser.get(s.userId);
+      if (!stat) continue;
+      stat.total += 1;
+      if (s.verdict === 'Accepted') stat.solved.add(s.problemId);
+    }
+
+    const leaderboard = studentIds
+      .map(id => {
+        const profile = studentsMap.get(id) || {};
+        const stat = statsByUser.get(id);
+        return {
+          id,
+          name: profile.name || 'Unknown',
+          rating: profile.rating != null ? parseInt(profile.rating, 10) : 1200,
+          department: profile.department || null,
+          section: profile.section || null,
+          solvedCount: stat.solved.size,
+          totalSubmissions: stat.total,
+        };
+      })
+      .sort((a, b) => b.solvedCount - a.solvedCount || a.name.localeCompare(b.name))
+      .slice(0, 100)
+      .map((r, index) => ({ ...r, rank: index + 1, score: r.solvedCount * 10 }));
 
     res.json({ success: true, data: leaderboard });
   } catch (error) {
@@ -358,16 +307,15 @@ exports.getDailyChallenge = async (req, res) => {
     const today = new Date().toISOString().split('T')[0];
     const dateHash = today.split('-').reduce((acc, n) => acc + parseInt(n), 0);
 
-    const { rows } = await db.query(
-      'SELECT id, title, difficulty, tags FROM problems ORDER BY created_at ASC'
-    );
+    const problems = (await problemRepo.getAll())
+      .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
 
-    if (rows.length === 0) {
+    if (problems.length === 0) {
       return res.json({ success: true, data: null });
     }
 
-    const problem = rows[dateHash % rows.length];
-    res.json({ success: true, data: problem });
+    const p = problems[dateHash % problems.length];
+    res.json({ success: true, data: { id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [] } });
   } catch (error) {
     console.error('Daily Challenge Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch daily challenge' });
@@ -380,7 +328,7 @@ exports.updateProfile = async (req, res) => {
     const { name } = req.body;
 
     if (name) {
-      await db.query('UPDATE users SET name = $1 WHERE id = $2', [name.trim(), userId]);
+      await userRepo.update(userId, req.user.role, { name: name.trim() });
     }
 
     res.json({ success: true, message: 'Profile updated' });
@@ -396,34 +344,26 @@ exports.updateProfile = async (req, res) => {
 exports.getStats = async (req, res) => {
   try {
     const userId = req.user.id;
-    // Whitelist → fixed interval strings (no user input interpolated into SQL).
-    const INTERVALS = { '7d': '7 days', '30d': '30 days', '6mo': '6 months' };
-    const interval = INTERVALS[req.query.period];
-    const period = interval ? req.query.period : 'all';
-    const timeClause = interval ? `AND submitted_at >= NOW() - INTERVAL '${interval}'` : '';
+    const INTERVAL_DAYS = { '7d': 7, '30d': 30, '6mo': 182 };
+    const days = INTERVAL_DAYS[req.query.period];
+    const period = days ? req.query.period : 'all';
+    const cutoff = days ? Date.now() - days * 86400000 : null;
 
-    const [verdictRes, langRes] = await Promise.all([
-      db.query(
-        `SELECT verdict, COUNT(*)::int AS n FROM code_submissions
-         WHERE user_id = $1 ${timeClause} GROUP BY verdict`,
-        [userId],
-      ),
-      db.query(
-        `SELECT language, COUNT(*)::int AS n FROM code_submissions
-         WHERE user_id = $1 ${timeClause} GROUP BY language ORDER BY n DESC`,
-        [userId],
-      ),
-    ]);
+    let mySubs = await submissionRepo.listByUser(userId);
+    if (cutoff) mySubs = mySubs.filter(s => subMillis(s) >= cutoff);
 
-    const total = verdictRes.rows.reduce((a, r) => a + r.n, 0);
+    const verdictCounts = {};
+    const langCounts = {};
+    for (const s of mySubs) {
+      if (s.verdict) verdictCounts[s.verdict] = (verdictCounts[s.verdict] || 0) + 1;
+      if (s.language) langCounts[s.language] = (langCounts[s.language] || 0) + 1;
+    }
+    const verdicts = Object.entries(verdictCounts).map(([verdict, n]) => ({ verdict, n }));
+    const languages = Object.entries(langCounts).map(([language, n]) => ({ language, n })).sort((a, b) => b.n - a.n);
+
     res.json({
       success: true,
-      data: {
-        period,
-        total,
-        verdicts: verdictRes.rows,   // [{ verdict, n }]
-        languages: langRes.rows,     // [{ language, n }]
-      },
+      data: { period, total: mySubs.length, verdicts, languages },
     });
   } catch (error) {
     console.error('getStats error:', error);
@@ -437,15 +377,17 @@ exports.getPlacementReadiness = async (req, res) => {
     const { TRACKS } = require('../config/placementTracks');
 
     // Distinct accepted problems per topic for this student.
-    const { rows: tagRows } = await db.query(`
-      SELECT unnest(p.tags) AS topic, COUNT(DISTINCT s.problem_id) AS solved
-        FROM code_submissions s
-        JOIN problems p ON p.id = s.problem_id
-       WHERE s.user_id = $1 AND s.verdict = 'Accepted'
-       GROUP BY unnest(p.tags)
-    `, [userId]);
+    const mySubs = await submissionRepo.listByUser(userId);
+    const acceptedIds = [...new Set(mySubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId))];
+    const acceptedProblemsMap = await problemRepo.getMapByIds(acceptedIds);
     const solvedByTopic = {};
-    tagRows.forEach(r => { solvedByTopic[r.topic.toLowerCase()] = parseInt(r.solved) || 0; });
+    for (const p of acceptedProblemsMap.values()) {
+      for (const tag of (p.tags || [])) {
+        const key = tag.toLowerCase();
+        solvedByTopic[key] = (solvedByTopic[key] || 0) + 1;
+      }
+    }
+    const tagRows = Object.entries(solvedByTopic).map(([topic, solved]) => ({ topic, solved }));
 
     // Build each track's readiness from real solved counts.
     const deficitByTopic = {};
@@ -476,15 +418,15 @@ exports.getPlacementReadiness = async (req, res) => {
       .sort((a, b) => b[1] - a[1]).slice(0, 4).map(([t]) => t);
     let recommended = [];
     if (weakTopics.length) {
-      const { rows } = await db.query(`
-        SELECT id, title, difficulty, tags
-          FROM problems
-         WHERE tags && $1::text[]
-           AND id NOT IN (SELECT DISTINCT problem_id FROM code_submissions WHERE user_id = $2 AND verdict = 'Accepted')
-         ORDER BY CASE difficulty WHEN 'easy' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, RANDOM()
-         LIMIT 6
-      `, [weakTopics, userId]);
-      recommended = rows;
+      const acceptedSet = new Set(acceptedIds);
+      const order = { easy: 1, medium: 2, hard: 3 };
+      const candidates = (await problemRepo.getAll())
+        .filter(p => !acceptedSet.has(p.id) && (p.tags || []).some(t => weakTopics.includes(t)));
+      recommended = candidates
+        .map(v => [Math.random(), v]).sort((a, b) => a[0] - b[0]).map(([, v]) => v)
+        .sort((a, b) => (order[a.difficulty] || 4) - (order[b.difficulty] || 4))
+        .slice(0, 6)
+        .map(p => ({ id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [] }));
     }
 
     res.json({ success: true, data: { tracks, recommended, solvedTotal: tagRows.reduce((s, r) => s + (parseInt(r.solved) || 0), 0) } });
@@ -499,26 +441,29 @@ exports.getProblemSolutions = async (req, res) => {
   const { id } = req.params;
   try {
     // Gate: you can only view peers' solutions AFTER you've solved it yourself.
-    const mine = await db.query(
-      `SELECT 1 FROM code_submissions WHERE user_id=$1 AND problem_id=$2 AND verdict='Accepted' LIMIT 1`,
-      [userId, id]
-    );
-    if (!mine.rows.length) {
+    const mine = (await submissionRepo.listByUserAndProblem(userId, id)).some(s => s.verdict === 'Accepted');
+    if (!mine) {
       return res.status(403).json({ success: false, error: 'Solve this problem first to unlock community solutions.' });
     }
 
     // Latest accepted submission per other student.
-    const { rows } = await db.query(`
-      SELECT DISTINCT ON (s.user_id) s.id, s.language, s.runtime, s.code, u.name
-        FROM code_submissions s JOIN users u ON u.id = s.user_id
-       WHERE s.problem_id = $1 AND s.verdict = 'Accepted' AND s.user_id <> $2
-       ORDER BY s.user_id, s.submitted_at DESC
-    `, [id, userId]);
+    const problemSubs = (await submissionRepo.listByProblem(id))
+      .filter(s => s.verdict === 'Accepted' && s.userId !== userId)
+      .sort((a, b) => subMillis(b) - subMillis(a));
+    const latestPerUser = new Map();
+    for (const s of problemSubs) {
+      if (!latestPerUser.has(s.userId)) latestPerUser.set(s.userId, s);
+    }
 
-    const solutions = rows
+    const usersMap = await userRepo.getAllUsersMap();
+    const solutions = [...latestPerUser.values()]
       .sort((a, b) => (a.runtime ?? 1e9) - (b.runtime ?? 1e9))
       .slice(0, 5)
-      .map(r => ({ id: r.id, author: r.name, language: r.language, runtime: r.runtime, code: r.code }));
+      .map(r => ({
+        id: r.id,
+        author: usersMap.get(r.userId)?.name || 'Unknown',
+        language: r.language, runtime: r.runtime, code: r.code,
+      }));
 
     res.json({ success: true, data: solutions });
   } catch (error) {
@@ -530,24 +475,31 @@ exports.getProblemSolutions = async (req, res) => {
 exports.getBadges = async (req, res) => {
   const userId = req.user.id;
   try {
-    const [solvedRes, nightRes, langRes, topicRes, heatmapRes] = await Promise.all([
-      db.query(`SELECT COUNT(DISTINCT problem_id)::int AS n FROM code_submissions WHERE user_id=$1 AND verdict='Accepted'`, [userId]),
-      db.query(`SELECT EXISTS(SELECT 1 FROM code_submissions WHERE user_id=$1 AND verdict='Accepted' AND EXTRACT(HOUR FROM submitted_at) BETWEEN 0 AND 4) AS owl`, [userId]),
-      db.query(`SELECT COUNT(DISTINCT language)::int AS n FROM code_submissions WHERE user_id=$1 AND verdict='Accepted'`, [userId]),
-      db.query(`SELECT unnest(p.tags) AS topic, COUNT(DISTINCT s.problem_id)::int AS n
-                FROM code_submissions s JOIN problems p ON p.id=s.problem_id
-                WHERE s.user_id=$1 AND s.verdict='Accepted' GROUP BY unnest(p.tags)`, [userId]),
-      db.query(`SELECT DATE(submitted_at) as date, COUNT(*) as count FROM code_submissions
-                WHERE user_id=$1 AND submitted_at >= NOW() - INTERVAL '12 months'
-                GROUP BY DATE(submitted_at) ORDER BY date ASC`, [userId]),
-    ]);
+    const mySubs = await submissionRepo.listByUser(userId);
+    const acceptedSubs = mySubs.filter(s => s.verdict === 'Accepted');
 
-    const totalSolved = solvedRes.rows[0].n || 0;
-    const nightOwl = nightRes.rows[0].owl === true;
-    const langs = langRes.rows[0].n || 0;
+    const totalSolved = new Set(acceptedSubs.map(s => s.problemId)).size;
+    const nightOwl = acceptedSubs.some(s => { const h = subDate(s).getHours(); return h >= 0 && h <= 4; });
+    const langs = new Set(acceptedSubs.map(s => s.language).filter(Boolean)).size;
+
+    const badgeProblemsMap = await problemRepo.getMapByIds([...new Set(acceptedSubs.map(s => s.problemId))]);
     const topic = {};
-    topicRes.rows.forEach(r => { topic[r.topic.toLowerCase()] = r.n; });
-    const heatmap = heatmapRes.rows.map(r => ({ date: r.date.toISOString().split('T')[0], count: parseInt(r.count) }));
+    for (const p of badgeProblemsMap.values()) {
+      for (const tag of (p.tags || [])) {
+        const key = tag.toLowerCase();
+        topic[key] = (topic[key] || 0) + 1;
+      }
+    }
+
+    const twelveMonthsAgo = Date.now() - 365 * 86400000;
+    const heatmapCounts = {};
+    for (const s of mySubs) {
+      const ms = subMillis(s);
+      if (ms < twelveMonthsAgo) continue;
+      const date = subDate(s).toISOString().split('T')[0];
+      heatmapCounts[date] = (heatmapCounts[date] || 0) + 1;
+    }
+    const heatmap = Object.entries(heatmapCounts).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date));
     const streak = calculateStreak(heatmap);
 
     const def = [
@@ -583,23 +535,22 @@ exports.getBadges = async (req, res) => {
 exports.getSkills = async (req, res) => {
   try {
     const userId = req.user.id;
-    const [masteryRes, difficultyRes] = await Promise.all([
-      db.query(`
-        SELECT topic, solved_count, failed_count, hint_usage_count
-          FROM student_topic_mastery WHERE user_id = $1
-      `, [userId]),
-      db.query(`
-        SELECT p.difficulty, COUNT(DISTINCT s.problem_id) AS solved
-          FROM code_submissions s JOIN problems p ON p.id = s.problem_id
-         WHERE s.user_id = $1 AND s.verdict = 'Accepted'
-         GROUP BY p.difficulty
-      `, [userId]),
+    const [masteryRows, mySubs] = await Promise.all([
+      topicMasteryRepo.listByUser(userId),
+      submissionRepo.listByUser(userId),
     ]);
 
-    const { strengths, weaknesses } = computeStrengthsWeaknesses(masteryRes.rows);
-    const difficultyProgression = difficultyRes.rows.map(r => ({
-      difficulty: r.difficulty || 'Unknown', solved: parseInt(r.solved) || 0,
-    }));
+    const { strengths, weaknesses } = computeStrengthsWeaknesses(masteryRows.map(m => ({
+      topic: m.topic, solved_count: m.solvedCount, failed_count: m.failedCount, hint_usage_count: m.hintUsageCount,
+    })));
+    const acceptedIds = [...new Set(mySubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId))];
+    const skillsProblemsMap = await problemRepo.getMapByIds(acceptedIds);
+    const byDifficulty = {};
+    for (const p of skillsProblemsMap.values()) {
+      const d = p.difficulty || 'Unknown';
+      byDifficulty[d] = (byDifficulty[d] || 0) + 1;
+    }
+    const difficultyProgression = Object.entries(byDifficulty).map(([difficulty, solved]) => ({ difficulty, solved }));
 
     res.json({ success: true, data: { strengths, weaknesses, difficultyProgression } });
   } catch (error) {
@@ -611,14 +562,8 @@ exports.getSkills = async (req, res) => {
 exports.getSolvedProblems = async (req, res) => {
   try {
     const userId = req.user.id;
-    const { rows } = await db.query(`
-      SELECT DISTINCT problem_id
-      FROM code_submissions
-      WHERE user_id = $1 AND verdict = 'Accepted'
-    `, [userId]);
-
-    // Return UUIDs as-is (not parseInt — problem IDs are UUIDs)
-    const solvedIds = rows.map(r => r.problem_id);
+    const mySubs = await submissionRepo.listByUser(userId);
+    const solvedIds = [...new Set(mySubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId))];
     res.json({ success: true, data: solvedIds });
   } catch (error) {
     console.error('Solved Problems Error:', error);

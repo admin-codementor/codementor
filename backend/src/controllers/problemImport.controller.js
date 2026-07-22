@@ -1,6 +1,6 @@
 const multer = require('multer');
 const AdmZip = require('adm-zip');
-const db = require('../config/db');
+const problemRepo = require('../repositories/problemRepository');
 
 // Multer configured for in-memory storage — the ZIP is parsed from req.file.buffer.
 // 20 MB cap is generous for problem packages while protecting against abuse.
@@ -160,42 +160,22 @@ exports.importZip = async (req, res) => {
       return a.stem.localeCompare(b.stem);
     });
 
-    // ── Persist inside a transaction ─────────────────────────────────────────
-    const client = await db.pool.connect();
-    try {
-      await client.query('BEGIN');
+    // First 2 test cases are public (sample), the rest hidden — matches the
+    // platform convention of revealing only a couple of examples to students.
+    const testCases = paired.map((tc, i) => ({
+      input: tc.in, output: tc.out, is_public: i < 2,
+    }));
 
-      const problemResult = await client.query(
-        `INSERT INTO problems (title, description, difficulty, tags, created_by, scoring_mode, max_score)
-         VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id`,
-        [title, description, difficulty, tags, req.user.id, scoringMode, maxScore]
-      );
-      const problemId = problemResult.rows[0].id;
+    const problem = await problemRepo.create({
+      title, description, difficulty, tags,
+      createdBy: req.user.id, scoringMode, maxScore,
+      timeLimit: 2, memoryLimit: 256, stubs: {},
+    }, testCases);
 
-      // First 2 test cases are public (sample), the rest hidden — matches the
-      // platform convention of revealing only a couple of examples to students.
-      for (let i = 0; i < paired.length; i++) {
-        const isPublic = i < 2;
-        await client.query(
-          `INSERT INTO test_cases (problem_id, input_data, expected_output, is_public)
-           VALUES ($1, $2, $3, $4)`,
-          [problemId, paired[i].in, paired[i].out, isPublic]
-        );
-      }
-
-      await client.query('COMMIT');
-
-      return res.status(201).json({
-        success: true,
-        data: { problem_id: problemId, test_count: paired.length },
-      });
-    } catch (e) {
-      await client.query('ROLLBACK');
-      throw e;
-    } finally {
-      client.release();
-    }
+    return res.status(201).json({
+      success: true,
+      data: { problem_id: problem.id, test_count: paired.length },
+    });
   } catch (error) {
     console.error('ZIP import failed:', error);
     res.status(500).json({ success: false, error: 'Server error' });

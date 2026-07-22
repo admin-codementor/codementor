@@ -1,9 +1,12 @@
 const { Worker } = require('bullmq');
 const axios = require('axios');
-const db = require('../config/db');
 const { connection } = require('../config/queue');
 const { getIO } = require('../config/io');
 const { runChecker } = require('../utils/checkerRunner');
+const problemRepo = require('../repositories/problemRepository');
+const topicMasteryRepo = require('../repositories/topicMasteryRepository');
+const contestRepo = require('../repositories/contestRepository');
+const submissionRepo = require('../repositories/submissionRepository');
 
 const JUDGE0_URL = process.env.JUDGE0_URL || 'http://localhost:2358';
 const BATCH_SIZE  = parseInt(process.env.JUDGE0_BATCH_SIZE || '20', 10);
@@ -167,29 +170,11 @@ const normalizeOutput = (str) => {
 // Upsert topic mastery after a submission verdict
 const updateTopicMastery = async (userId, problemId, isAccepted, hintUsed) => {
   try {
-    const tagResult = await db.query(
-      'SELECT tags FROM problems WHERE id = $1',
-      [problemId]
-    );
-    const tags = tagResult.rows[0]?.tags || [];
+    const problem = await problemRepo.getById(problemId);
+    const tags = problem?.tags || [];
 
     for (const tag of tags) {
-      if (isAccepted) {
-        await db.query(`
-          INSERT INTO student_topic_mastery (user_id, topic, solved_count, failed_count, hint_usage_count)
-          VALUES ($1, $2, 1, 0, $3)
-          ON CONFLICT (user_id, topic) DO UPDATE
-          SET solved_count = student_topic_mastery.solved_count + 1,
-              hint_usage_count = student_topic_mastery.hint_usage_count + $3
-        `, [userId, tag, hintUsed ? 1 : 0]);
-      } else {
-        await db.query(`
-          INSERT INTO student_topic_mastery (user_id, topic, solved_count, failed_count, hint_usage_count)
-          VALUES ($1, $2, 0, 1, 0)
-          ON CONFLICT (user_id, topic) DO UPDATE
-          SET failed_count = student_topic_mastery.failed_count + 1
-        `, [userId, tag]);
-      }
+      await topicMasteryRepo.recordAttempt(userId, tag, { solved: isAccepted, hintUsed });
     }
   } catch (err) {
     // Non-critical: log but don't fail the submission
@@ -232,29 +217,28 @@ async function runJob(job, { problem_id, source_code, language_id, user_id, cust
     };
   }
 
-  const { rows: testCases } = await db.query(
-    'SELECT input_data, expected_output, score, is_public FROM test_cases WHERE problem_id = $1',
-    [problem_id]
-  );
+  const testCasesRaw = await problemRepo.getTestCases(problem_id);
+  // Normalize to the snake_case shape the rest of this function already expects.
+  const testCases = testCasesRaw.map(tc => ({
+    input_data: tc.inputData, expected_output: tc.expectedOutput,
+    score: tc.score || 0, is_public: !!tc.isPublic,
+  }));
 
   if (testCases.length === 0) {
     throw new Error('No test cases found for problem');
   }
 
   // Fetch scoring mode + special-judge config for this problem
-  const { rows: [probMeta] } = await db.query(
-    'SELECT scoring_mode, max_score, uses_checker, checker_code, checker_language_id FROM problems WHERE id = $1',
-    [problem_id]
-  );
-  const scoringMode = probMeta?.scoring_mode || 'acm';
-  const maxScore    = probMeta?.max_score    || 100;
+  const probMeta = await problemRepo.getById(problem_id);
+  const scoringMode = probMeta?.scoringMode || 'acm';
+  const maxScore    = probMeta?.maxScore    || 100;
   const isOI        = scoringMode === 'oi';
 
   // Special judge: when enabled, a faculty-provided checker program decides
   // AC/WA instead of the normalized string compare below.
-  const usesChecker       = !!probMeta?.uses_checker;
-  const checkerCode       = probMeta?.checker_code || null;
-  const checkerLanguageId = probMeta?.checker_language_id || null;
+  const usesChecker       = !!probMeta?.usesChecker;
+  const checkerCode       = probMeta?.checkerCode || null;
+  const checkerLanguageId = probMeta?.checkerLanguageId || null;
 
   // In OI mode: if all test-case scores are 0, distribute max_score evenly
   const totalTcScore = testCases.reduce((s, tc) => s + (tc.score || 0), 0);
@@ -382,25 +366,21 @@ async function runJob(job, { problem_id, source_code, language_id, user_id, cust
 
   const finalScore = isOI ? earnedScore : null;
   // Ordered pass/fail per test case that ran (powers the concept heatmap).
-  const testResultsJson = JSON.stringify(results.map(r => !!r.passed));
+  const testResultsArr = results.map(r => !!r.passed);
 
-  // Insert submission record — cap source_code before writing to DB
-  const insertResult = await db.query(
-    `INSERT INTO code_submissions (user_id, problem_id, code, language, verdict, runtime, memory, score, test_results, assignment_id)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING id`,
-    [
-      user_id || null,
-      problem_id,
-      capOutput(source_code),
-      language_id.toString(),
-      finalVerdict.description,
-      Math.floor(maxTime * 1000),
-      maxMemory,
-      finalScore,
-      testResultsJson,
-      assignment_id || null,
-    ]
-  );
+  // Insert submission record — cap source_code before writing
+  const submission = await submissionRepo.create({
+    userId: user_id || null,
+    problemId: problem_id,
+    code: capOutput(source_code),
+    language: language_id.toString(),
+    verdict: finalVerdict.description,
+    runtime: Math.floor(maxTime * 1000),
+    memory: maxMemory,
+    score: finalScore,
+    testResults: testResultsArr,
+    assignmentId: assignment_id || null,
+  });
 
   // Update topic mastery (non-blocking)
   if (user_id) {
@@ -413,21 +393,16 @@ async function runJob(job, { problem_id, source_code, language_id, user_id, cust
   // and the user must be registered. Failures here never fail the judging.
   if (contest_id && user_id) {
     try {
-      const { rows: [ok] } = await db.query(
-        `SELECT 1
-           FROM contests c
-           JOIN contest_problems cp ON cp.contest_id = c.id AND cp.problem_id = $2
-           JOIN contest_registrations cr ON cr.contest_id = c.id AND cr.user_id = $3
-          WHERE c.id = $1 AND NOW() BETWEEN c.starts_at AND c.ends_at
-          LIMIT 1`,
-        [contest_id, problem_id, user_id]
-      );
-      if (ok) {
-        await db.query(
-          `INSERT INTO contest_submissions (contest_id, user_id, problem_id, verdict, score, is_virtual)
-           VALUES ($1, $2, $3, $4, $5, FALSE)`,
-          [contest_id, user_id, problem_id, finalVerdict.description, finalScore || 0]
-        );
+      const contest = await contestRepo.getById(contest_id);
+      const withinWindow = contest && new Date() >= new Date(contest.startsAt) && new Date() <= new Date(contest.endsAt);
+      const hasProblem = contest && (contest.problemIds || []).includes(problem_id);
+      const registration = contest ? await contestRepo.isRegistered(contest_id, user_id) : null;
+
+      if (contest && withinWindow && hasProblem && registration) {
+        await contestRepo.addSubmission(contest_id, {
+          userId: user_id, problemId: problem_id, verdict: finalVerdict.description,
+          score: finalScore || 0, isVirtual: false, penaltyMinutes: 0,
+        });
         // Notify the contest room so live scoreboards refresh (A2).
         getIO()?.to(`contest:${contest_id}`).emit('scoreboard_update', { contest_id });
       }
@@ -437,7 +412,7 @@ async function runJob(job, { problem_id, source_code, language_id, user_id, cust
   }
 
   return {
-    submission_id: insertResult.rows[0].id,
+    submission_id: submission.id,
     verdict: finalVerdict,
     time: maxTime,
     memory: maxMemory,

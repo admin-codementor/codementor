@@ -1,44 +1,33 @@
-const db = require('../config/db');
+const problemRepo = require('../repositories/problemRepository');
+
+const ALLOWED_DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 
 // @desc    Get all problems (with optional filters)
 // @route   GET /api/problems
-const ALLOWED_DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
-
 exports.getProblems = async (req, res) => {
   try {
     let { difficulty, tag, search, limit } = req.query;
-    const conditions = [];
-    const params = [];
-
-    if (difficulty) {
-      if (!ALLOWED_DIFFICULTIES.has(String(difficulty).toLowerCase())) {
-        return res.status(400).json({ success: false, error: 'Invalid difficulty value.' });
-      }
-      params.push(difficulty);
-      conditions.push(`difficulty = $${params.length}`);
+    if (difficulty && !ALLOWED_DIFFICULTIES.has(String(difficulty).toLowerCase())) {
+      return res.status(400).json({ success: false, error: 'Invalid difficulty value.' });
     }
-    if (tag) {
-      tag = String(tag).slice(0, 50);
-      params.push(tag);
-      conditions.push(`$${params.length} = ANY(tags)`);
-    }
-    if (search) {
-      search = String(search).slice(0, 100);
-      params.push(`%${search}%`);
-      conditions.push(`title ILIKE $${params.length}`);
-    }
-
-    const where = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    tag = tag ? String(tag).slice(0, 50) : null;
+    search = search ? String(search).slice(0, 100).toLowerCase() : null;
     const parsedLimit = Math.min(Math.max(parseInt(limit) || 100, 1), 200);
-    const limitClause = `LIMIT ${parsedLimit}`;
 
-    const { rows } = await db.query(
-      `SELECT id, title, difficulty, tags, time_limit, memory_limit, created_at
-       FROM problems ${where}
-       ORDER BY created_at DESC ${limitClause}`,
-      params
-    );
-    res.json({ success: true, count: rows.length, data: rows });
+    let problems = await problemRepo.getAll();
+    if (difficulty) problems = problems.filter(p => (p.difficulty || '').toLowerCase() === String(difficulty).toLowerCase());
+    if (tag) problems = problems.filter(p => (p.tags || []).includes(tag));
+    if (search) problems = problems.filter(p => (p.title || '').toLowerCase().includes(search));
+
+    problems = problems
+      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+      .slice(0, parsedLimit)
+      .map(p => ({
+        id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [],
+        time_limit: p.timeLimit, memory_limit: p.memoryLimit, created_at: p.createdAt,
+      }));
+
+    res.json({ success: true, count: problems.length, data: problems });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server Error' });
@@ -51,12 +40,10 @@ exports.getAdjacentProblems = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get all problem IDs ordered by creation date
-    const { rows } = await db.query(
-      'SELECT id FROM problems ORDER BY created_at ASC'
-    );
+    const problems = (await problemRepo.getAll())
+      .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
 
-    const idx = rows.findIndex(r => r.id === id);
+    const idx = problems.findIndex(r => r.id === id);
     if (idx === -1) {
       return res.status(404).json({ success: false, error: 'Problem not found' });
     }
@@ -64,10 +51,10 @@ exports.getAdjacentProblems = async (req, res) => {
     res.json({
       success: true,
       data: {
-        prev: idx > 0 ? rows[idx - 1].id : null,
-        next: idx < rows.length - 1 ? rows[idx + 1].id : null,
+        prev: idx > 0 ? problems[idx - 1].id : null,
+        next: idx < problems.length - 1 ? problems[idx + 1].id : null,
         position: idx + 1,
-        total: rows.length
+        total: problems.length
       }
     });
   } catch (error) {
@@ -81,119 +68,32 @@ exports.getAdjacentProblems = async (req, res) => {
 exports.getProblemById = async (req, res) => {
   try {
     const { id } = req.params;
-    
-    const problemResult = await db.query('SELECT * FROM problems WHERE id = $1', [id]);
-    
-    if (problemResult.rows.length === 0) {
+
+    const p = await problemRepo.getById(id);
+    if (!p) {
       return res.status(404).json({ success: false, error: 'Problem not found' });
     }
 
-    const problem = problemResult.rows[0];
-
-    // Fetch public test cases
-    const testCasesResult = await db.query(
-      'SELECT input_data, expected_output FROM test_cases WHERE problem_id = $1 AND is_public = true',
-      [id]
-    );
-
-    problem.test_cases = testCasesResult.rows;
-    // The solve page consumes `examples` with {input, output} field names.
-    problem.examples = testCasesResult.rows.map(r => ({
-      input: r.input_data,
-      output: r.expected_output,
-    }));
+    const publicTestCases = await problemRepo.getPublicTestCases(id);
 
     // Hide editorial if not yet published
     const now = new Date();
-    if (!problem.editorial_visible_at || new Date(problem.editorial_visible_at) > now) {
-      problem.editorial = null;
-    }
-    problem.editorial_unlocked = !!problem.editorial;
+    const editorialVisibleAt = p.editorialVisibleAt?.toDate?.() ?? (p.editorialVisibleAt ? new Date(p.editorialVisibleAt) : null);
+    const editorialUnlocked = !!(editorialVisibleAt && editorialVisibleAt <= now && p.editorial);
+
+    const problem = {
+      id: p.id, title: p.title, description: p.description, difficulty: p.difficulty, tags: p.tags || [],
+      time_limit: p.timeLimit, memory_limit: p.memoryLimit,
+      stubs: p.stubs || {},
+      editorial: editorialUnlocked ? p.editorial : null,
+      editorial_visible_at: editorialVisibleAt ? editorialVisibleAt.toISOString() : null,
+      editorial_unlocked: editorialUnlocked,
+      test_cases: publicTestCases.map(t => ({ input_data: t.inputData, expected_output: t.expectedOutput })),
+      // The solve page consumes `examples` with {input, output} field names.
+      examples: publicTestCases.map(t => ({ input: t.inputData, output: t.expectedOutput })),
+    };
 
     res.json({ success: true, data: problem });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: 'Server Error' });
-  }
-};
-
-// @desc    Create a new problem (with test cases)
-// @route   POST /api/problems
-exports.createProblem = async (req, res) => {
-  try {
-    const { title, description, difficulty, tags, time_limit, memory_limit, test_cases } = req.body;
-
-    // Insert Problem
-    const problemResult = await db.query(
-      `INSERT INTO problems (title, description, difficulty, tags, time_limit, memory_limit)
-       VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-      [title, description, difficulty, tags || [], time_limit || 2, memory_limit || 256]
-    );
-
-    const newProblem = problemResult.rows[0];
-
-    // Insert Test Cases if provided
-    if (test_cases && test_cases.length > 0) {
-      for (const tc of test_cases) {
-        await db.query(
-          `INSERT INTO test_cases (problem_id, input_data, expected_output, is_public)
-           VALUES ($1, $2, $3, $4)`,
-          [newProblem.id, tc.input, tc.expected_output, tc.is_public || false]
-        );
-      }
-    }
-
-    res.status(201).json({ success: true, data: newProblem });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: 'Server Error' });
-  }
-};
-
-// @desc    Update a problem
-// @route   PUT /api/problems/:id
-exports.updateProblem = async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { title, description, difficulty, tags, time_limit, memory_limit } = req.body;
-
-    const result = await db.query(
-      `UPDATE problems 
-       SET title = COALESCE($1, title),
-           description = COALESCE($2, description),
-           difficulty = COALESCE($3, difficulty),
-           tags = COALESCE($4, tags),
-           time_limit = COALESCE($5, time_limit),
-           memory_limit = COALESCE($6, memory_limit)
-       WHERE id = $7 RETURNING *`,
-      [title, description, difficulty, tags, time_limit, memory_limit, id]
-    );
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Problem not found' });
-    }
-
-    res.json({ success: true, data: result.rows[0] });
-  } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, error: 'Server Error' });
-  }
-};
-
-// @desc    Delete a problem
-// @route   DELETE /api/problems/:id
-exports.deleteProblem = async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // test_cases are deleted automatically due to ON DELETE CASCADE
-    const result = await db.query('DELETE FROM problems WHERE id = $1 RETURNING id', [id]);
-
-    if (result.rows.length === 0) {
-      return res.status(404).json({ success: false, error: 'Problem not found' });
-    }
-
-    res.json({ success: true, data: {} });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server Error' });

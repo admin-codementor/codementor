@@ -1,7 +1,7 @@
-const db = require('../config/db');
 const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
 const qrcode = require('qrcode');
+const userRepo = require('../repositories/userRepository');
 
 const { resolvePermissions } = require('../middleware/permissions');
 
@@ -22,11 +22,10 @@ const ISSUER = 'CodeMentor';
 // scannable QR data URL.
 exports.setup2FA = async (req, res) => {
   try {
-    const userResult = await db.query('SELECT id, email FROM users WHERE id = $1', [req.user.id]);
-    if (userResult.rows.length === 0) {
+    const user = await userRepo.getById(req.user.id, req.user.role);
+    if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
     }
-    const user = userResult.rows[0];
 
     const secret = speakeasy.generateSecret({
       name: `${ISSUER} (${user.email})`,
@@ -35,10 +34,7 @@ exports.setup2FA = async (req, res) => {
     });
 
     // Store the base32 secret. Keep totp_enabled false until verified.
-    await db.query(
-      'UPDATE users SET totp_secret = $1, totp_enabled = FALSE WHERE id = $2',
-      [secret.base32, user.id]
-    );
+    await userRepo.update(req.user.id, req.user.role, { totpSecret: secret.base32, totpEnabled: false });
 
     const otpauth_url = secret.otpauth_url;
     const qr_data_url = await qrcode.toDataURL(otpauth_url);
@@ -67,13 +63,13 @@ exports.enable2FA = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Verification code is required' });
     }
 
-    const result = await db.query('SELECT id, totp_secret FROM users WHERE id = $1', [req.user.id]);
-    if (result.rows.length === 0 || !result.rows[0].totp_secret) {
+    const user = await userRepo.getById(req.user.id, req.user.role);
+    if (!user || !user.totpSecret) {
       return res.status(400).json({ success: false, error: 'Run 2FA setup before enabling' });
     }
 
     const verified = speakeasy.totp.verify({
-      secret: result.rows[0].totp_secret,
+      secret: user.totpSecret,
       encoding: 'base32',
       token: token.replace(/\s+/g, ''),
       window: 1,
@@ -83,7 +79,7 @@ exports.enable2FA = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid verification code' });
     }
 
-    await db.query('UPDATE users SET totp_enabled = TRUE WHERE id = $1', [req.user.id]);
+    await userRepo.update(req.user.id, req.user.role, { totpEnabled: true });
 
     return res.json({ success: true, data: { totp_enabled: true } });
   } catch (error) {
@@ -101,13 +97,13 @@ exports.disable2FA = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Verification code is required' });
     }
 
-    const result = await db.query('SELECT id, totp_secret, totp_enabled FROM users WHERE id = $1', [req.user.id]);
-    if (result.rows.length === 0 || !result.rows[0].totp_secret || !result.rows[0].totp_enabled) {
+    const user = await userRepo.getById(req.user.id, req.user.role);
+    if (!user || !user.totpSecret || !user.totpEnabled) {
       return res.status(400).json({ success: false, error: '2FA is not enabled' });
     }
 
     const verified = speakeasy.totp.verify({
-      secret: result.rows[0].totp_secret,
+      secret: user.totpSecret,
       encoding: 'base32',
       token: token.replace(/\s+/g, ''),
       window: 1,
@@ -117,10 +113,7 @@ exports.disable2FA = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid verification code' });
     }
 
-    await db.query(
-      'UPDATE users SET totp_secret = NULL, totp_enabled = FALSE WHERE id = $1',
-      [req.user.id]
-    );
+    await userRepo.update(req.user.id, req.user.role, { totpSecret: null, totpEnabled: false });
 
     return res.json({ success: true, data: { totp_enabled: false } });
   } catch (error) {
@@ -139,23 +132,16 @@ exports.verify2FA = async (req, res) => {
       return res.status(400).json({ success: false, error: 'user_id and token are required' });
     }
 
-    const result = await db.query(
-      'SELECT id, name, email, role, department, permissions, totp_secret, totp_enabled FROM users WHERE id = $1',
-      [user_id]
-    );
-
-    if (result.rows.length === 0) {
+    const user = await userRepo.getById(user_id);
+    if (!user) {
       return res.status(401).json({ success: false, error: 'Invalid verification code' });
     }
-
-    const user = result.rows[0];
-
-    if (!user.totp_enabled || !user.totp_secret) {
+    if (!user.totpEnabled || !user.totpSecret) {
       return res.status(400).json({ success: false, error: '2FA is not enabled for this account' });
     }
 
     const verified = speakeasy.totp.verify({
-      secret: user.totp_secret,
+      secret: user.totpSecret,
       encoding: 'base32',
       token: token.replace(/\s+/g, ''),
       window: 1,

@@ -1,10 +1,12 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const db = require('../config/db');
 const { submissionsQueue } = require('../config/queue');
 const jwt = require('jsonwebtoken');
 const { submitBurstLimiter, submitSustainedLimiter } = require('../middleware/rateLimiter');
 const { enforceExamIP } = require('../middleware/cidrCheck');
+const problemRepo = require('../repositories/problemRepository');
+const assignmentRepo = require('../repositories/assignmentRepository');
+const submissionRepo = require('../repositories/submissionRepository');
 
 const router = express.Router();
 
@@ -97,15 +99,15 @@ router.get('/submit/history/:problemId', async (req, res) => {
     const user_id = extractUserId(req);
     if (!user_id) return res.json({ success: true, data: [] });
 
-    const { rows } = await db.query(`
-      SELECT id, verdict, language, runtime, memory, submitted_at, code
-      FROM code_submissions
-      WHERE user_id = $1 AND problem_id = $2
-      ORDER BY submitted_at DESC
-      LIMIT 20
-    `, [user_id, req.params.problemId]);
+    const subs = (await submissionRepo.listByUserAndProblem(user_id, req.params.problemId))
+      .sort((a, b) => (b.submittedAt?.toMillis?.() ?? 0) - (a.submittedAt?.toMillis?.() ?? 0))
+      .slice(0, 20)
+      .map(s => ({
+        id: s.id, verdict: s.verdict, language: s.language, runtime: s.runtime, memory: s.memory,
+        submitted_at: s.submittedAt?.toDate?.() ?? s.submittedAt, code: s.code,
+      }));
 
-    res.json({ success: true, data: rows });
+    res.json({ success: true, data: subs });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -121,24 +123,26 @@ router.get('/submissions', async (req, res) => {
     if (!user_id) return res.json({ success: true, data: [] });
 
     const scope = ['graded', 'practice', 'all'].includes(req.query.scope) ? req.query.scope : 'graded';
-    const scopeClause =
-      scope === 'graded' ? 'AND s.assignment_id IS NOT NULL'
-        : scope === 'practice' ? 'AND s.assignment_id IS NULL'
-          : '';
 
-    const { rows } = await db.query(
-      `SELECT s.id, s.verdict, s.language, s.runtime, s.memory, s.submitted_at,
-              p.title AS problem_title, p.id AS problem_id,
-              s.assignment_id, a.title AS assignment_title
-       FROM code_submissions s
-       JOIN problems p ON s.problem_id = p.id
-       LEFT JOIN assignments a ON s.assignment_id = a.id
-       WHERE s.user_id = $1 ${scopeClause}
-       ORDER BY s.submitted_at DESC LIMIT 50`,
-      [user_id],
-    );
+    let subs = await submissionRepo.listByUser(user_id);
+    if (scope === 'graded') subs = subs.filter(s => s.assignmentId != null);
+    else if (scope === 'practice') subs = subs.filter(s => s.assignmentId == null);
+    subs = subs
+      .sort((a, b) => (b.submittedAt?.toMillis?.() ?? 0) - (a.submittedAt?.toMillis?.() ?? 0))
+      .slice(0, 50);
 
-    res.json({ success: true, data: rows });
+    const problemsMap = await problemRepo.getMapByIds(subs.map(s => s.problemId));
+    const assignmentIds = [...new Set(subs.map(s => s.assignmentId).filter(Boolean))];
+    const assignmentsMap = new Map((await Promise.all(assignmentIds.map(id => assignmentRepo.getById(id)))).filter(Boolean).map(a => [a.id, a]));
+    const data = subs.map(s => ({
+      id: s.id, verdict: s.verdict, language: s.language, runtime: s.runtime, memory: s.memory,
+      submitted_at: s.submittedAt?.toDate?.() ?? s.submittedAt,
+      problem_id: s.problemId, assignment_id: s.assignmentId,
+      problem_title: problemsMap.get(s.problemId)?.title || 'Unknown',
+      assignment_title: s.assignmentId ? (assignmentsMap.get(s.assignmentId)?.title || 'Unknown') : null,
+    }));
+
+    res.json({ success: true, data });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });

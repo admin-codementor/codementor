@@ -12,7 +12,7 @@ const { validateSubmission } = require('./middleware/security');
 const { apiLimiter } = require('./middleware/rateLimiter');
 
 // Validate required environment variables before starting
-const REQUIRED_ENV = ['DATABASE_URL', 'JWT_SECRET', 'JWT_REFRESH_SECRET'];
+const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
 const missing = REQUIRED_ENV.filter(k => !process.env[k]);
 if (missing.length > 0) {
   console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
@@ -36,7 +36,6 @@ const proctorRoutes = require('./routes/proctor.routes');
 const mcqRoutes = require('./routes/mcq.routes');
 const profilesRoutes = require('./routes/profiles.routes');
 const courseRoutes = require('./routes/courses.routes');
-const db = require('./config/db');
 
 // Initialize Judge Worker
 require('./workers/judge.worker');
@@ -135,6 +134,5 @@ io.on('connection', (socket) => {
 // ── Start ────────────────────────────────────────────────────────────────────
 httpServer.listen(PORT, async () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
-  await db.scaffoldDatabase();
   await checkJudge0Health();
 });

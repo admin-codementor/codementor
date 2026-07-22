@@ -1,5 +1,5 @@
 const { GoogleGenAI } = require('@google/genai');
-const db = require('../config/db');
+const aiTutorRepo = require('../repositories/aiTutorRepository');
 
 const getGeminiClient = () => {
   if (!process.env.GEMINI_API_KEY) {
@@ -46,20 +46,10 @@ const askTutor = async (req, res) => {
 
   try {
     // 1. Store the user's message
-    await db.query(
-      `INSERT INTO ai_tutor_conversations (user_id, problem_id, role, content) 
-       VALUES ($1, $2, $3, $4)`,
-      [userId, problemId, 'user', message]
-    );
+    await aiTutorRepo.addMessage({ userId, problemId, role: 'user', content: message });
 
     // 2. Retrieve history for context
-    const historyResult = await db.query(
-      `SELECT role, content FROM ai_tutor_conversations 
-       WHERE user_id = $1 AND problem_id = $2 
-       ORDER BY created_at ASC`,
-      [userId, problemId]
-    );
-    const history = historyResult.rows;
+    const history = await aiTutorRepo.getHistory(userId, problemId);
 
     // 3. Call Gemini
     const ai = getGeminiClient();
@@ -84,11 +74,7 @@ const askTutor = async (req, res) => {
     }
 
     // 4. Store the AI's response
-    await db.query(
-      `INSERT INTO ai_tutor_conversations (user_id, problem_id, role, content) 
-       VALUES ($1, $2, $3, $4)`,
-      [userId, problemId, 'assistant', aiResponseText]
-    );
+    await aiTutorRepo.addMessage({ userId, problemId, role: 'assistant', content: aiResponseText });
 
     res.json({ success: true, response: aiResponseText });
   } catch (error) {
@@ -106,13 +92,10 @@ const getHistory = async (req, res) => {
   }
 
   try {
-    const result = await db.query(
-      `SELECT role, content, created_at FROM ai_tutor_conversations 
-       WHERE user_id = $1 AND problem_id = $2 
-       ORDER BY created_at ASC`,
-      [userId, problemId]
-    );
-    res.json({ success: true, history: result.rows });
+    const history = (await aiTutorRepo.getHistory(userId, problemId)).map(m => ({
+      role: m.role, content: m.content, created_at: m.createdAt?.toDate?.() ?? m.createdAt,
+    }));
+    res.json({ success: true, history });
   } catch (error) {
     console.error('Fetch AI History Error:', error);
     res.status(500).json({ error: 'Failed to fetch conversation history' });
