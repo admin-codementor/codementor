@@ -1,6 +1,6 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
-const { submissionsQueue } = require('../config/queue');
+const judgeService = require('../services/judgeService');
 const jwt = require('jsonwebtoken');
 const { submitBurstLimiter, submitSustainedLimiter } = require('../middleware/rateLimiter');
 const { enforceExamIP } = require('../middleware/cidrCheck');
@@ -79,25 +79,24 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
     const jobId = job_id || uuidv4();
 
     try {
-      await submissionsQueue.add('judge-submission', {
-        jobId, source_code, language_id, problem_id: problem_id || null, user_id,
+      await judgeService.startJudging(jobId, {
+        source_code, language_id, problem_id: problem_id || null, user_id,
         custom_input: isCustomRun ? custom_input : null,
         contest_id: isCustomRun ? null : (contest_id || null),
         // Only graded submits (not custom runs) are recorded against an assignment/exam.
         assignment_id: isCustomRun ? null : (assignment_id || null),
-      }, { jobId });
-    } catch (queueErr) {
-      console.error('Queue add failed:', queueErr.message);
-      // Distinguish "Redis/queue is offline" from "queue is full" so the user
-      // gets an accurate message (retrying won't help if the queue is down).
-      const offline = /ECONNREFUSED|ENOTFOUND|ETIMEDOUT|connection is closed|stream isn'?t writeable|enableofflinequeue/i
-        .test(queueErr.message || '');
+      });
+    } catch (startErr) {
+      console.error('Failed to start judging:', startErr.message);
+      // Distinguish "Judge0 is offline" from "Judge0's queue is full" so the
+      // user gets an accurate message (retrying won't help if it's offline).
+      const queueFull = startErr?.response?.status === 503;
       return res.status(503).json({
         success: false,
-        queue_full: !offline,
-        error: offline
-          ? 'The submission service is offline — the job queue (Redis) is unreachable. Please ensure the backend services are running and try again.'
-          : 'The judge is currently overloaded. Please try again in a moment.',
+        queue_full: queueFull,
+        error: queueFull
+          ? 'The judge is currently overloaded. Please try again in a moment.'
+          : 'The judging service is unreachable. Please ensure Judge0 is running and try again.',
       });
     }
 
@@ -108,8 +107,22 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
   }
 });
 
-// NOTE: the GET /api/submit/status/:jobId polling endpoint was removed —
-// verdicts are now delivered in real time via Socket.IO job rooms.
+// GET /api/submit/status/:jobId — poll for judging progress. Verdicts used to
+// be pushed over Socket.IO job rooms; a persistent socket server can't run on
+// Vercel, so the client now polls this endpoint instead (see judgeService.js).
+router.get('/submit/status/:jobId', async (req, res) => {
+  const { jobId } = req.params;
+  if (!UUID_RE.test(String(jobId))) {
+    return res.status(400).json({ success: false, error: 'Invalid job id format.' });
+  }
+  try {
+    const status = await judgeService.pollJudging(jobId);
+    return res.json(status);
+  } catch (error) {
+    console.error('Poll error:', error);
+    return res.status(500).json({ success: false, error: 'Failed to check judging status' });
+  }
+});
 
 // GET /api/submit/history/:problemId — per-problem submission history for current user
 router.get('/submit/history/:problemId', async (req, res) => {

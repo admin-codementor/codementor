@@ -5,8 +5,9 @@
 #   judge0_net  — Judge0 server, worker, its postgres, its redis
 #                 Judge0 has NO exposed ports; only the backend can reach it.
 #
-#   app_net     — Express backend, app redis (BullMQ). App data lives entirely
-#                 in Firebase Firestore — no app-owned Postgres instance.
+#   app_net     — Express backend. App data lives entirely in Firebase
+#                 Firestore; the analytics cache and rate limiter use Upstash
+#                 Redis (a managed REST-based service, not a container here).
 #
 #   The backend sits on BOTH networks so it can talk to Judge0 internally
 #   via http://judge0_server:2358 without ever touching the host interface.
@@ -48,36 +49,14 @@ services:
     environment:
       # Reaches Judge0 via internal Docker network — no host port needed
       JUDGE0_URL: http://judge0_server:2358
-      # BullMQ Redis
-      REDIS_URL: redis://:${REDIS_PASSWORD:-}@app_redis:6379
     ports:
       - "127.0.0.1:3001:3001"
     depends_on:
-      app_redis:
-        condition: service_healthy
       judge0_server:
         condition: service_started
     networks:
       - app_net
       - judge0_net
-
-  # ── App: Redis (BullMQ queue) ──────────────────────────────────────────────
-  app_redis:
-    image: redis:7-alpine
-    container_name: codesphere_redis
-    restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD:-}
-    ports:
-      - "127.0.0.1:6379:6379"
-    volumes:
-      - app_redis_data:/data
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-    networks:
-      - app_net
 
   # ── Judge0: server ─────────────────────────────────────────────────────────
   judge0_server:
@@ -163,7 +142,6 @@ services:
       - judge0_net
 
 volumes:
-  app_redis_data:
   judge0_postgres_data:
 
 networks:

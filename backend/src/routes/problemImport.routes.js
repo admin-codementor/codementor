@@ -1,6 +1,6 @@
 const express = require('express');
 const multer = require('multer');
-const rateLimit = require('express-rate-limit');
+const { createLimiter } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
 const { requirePermission } = require('../middleware/permissions');
@@ -9,13 +9,12 @@ const { importZip, upload } = require('../controllers/problemImport.controller')
 const router = express.Router();
 
 // ZIP imports parse archives and write many rows — cap per faculty to prevent abuse.
-const importLimiter = rateLimit({
+const importLimiter = createLimiter({
   windowMs: 10 * 60 * 1000,
   max: 10,
+  prefix: 'problemImport',
   keyGenerator: (req) => req.user?.id || 'anon',
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: 'Too many imports. Please wait a few minutes before importing again.' },
+  message: 'Too many imports. Please wait a few minutes before importing again.',
 });
 
 // Wrap multer so its errors (file too large, wrong type) become clean JSON

@@ -120,7 +120,18 @@ exports.runPlagiarism = async (req, res) => {
     return res.status(404).json({ success: false, error: 'Assignment not found' });
   }
 
-  // 2. Check JPlag JAR exists
+  // 2. JPlag shells out to a local `java` binary — there is no JVM in Vercel's
+  // serverless runtime and no way to bundle one, so this feature is disabled
+  // there intentionally (not just incidentally via a missing JAR — `VERCEL`
+  // is set automatically by the platform on every deployment).
+  if (process.env.VERCEL) {
+    return res.status(501).json({
+      success: false,
+      error: 'Plagiarism checking is not available on this deployment (requires a Java runtime, which Vercel serverless functions don\'t provide). Run it from a build with a JVM available.',
+    });
+  }
+
+  // 4. Check JPlag JAR exists
   if (!fs.existsSync(JPLAG_JAR)) {
     return res.status(503).json({
       success: false,
@@ -128,14 +139,14 @@ exports.runPlagiarism = async (req, res) => {
     });
   }
 
-  // 3. Fetch all problems in assignment
+  // 5. Fetch all problems in assignment
   const apProblemsMap = await problemRepo.getMapByIds(assignment.problemIds || []);
   const apRows = (assignment.problemIds || []).map(pid => ({ problem_id: pid, title: apProblemsMap.get(pid)?.title || 'Unknown' }));
   if (!apRows.length) {
     return res.status(400).json({ success: false, error: 'Assignment has no problems' });
   }
 
-  // 4. Fetch all enrolled students
+  // 6. Fetch all enrolled students
   const subsPerProblem = await Promise.all(apRows.map(r => submissionRepo.listByProblem(r.problem_id)));
   const submitterIds = [...new Set(subsPerProblem.flat().map(s => s.userId))];
   const plagUsersMap = await userRepo.getAllUsersMap();
@@ -157,7 +168,7 @@ exports.runPlagiarism = async (req, res) => {
   let detectedLang = 'java';
   const emailToId = {};
   try {
-    // 5. Write each student's first accepted submission for each problem
+    // 7. Write each student's first accepted submission for each problem
     for (const problem of apRows) {
       for (const student of students) {
         const rollno = student.email.split('@')[0];

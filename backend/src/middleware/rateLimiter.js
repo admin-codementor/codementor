@@ -1,8 +1,11 @@
-const rateLimitPkg = require('express-rate-limit');
-const rateLimit = rateLimitPkg.rateLimit || rateLimitPkg;
-// IPv6-safe IP key helper (normalises IPv6 into a /56 subnet bucket).
-// Named `ipKeyGenerator` so express-rate-limit's validator recognises the call.
-const ipKeyGenerator = rateLimitPkg.ipKeyGenerator || ((ip) => ip);
+// Rate limiting backed by Upstash Redis (@upstash/ratelimit) instead of
+// express-rate-limit's default in-memory store. In-memory counters only work
+// within a single long-lived process — under Vercel's many-stateless-
+// instances model each instance would get its own counters, letting a user
+// burn through several times the intended limit. @upstash/ratelimit's REST
+// client shares state across every instance and works identically locally.
+const { Ratelimit } = require('@upstash/ratelimit');
+const { redis } = require('../config/redis');
 const jwt = require('jsonwebtoken');
 
 // Extract user_id from JWT without throwing — used as the rate-limit key.
@@ -22,47 +25,59 @@ const getUserId = (req) => {
 // and stops one anonymous IP from blocking other users on the same network.
 const submissionKey = (req) => {
   const userId = getUserId(req);
-  return userId ? `user:${userId}` : `ip:${ipKeyGenerator(req.ip)}`;
+  return userId ? `user:${userId}` : `ip:${req.ip}`;
 };
 
-const rateLimitResponse = (windowSec, msg) => ({
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: msg },
-  // In-memory store is fine for a single-server deployment.
-  // For multi-instance: swap in a RedisStore (rate-limit-redis package).
-});
-
-// ── Submission limiters (applied in sequence on POST /api/submit) ────────────
+// ── Limiters ─────────────────────────────────────────────────────────────────
 
 // Layer 1 — burst: at most 1 submission every 10 s per user/IP.
-// Stops rapid-fire spam even if the sustained cap hasn't been hit yet.
-const submitBurstLimiter = rateLimit({
-  windowMs: 10 * 1000,
-  max: 1,
-  keyGenerator: submissionKey,
-  skipSuccessfulRequests: false,
-  ...rateLimitResponse(10, 'Please wait 10 seconds between submissions.'),
-});
+const submitBurst = new Ratelimit({ redis, prefix: 'rl:submit:burst', limiter: Ratelimit.slidingWindow(1, '10 s') });
 
 // Layer 2 — sustained: 20/min for authenticated users, 10/min for anonymous.
-// Authenticated students get a higher limit; anonymous/test traffic gets less.
-const submitSustainedLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: (req) => (getUserId(req) ? 20 : 10),
-  keyGenerator: submissionKey,
-  skipSuccessfulRequests: false,
-  ...rateLimitResponse(60, 'Submission rate limit exceeded. Please wait before trying again.'),
-});
+const submitSustainedAuth = new Ratelimit({ redis, prefix: 'rl:submit:sustained', limiter: Ratelimit.slidingWindow(20, '60 s') });
+const submitSustainedAnon = new Ratelimit({ redis, prefix: 'rl:submit:sustained', limiter: Ratelimit.slidingWindow(10, '60 s') });
 
-// ── General API limiter (applied globally on all /api routes) ────────────────
-// Protects non-submission endpoints from scraping and brute-force enumeration.
-const apiLimiter = rateLimit({
-  windowMs: 60 * 1000,
-  max: 200,
-  keyGenerator: (req) => ipKeyGenerator(req.ip),
-  skipSuccessfulRequests: false,
-  ...rateLimitResponse(60, 'Too many requests. Please slow down.'),
-});
+// General API limiter — protects non-submission endpoints from scraping/brute-force.
+const apiRl = new Ratelimit({ redis, prefix: 'rl:api', limiter: Ratelimit.slidingWindow(200, '60 s') });
 
-module.exports = { submitBurstLimiter, submitSustainedLimiter, apiLimiter };
+// Wraps a Ratelimit instance as Express middleware. Fails OPEN if Upstash is
+// unreachable — matching utils/cache.js's philosophy: a rate limiter outage
+// should degrade to "unlimited", not take the API down.
+const asMiddleware = (limiter, keyFn, message) => async (req, res, next) => {
+  try {
+    const { success } = await limiter.limit(keyFn(req));
+    if (!success) return res.status(429).json({ success: false, error: message });
+    return next();
+  } catch (err) {
+    console.warn('Rate limiter unavailable, failing open:', err.message);
+    return next();
+  }
+};
+
+const submitBurstLimiter = asMiddleware(submitBurst, submissionKey, 'Please wait 10 seconds between submissions.');
+
+const submitSustainedLimiter = (req, res, next) => {
+  const limiter = getUserId(req) ? submitSustainedAuth : submitSustainedAnon;
+  return asMiddleware(limiter, submissionKey, 'Submission rate limit exceeded. Please wait before trying again.')(req, res, next);
+};
+
+const apiLimiter = asMiddleware(apiRl, (req) => `ip:${req.ip}`, 'Too many requests. Please slow down.');
+
+// Reusable factory for the route-local limiters scattered across
+// routes/*.routes.js (auth, faculty, profiles, problemImport, twofa, ai) —
+// each used to build its own express-rate-limit instance with the same
+// in-memory-only problem submitBurst/submitSustained/apiRl above were built
+// to fix. One Ratelimit instance per call site (keyed by `prefix`), same
+// fail-open behavior as every other limiter in this file.
+//
+//   createLimiter({ windowMs: 60_000, max: 20, prefix: 'ai', message: '...' })
+//   createLimiter({ windowMs: 300_000, max: 5, prefix: 'plagiarism',
+//     keyGenerator: (req) => req.user?.id || 'anon', message: '...' })
+function createLimiter({ windowMs, max, prefix, message, keyGenerator }) {
+  const windowSeconds = Math.max(1, Math.round(windowMs / 1000));
+  const limiter = new Ratelimit({ redis, prefix: `rl:${prefix}`, limiter: Ratelimit.slidingWindow(max, `${windowSeconds} s`) });
+  const keyFn = keyGenerator || ((req) => `ip:${req.ip}`);
+  return asMiddleware(limiter, keyFn, message);
+}
+
+module.exports = { submitBurstLimiter, submitSustainedLimiter, apiLimiter, createLimiter };

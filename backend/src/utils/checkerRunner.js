@@ -32,15 +32,23 @@
 //   - anything else          -> rejected, the stdout (or stderr) is the message
 // If the checker fails to compile, crashes, times out, or Judge0 itself errors,
 // we fail safe to accepted:false with a descriptive message (never throw).
+//
+// ── Async, non-blocking usage ────────────────────────────────────────────────
+// judgeService.js runs inside stateless HTTP requests (Vercel-safe), so this
+// module never blocks waiting on Judge0: submitCheckerBatch() fires a batch of
+// checker runs and returns immediately with tokens; pollCheckerBatch() does a
+// single non-blocking status check per call (returns null until every token in
+// the batch has a terminal status) — the caller is responsible for calling it
+// again on a later request/poll rather than looping here.
 
 const axios = require('axios');
 const { toB64, fromB64 } = require('./judge0Encoding');
 
 const JUDGE0_URL = process.env.JUDGE0_URL || 'http://localhost:2358';
-const CHECKER_TIMEOUT_MS = 20000;
+const REQUEST_TIMEOUT_MS = 15000;
 
 // Self-contained copy of the worker's auth-header helper — matches AUTHN_TOKEN
-// in judge0.conf so we don't depend on the worker module.
+// in judge0.conf so we don't depend on any other module.
 const judge0Headers = () => {
   const token = process.env.JUDGE0_AUTH_TOKEN;
   return {
@@ -72,65 +80,28 @@ const cap = (s) => {
 };
 
 /**
- * Run a faculty-provided checker program against one test case.
+ * Interpret a checker program's completed Judge0 result into an accept/reject
+ * verdict, per the contract documented above. Never throws — fails safe to
+ * accepted:false with a descriptive message.
  *
- * @param {Object}  args
- * @param {string}  args.checkerCode        Source code of the checker program.
- * @param {number}  args.checkerLanguageId  Judge0 language id the checker is written in.
- * @param {string}  args.input              The test case input fed to the contestant.
- * @param {string}  args.expected           The stored expected output.
- * @param {string}  args.actual             The contestant program's stdout.
- * @returns {Promise<{ accepted: boolean, message: string }>}
+ * @param {Object} r  Decoded Judge0 result: { status, stdout, stderr, compile_output, message }
  */
-exports.runChecker = async ({ checkerCode, checkerLanguageId, input, expected, actual }) => {
-  // Guard: a problem flagged uses_checker but missing checker config can't judge.
-  if (!checkerCode || !checkerLanguageId) {
-    return { accepted: false, message: 'Special judge misconfigured: missing checker code or language.' };
-  }
-
-  const stdin = buildCheckerStdin(input, expected, actual);
-
-  let res;
-  try {
-    res = await axios.post(
-      `${JUDGE0_URL}/submissions?base64_encoded=true&wait=true`,
-      {
-        source_code:     toB64(checkerCode),
-        language_id:     Number(checkerLanguageId),
-        stdin:           toB64(stdin),
-        cpu_time_limit:  10,
-        wall_time_limit: 15,
-        memory_limit:    262144,
-        base64_encoded:  true,
-      },
-      { headers: judge0Headers(), timeout: CHECKER_TIMEOUT_MS }
-    );
-  } catch (err) {
-    // Judge0 unreachable / 5xx / timeout — fail safe to rejected.
-    const detail = err.response?.data?.error || err.message || 'unknown error';
-    return { accepted: false, message: `Checker execution failed: ${cap(detail)}` };
-  }
-
-  const r = res.data || {};
+function interpretCheckerResult(r) {
   const statusId = r.status?.id;
-  const decodedStdout        = fromB64(r.stdout);
-  const decodedStderr        = fromB64(r.stderr);
-  const decodedCompileOutput = fromB64(r.compile_output);
-  const decodedMessage       = fromB64(r.message);
 
   // Judge0 status ids: 3 = Accepted (ran cleanly), 6 = Compilation Error,
   // 5 = TLE, 7-12 = various runtime errors. Anything other than a clean run
   // means the checker itself is broken -> reject with diagnostics.
   if (statusId !== 3) {
     const reason =
-      decodedCompileOutput ? `compile error: ${cap(decodedCompileOutput)}` :
-      decodedStderr        ? `runtime error: ${cap(decodedStderr)}` :
-      decodedMessage       ? cap(decodedMessage) :
+      r.compile_output ? `compile error: ${cap(r.compile_output)}` :
+      r.stderr          ? `runtime error: ${cap(r.stderr)}` :
+      r.message          ? cap(r.message) :
       (r.status?.description || 'unknown checker failure');
     return { accepted: false, message: `Checker did not run cleanly (${reason}).` };
   }
 
-  const stdout = (decodedStdout || '').trim();
+  const stdout = (r.stdout || '').trim();
   if (!stdout) {
     // Ran cleanly (exit 0) but printed nothing. Per the contract we require an
     // explicit "AC" token, so treat empty output as a reject for safety.
@@ -143,5 +114,55 @@ exports.runChecker = async ({ checkerCode, checkerLanguageId, input, expected, a
   }
 
   // Anything else is a rejection; surface the checker's own message.
-  return { accepted: false, message: cap(stdout) || (decodedStderr ? cap(decodedStderr) : 'Rejected by checker') };
+  return { accepted: false, message: cap(stdout) || (r.stderr ? cap(r.stderr) : 'Rejected by checker') };
+}
+
+/**
+ * Submit a batch of checker runs (one per test case needing special-judge
+ * verification) without waiting for results.
+ *
+ * @param {Array<{checkerCode: string, checkerLanguageId: number, input: string, expected: string, actual: string}>} items
+ * @returns {Promise<string[]>} Judge0 tokens, in the same order as `items`.
+ */
+exports.submitCheckerBatch = async function submitCheckerBatch(items) {
+  const res = await axios.post(
+    `${JUDGE0_URL}/submissions/batch?base64_encoded=true`,
+    {
+      submissions: items.map(({ checkerCode, checkerLanguageId, input, expected, actual }) => ({
+        source_code: toB64(checkerCode),
+        language_id: Number(checkerLanguageId),
+        stdin: toB64(buildCheckerStdin(input, expected, actual)),
+        cpu_time_limit: 10,
+        wall_time_limit: 15,
+        memory_limit: 262144,
+      })),
+    },
+    { headers: judge0Headers(), timeout: REQUEST_TIMEOUT_MS }
+  );
+  return res.data.map((t) => t.token);
+};
+
+/**
+ * Single non-blocking status check for a checker batch. Returns null if any
+ * token is still pending; otherwise returns the interpreted accept/reject
+ * verdict for every token, in the same order the tokens were passed in.
+ *
+ * @param {string[]} tokens
+ * @returns {Promise<null|Array<{accepted: boolean, message: string}>>}
+ */
+exports.pollCheckerBatch = async function pollCheckerBatch(tokens) {
+  const res = await axios.get(
+    `${JUDGE0_URL}/submissions/batch?tokens=${tokens.join(',')}&base64_encoded=true`,
+    { headers: judge0Headers(), timeout: REQUEST_TIMEOUT_MS }
+  );
+  const subs = res.data.submissions;
+  if (!subs.every((s) => s.status?.id > 2)) return null;
+
+  return subs.map((s) => interpretCheckerResult({
+    status: s.status,
+    stdout: fromB64(s.stdout),
+    stderr: fromB64(s.stderr),
+    compile_output: fromB64(s.compile_output),
+    message: fromB64(s.message),
+  }));
 };

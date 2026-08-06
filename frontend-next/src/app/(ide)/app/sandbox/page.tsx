@@ -19,7 +19,7 @@ import {
   RestartAltOutlinedIcon,
 } from "@/components/ui/icons";
 import api from "@/lib/api";
-import { createSocket, joinRoomAck, leaveRoom } from "@/lib/socket";
+import { pollUntilDone } from "@/lib/pollJudging";
 import { darkScheme, lightScheme } from "@/theme/tokens";
 import type { VerdictPayload, VerdictResult } from "@/lib/types";
 
@@ -111,8 +111,7 @@ export default function SandboxPage() {
   const [result, setResult] = React.useState<VerdictResult | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
-  const socketRef = React.useRef<ReturnType<typeof createSocket> | null>(null);
-  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelPollRef = React.useRef<(() => void) | null>(null);
   const pendingRef = React.useRef(false);
 
   const lang = LANGUAGES.find((l) => l.id === langId) ?? LANGUAGES[0];
@@ -153,8 +152,7 @@ export default function SandboxPage() {
   const execute = React.useCallback(async () => {
     if (pendingRef.current || !code.trim()) return;
 
-    if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; }
-    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; }
     pendingRef.current = true;
     setRunning(true);
     setResult(null);
@@ -162,38 +160,15 @@ export default function SandboxPage() {
 
     const settle = () => {
       pendingRef.current = false;
-      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-      if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; }
+      if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; }
     };
 
-    // Generate the job id ourselves and join its socket room BEFORE submitting,
-    // waiting for the server's join ack — a trivial run can finish faster than
-    // a fire-and-forget join would land, and the worker would emit "verdict"
-    // into a room we hadn't actually joined yet.
+    // Client-generated job id, submitted up front — polling (unlike the old
+    // socket-room join) has no race to guard against: even a run that
+    // finishes instantly just resolves on the very first poll.
     const jobId = crypto.randomUUID();
-    const socket = createSocket();
-    socketRef.current = socket;
-    socket.once("verdict", (payload: VerdictPayload) => {
-      leaveRoom(socket, jobId);
-      settle();
-      setRunning(false);
-      if (!payload.success) {
-        setError(payload.error ?? "Run failed");
-      } else if (payload.result) {
-        setResult(payload.result);
-      }
-    });
 
     try {
-      await joinRoomAck(socket, jobId);
-
-      timeoutRef.current = setTimeout(() => {
-        if (!pendingRef.current) return;
-        settle();
-        setRunning(false);
-        setError("Run timed out. Please try again.");
-      }, 60_000);
-
       const res = await api.post<{ success: boolean; jobId?: string; error?: string }>("/api/submit", {
         source_code: code,
         language_id: langId,
@@ -201,11 +176,21 @@ export default function SandboxPage() {
         job_id: jobId,
       });
       if (!res.data.success) {
-        leaveRoom(socket, jobId);
         setError(res.data.error ?? "Run failed");
         setRunning(false);
         settle();
+        return;
       }
+
+      cancelPollRef.current = pollUntilDone<VerdictPayload>(jobId, (payload) => {
+        settle();
+        setRunning(false);
+        if (!payload.success) {
+          setError(payload.error ?? "Run failed");
+        } else if (payload.result) {
+          setResult(payload.result);
+        }
+      });
     } catch {
       setError("Network error. Please check your connection.");
       setRunning(false);
@@ -226,8 +211,7 @@ export default function SandboxPage() {
 
   React.useEffect(
     () => () => {
-      if (socketRef.current) socketRef.current.disconnect();
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (cancelPollRef.current) cancelPollRef.current();
     },
     [],
   );

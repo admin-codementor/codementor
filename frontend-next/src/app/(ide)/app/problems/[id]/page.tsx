@@ -31,7 +31,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import Alert from "@mui/material/Alert";
 import api from "@/lib/api";
-import { createSocket, joinRoom, leaveRoom } from "@/lib/socket";
+import { pollUntilDone } from "@/lib/pollJudging";
 import { useProctor } from "@/hooks/useProctor";
 import { fireConfetti } from "@/components/feedback/confetti";
 import { clearSession, getUser } from "@/lib/auth";
@@ -661,9 +661,8 @@ export default function ProblemSolvingPage() {
   const contestId = searchParams.get("contest");
   const proctored = !!assignmentId && searchParams.get("proctor") === "1";
 
-  // ── Judging lifecycle refs (avoid stale closures / socket leaks) ──
-  const socketRef = React.useRef<ReturnType<typeof createSocket> | null>(null);
-  const timeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  // ── Judging lifecycle refs (avoid stale closures / poll leaks) ──
+  const cancelPollRef = React.useRef<(() => void) | null>(null);
   const pendingRef = React.useRef(false);
   const autoSubmitRef = React.useRef<() => void>(() => {});
 
@@ -771,10 +770,9 @@ export default function ProblemSolvingPage() {
     }
   };
 
-  // ── Socket.io verdict handler ──
+  // ── Verdict handler (invoked once polling resolves) ──
   const handleVerdict = React.useCallback((payload: VerdictPayload) => {
     pendingRef.current = false;
-    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
     setVerdict(payload);
     setSubmitting(false);
     setRunning(false);
@@ -802,8 +800,7 @@ export default function ProblemSolvingPage() {
       if (!currentCode.trim()) return;
 
       // Tear down any in-flight judging before starting a new one.
-      if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; }
-      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; }
       pendingRef.current = true;
 
       if (isSubmit) setSubmitting(true);
@@ -812,8 +809,7 @@ export default function ProblemSolvingPage() {
 
       const settle = () => {
         pendingRef.current = false;
-        if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-        if (socketRef.current) { socketRef.current.disconnect(); socketRef.current = null; }
+        if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; }
       };
 
       try {
@@ -837,24 +833,11 @@ export default function ProblemSolvingPage() {
           return;
         }
 
-        const socket = createSocket();
-        socketRef.current = socket;
         const jobId = res.data.jobId;
-        joinRoom(socket, jobId);
-        socket.once("verdict", (payload: VerdictPayload) => {
-          leaveRoom(socket, jobId);
+        cancelPollRef.current = pollUntilDone<VerdictPayload>(jobId, (payload) => {
           settle();
           handleVerdict(payload);
         });
-        // Safety timeout (60 s) — fires only if the verdict never arrives.
-        timeoutRef.current = setTimeout(() => {
-          if (!pendingRef.current) return;
-          settle();
-          setVerdict({ success: false, state: "failed", error: "Judging timed out. Please try again." });
-          setSubmitting(false);
-          setRunning(false);
-          setOutputOpen(true);
-        }, 60_000);
       } catch {
         setVerdict({ success: false, state: "failed", error: "Network error. Please check your connection." });
         setSubmitting(false);
@@ -884,11 +867,10 @@ export default function ProblemSolvingPage() {
     autoSubmitRef.current = () => execute(true);
   }, [execute]);
 
-  // Tear down any live socket / timeout when leaving the page.
+  // Stop polling for a verdict when leaving the page.
   React.useEffect(
     () => () => {
-      if (socketRef.current) socketRef.current.disconnect();
-      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (cancelPollRef.current) cancelPollRef.current();
     },
     [],
   );

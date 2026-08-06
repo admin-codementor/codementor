@@ -1,5 +1,5 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
+const { createLimiter } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth.middleware');
 const {
   setup2FA,
@@ -11,12 +11,11 @@ const {
 const router = express.Router();
 
 // Throttle the public verification / OAuth endpoints to slow down brute force.
-const twofaLimiter = rateLimit({
+const twofaLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
   max: 30,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: 'Too many attempts, please try again after 15 minutes.' },
+  prefix: 'twofa',
+  message: 'Too many attempts, please try again after 15 minutes.',
 });
 
 // Authenticated management endpoints.

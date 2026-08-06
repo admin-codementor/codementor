@@ -1,5 +1,5 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
+const { createLimiter } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
 const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../middleware/permissions');
@@ -16,13 +16,12 @@ router.use(authorize('faculty', 'admin', 'hod'));
 
 // JPlag runs are expensive (~minutes each) — cap them per faculty to prevent
 // accidental or malicious DoS. Keyed by user id (route is always authenticated).
-const plagiarismLimiter = rateLimit({
+const plagiarismLimiter = createLimiter({
   windowMs: 5 * 60 * 1000,
   max: 5,
+  prefix: 'faculty:plagiarism',
   keyGenerator: (req) => req.user?.id || 'anon',
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: 'Plagiarism runs are limited to 5 per 5 minutes. Please wait before running again.' },
+  message: 'Plagiarism runs are limited to 5 per 5 minutes. Please wait before running again.',
 });
 
 // ── Read-only dashboard endpoints (no extra permission needed) ───────────────

@@ -1,15 +1,14 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
+const { createLimiter } = require('../middleware/rateLimiter');
 const router = express.Router();
 const authMiddleware = require('../middleware/auth.middleware');
 const aiController = require('../controllers/ai.controller');
 
-const aiLimiter = rateLimit({
+const aiLimiter = createLimiter({
   windowMs: 60 * 1000,
   max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: 'Too many AI requests. Please wait a moment.' }
+  prefix: 'ai',
+  message: 'Too many AI requests. Please wait a moment.',
 });
 
 router.post('/tutor', authMiddleware.protect, aiLimiter, aiController.askTutor);

@@ -1,24 +1,22 @@
 const express = require('express');
-const rateLimit = require('express-rate-limit');
+const { createLimiter } = require('../middleware/rateLimiter');
 const { refresh } = require('../controllers/auth.controller');
 const { firebaseLogin } = require('../controllers/firebaseAuth.controller');
 
 const router = express.Router();
 
-const authLimiter = rateLimit({
+const authLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
   max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: 'Too many attempts, please try again after 15 minutes.' }
+  prefix: 'auth',
+  message: 'Too many attempts, please try again after 15 minutes.',
 });
 
-const refreshLimiter = rateLimit({
+const refreshLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
   max: 60,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { success: false, error: 'Too many refresh attempts.' }
+  prefix: 'auth:refresh',
+  message: 'Too many refresh attempts.',
 });
 
 router.post('/refresh', refreshLimiter, refresh);

@@ -34,7 +34,6 @@ import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
-import { createSocket, joinRoom, leaveRoom } from "@/lib/socket";
 
 interface Contest {
   id: string;
@@ -182,17 +181,16 @@ function ScoreboardPanel({ contestId, problemIds, frozen, hidden }: { contestId:
     load();
   }, [load]);
 
+  // Was a Socket.IO "scoreboard_update" push; a persistent socket server
+  // can't run on Vercel, so this now just re-polls the scoreboard on an
+  // interval — the backend already only ever triggered a refetch here, so
+  // the effect is the same either way, just on a timer instead of a push.
   React.useEffect(() => {
-    const socket = createSocket();
-    socket.on("connect", () => {
-      joinRoom(socket, `contest:${contestId}`);
-      setLive(true);
-    });
-    socket.on("disconnect", () => setLive(false));
-    socket.on("scoreboard_update", () => load(false));
+    setLive(true);
+    const interval = setInterval(() => load(false), 7_000);
     return () => {
-      leaveRoom(socket, `contest:${contestId}`);
-      socket.disconnect();
+      setLive(false);
+      clearInterval(interval);
     };
   }, [contestId, load]);
 
