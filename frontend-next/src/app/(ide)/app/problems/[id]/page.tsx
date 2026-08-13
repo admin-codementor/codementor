@@ -31,6 +31,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import Alert from "@mui/material/Alert";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { pollUntilDone } from "@/lib/pollJudging";
 import { useProctor } from "@/hooks/useProctor";
 import { fireConfetti } from "@/components/feedback/confetti";
@@ -838,8 +839,17 @@ export default function ProblemSolvingPage() {
           settle();
           handleVerdict(payload);
         });
-      } catch {
-        setVerdict({ success: false, state: "failed", error: "Network error. Please check your connection." });
+      } catch (e) {
+        // The judge returns 503 with a precise reason ("unreachable" vs
+        // "overloaded"), and axios throws on it — so this branch, not the
+        // !success branch above, is where that message has to be surfaced.
+        // Reporting a blanket "check your connection" sent people hunting a
+        // network fault when the judge was simply down.
+        setVerdict({
+          success: false,
+          state: "failed",
+          error: apiErrorMessage(e, "Could not reach the server. Please check your connection."),
+        });
         setSubmitting(false);
         setRunning(false);
         setOutputOpen(true);

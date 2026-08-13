@@ -19,6 +19,7 @@ import {
   RestartAltOutlinedIcon,
 } from "@/components/ui/icons";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { pollUntilDone } from "@/lib/pollJudging";
 import { darkScheme, lightScheme } from "@/theme/tokens";
 import type { VerdictPayload, VerdictResult } from "@/lib/types";
@@ -191,8 +192,10 @@ export default function SandboxPage() {
           setResult(payload.result);
         }
       });
-    } catch {
-      setError("Network error. Please check your connection.");
+    } catch (e) {
+      // Same reason as the solve page: a 503 from the judge throws, so its
+      // specific message ("unreachable" vs "overloaded") has to be read here.
+      setError(apiErrorMessage(e, "Could not reach the server. Please check your connection."));
       setRunning(false);
       settle();
     }
