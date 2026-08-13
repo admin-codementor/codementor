@@ -18,13 +18,10 @@ import InputAdornment from "@mui/material/InputAdornment";
 import Alert from "@mui/material/Alert";
 import Link from "@mui/material/Link";
 import LinearProgress from "@mui/material/LinearProgress";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
-import { CodeIcon, SchoolOutlinedIcon, MenuBookOutlinedIcon, VisibilityIcon as Visibility, VisibilityOffIcon as VisibilityOff } from "@/components/ui/icons";
+import { CodeIcon, SchoolOutlinedIcon, VisibilityIcon as Visibility, VisibilityOffIcon as VisibilityOff } from "@/components/ui/icons";
 import { setSession, homeForRole } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
-type Role = "student" | "faculty";
 
 const STRENGTH = (pw: string): { label: string; value: number; color: "error" | "warning" | "primary" | "success" } | null => {
   if (pw.length === 0) return null;
@@ -39,7 +36,6 @@ export default function RegisterPage() {
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  const [role, setRole] = React.useState<Role>("student");
   const [department, setDepartment] = React.useState("");
   const [section, setSection] = React.useState("");
   const [year, setYear] = React.useState("");
@@ -62,18 +58,15 @@ export default function RegisterPage() {
       const cred = await createUserWithEmailAndPassword(firebaseAuth, email, password);
       const idToken = await cred.user.getIdToken();
 
+      // No `role` is sent — the server ignores it and decides from the
+      // verified email domain. See backend/src/controllers/firebaseAuth.controller.js
       const res = await axios.post("/api/auth/firebase", {
         id_token: idToken,
         name,
-        role,
-        ...(role === "student"
-          ? {
-              department: department.trim() || undefined,
-              section: section.trim() || undefined,
-              year: year ? Number(year) : undefined,
-              roll_no: rollNo.trim() || undefined,
-            }
-          : {}),
+        department: department.trim() || undefined,
+        section: section.trim() || undefined,
+        year: year ? Number(year) : undefined,
+        roll_no: rollNo.trim() || undefined,
       });
       if (res.data.success) {
         setSession({
@@ -152,25 +145,14 @@ export default function RegisterPage() {
 
           <form onSubmit={handleRegister}>
             <Stack spacing={2.5}>
-              <Box>
-                <Typography variant="subtitle2" component="label" id="role-label" sx={{ mb: 1, display: "block" }}>
-                  I am a…
-                </Typography>
-                <ToggleButtonGroup
-                  exclusive
-                  fullWidth
-                  value={role}
-                  onChange={(_, v: Role | null) => v && setRole(v)}
-                  aria-labelledby="role-label"
-                >
-                  <ToggleButton value="student" sx={{ gap: 1, py: 1.25 }}>
-                    <SchoolOutlinedIcon fontSize="small" /> Student
-                  </ToggleButton>
-                  <ToggleButton value="faculty" sx={{ gap: 1, py: 1.25 }}>
-                    <MenuBookOutlinedIcon fontSize="small" /> Faculty
-                  </ToggleButton>
-                </ToggleButtonGroup>
-              </Box>
+              {/* No role selector. Self-registration always creates a student
+                  account — the server decides the role from the verified email
+                  domain and ignores anything the client sends. Faculty accounts
+                  are provisioned by an administrator. */}
+              <Alert severity="info" icon={<SchoolOutlinedIcon fontSize="small" />}>
+                Creating a student account. Faculty accounts are set up by your
+                administrator — contact them if you need one.
+              </Alert>
 
               <TextField
                 label="Full name"
@@ -190,21 +172,19 @@ export default function RegisterPage() {
                 fullWidth
               />
 
-              {role === "student" && (
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr" }, gap: 2 }}>
-                  <TextField label="Roll No." value={rollNo} onChange={(e) => setRollNo(e.target.value)} placeholder="e.g. 21CS045" />
-                  <TextField label="Department" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. CSE" />
-                  <TextField label="Section" value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. A" />
-                  <TextField select label="Year" value={year} onChange={(e) => setYear(e.target.value)}>
-                    <MenuItem value="">—</MenuItem>
-                    {[1, 2, 3, 4].map((y) => (
-                      <MenuItem key={y} value={String(y)}>
-                        {y}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                </Box>
-              )}
+              <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr" }, gap: 2 }}>
+                <TextField label="Roll No." value={rollNo} onChange={(e) => setRollNo(e.target.value)} placeholder="e.g. 21CS045" />
+                <TextField label="Department" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="e.g. CSE" />
+                <TextField label="Section" value={section} onChange={(e) => setSection(e.target.value)} placeholder="e.g. A" />
+                <TextField select label="Year" value={year} onChange={(e) => setYear(e.target.value)}>
+                  <MenuItem value="">—</MenuItem>
+                  {[1, 2, 3, 4].map((y) => (
+                    <MenuItem key={y} value={String(y)}>
+                      {y}
+                    </MenuItem>
+                  ))}
+                </TextField>
+              </Box>
 
               <Box>
                 <TextField
