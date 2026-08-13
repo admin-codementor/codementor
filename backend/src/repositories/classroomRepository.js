@@ -31,6 +31,12 @@ async function isJoinCodeTaken(code) {
   return !snap.empty;
 }
 
+// Newest-first across every classroom — for admin/HOD oversight views.
+async function listAll() {
+  const snap = await col().get();
+  return snap.docs.map(toClassroom).sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+}
+
 async function listByFacultyId(facultyId) {
   const snap = await col().where('facultyId', '==', facultyId).get();
   return snap.docs.map(toClassroom).sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
@@ -65,6 +71,6 @@ async function listMembers(classroomId) {
 }
 
 module.exports = {
-  create, getById, getByJoinCode, isJoinCodeTaken, listByFacultyId, listByStudentId,
+  create, getById, getByJoinCode, isJoinCodeTaken, listAll, listByFacultyId, listByStudentId,
   addMember, getMemberCount, listMembers,
 };

@@ -1,13 +1,7 @@
-const { GoogleGenAI } = require('@google/genai');
+// All model access goes through the gateway (services/aiGateway.js) so the
+// provider and model id are configuration — see the header there for why.
+const ai = require('../services/aiGateway');
 const aiTutorRepo = require('../repositories/aiTutorRepository');
-
-const getGeminiClient = () => {
-  if (!process.env.GEMINI_API_KEY) {
-    console.warn('⚠️ GEMINI_API_KEY is not set. Using mock AI response.');
-    return null;
-  }
-  return new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-};
 
 const SYSTEM_PROMPT = `You are a Socratic coding tutor for engineering students.
 Your ONLY job is to guide students to the answer through questions.
@@ -51,11 +45,10 @@ const askTutor = async (req, res) => {
     // 2. Retrieve history for context
     const history = await aiTutorRepo.getHistory(userId, problemId);
 
-    // 3. Call Gemini
-    const ai = getGeminiClient();
+    // 3. Ask the model
     let aiResponseText = '';
 
-    if (ai) {
+    if (ai.isConfigured()) {
       // Construct conversation context
       let context = constructPrompt(problemDescription, code, "Here is the conversation history and my new question.");
       context += "\n\nConversation History:\n";
@@ -63,14 +56,11 @@ const askTutor = async (req, res) => {
         context += `${msg.role.toUpperCase()}: ${msg.content}\n`;
       });
 
-      const response = await ai.models.generateContent({
-        model: 'gemini-2.5-flash',
-        contents: context,
-      });
-      aiResponseText = response.text;
+      const { text } = await ai.generateText({ prompt: context });
+      aiResponseText = text;
     } else {
-      // Mock Response if no API Key
-      aiResponseText = "This is a mock AI response since the GEMINI_API_KEY is not set. What do you think your code is doing on line 4?";
+      // Mock response when no provider is configured
+      aiResponseText = "This is a mock AI response since no AI provider is configured. What do you think your code is doing on line 4?";
     }
 
     // 4. Store the AI's response
@@ -109,11 +99,10 @@ const explainError = async (req, res) => {
   }
 
   try {
-    const ai = getGeminiClient();
-    if (!ai) {
-      return res.json({ 
-        success: true, 
-        explanation: "Mock Explanation: Your code crashes because you are trying to access an element out of bounds on line 8. Please check your loop condition." 
+    if (!ai.isConfigured()) {
+      return res.json({
+        success: true,
+        explanation: "Mock Explanation: Your code crashes because you are trying to access an element out of bounds on line 8. Please check your loop condition."
       });
     }
 
@@ -129,12 +118,9 @@ ${code}
 Error Trace:
 ${errorTrace}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
+    const { text } = await ai.generateText({ prompt });
 
-    res.json({ success: true, explanation: response.text });
+    res.json({ success: true, explanation: text });
   } catch (error) {
     console.error('Explain Error failed:', error);
     res.status(500).json({ error: 'Failed to explain error' });
@@ -148,8 +134,7 @@ const reviewCode = async (req, res) => {
   }
 
   try {
-    const ai = getGeminiClient();
-    if (!ai) {
+    if (!ai.isConfigured()) {
       return res.json({
         success: true,
         review: {
@@ -179,15 +164,9 @@ ${problemDescription}
 Code:
 ${code}`;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-      }
-    });
-
-    const parsedReview = JSON.parse(response.text);
+    // generateJson parses (and retries) for us, so a stray code fence or one bad
+    // roll no longer surfaces as a 500 to the student.
+    const { data: parsedReview } = await ai.generateJson({ prompt });
     res.json({ success: true, review: parsedReview });
   } catch (error) {
     console.error('Code Review failed:', error);
@@ -196,7 +175,6 @@ ${code}`;
 };
 
 module.exports = {
-  getGeminiClient,
   askTutor,
   getHistory,
   explainError,

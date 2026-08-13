@@ -2,8 +2,29 @@ const { computeStrengthsWeaknesses } = require('../utils/topicScores');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
+const classroomRepo = require('../repositories/classroomRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const submissionRepo = require('../repositories/submissionRepository');
+
+// Assignments a given student is actually assigned.
+//
+// An assignment with no `classroomIds` targets everyone — that is how every
+// assignment behaved before class targeting existed, so the absent/empty case must
+// stay open rather than hiding existing work. Once a faculty member names classes,
+// only members of those classes see it.
+async function visibleAssignmentsFor(userId) {
+  const all = await assignmentRepo.getAll();
+  const needsMembership = all.some(a => (a.classroomIds || []).length > 0);
+  // Skip the membership scan entirely when nothing is targeted.
+  const myClassIds = needsMembership
+    ? new Set((await classroomRepo.listByStudentId(userId)).map(c => c.id))
+    : new Set();
+
+  return all.filter(a => {
+    const target = a.classroomIds || [];
+    return target.length === 0 || target.some(cid => myClassIds.has(cid));
+  });
+}
 
 // Calculate consecutive-day submission streak from heatmap rows
 const calculateStreak = (heatmapRows) => {
@@ -135,7 +156,7 @@ exports.getAssignments = async (req, res) => {
   try {
     const userId = req.user.id;
 
-    const assignments = await assignmentRepo.getAll();
+    const assignments = await visibleAssignmentsFor(userId);
     const allProblemIds = [...new Set(assignments.flatMap(a => a.problemIds || []))];
     const problemsMap = await problemRepo.getMapByIds(allProblemIds);
 
@@ -169,7 +190,9 @@ exports.getNotifications = async (req, res) => {
     const now = Date.now();
     const in48h = now + 48 * 3600000;
     const toMs = (d) => d?.toMillis?.() ?? new Date(d).getTime();
-    const dueSoon = (await assignmentRepo.getAll())
+    // Same targeting filter as the list — otherwise a student is notified about a
+    // deadline for an assignment they can't even open.
+    const dueSoon = (await visibleAssignmentsFor(req.user.id))
       .filter(a => { const t = toMs(a.deadline); return t >= now && t <= in48h; })
       .sort((a, b) => toMs(a.deadline) - toMs(b.deadline))
       .slice(0, 10);

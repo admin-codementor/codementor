@@ -16,11 +16,14 @@ import Avatar from "@mui/material/Avatar";
 import Dialog from "@mui/material/Dialog";
 import DialogTitle from "@mui/material/DialogTitle";
 import DialogContent from "@mui/material/DialogContent";
+import Alert from "@mui/material/Alert";
 import { AddIcon, ContentCopyIcon, CheckIcon, CloseIcon, GroupsOutlinedIcon, SchoolOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
+import { useToast } from "@/components/feedback/ToastProvider";
 
 interface Classroom {
   id: string;
@@ -46,17 +49,19 @@ function initials(name: string) {
 function MembersDialog({ classroom, onClose }: { classroom: Classroom | null; onClose: () => void }) {
   const [members, setMembers] = React.useState<Member[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
 
   React.useEffect(() => {
     if (!classroom) return;
     setLoading(true);
     setMembers([]);
+    setError("");
     api
       .get(`/api/classrooms/${classroom.id}/members`)
       .then((r) => {
         if (r.data?.success) setMembers(r.data.data);
       })
-      .catch(() => {})
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't load members.")))
       .finally(() => setLoading(false));
   }, [classroom]);
 
@@ -73,6 +78,8 @@ function MembersDialog({ classroom, onClose }: { classroom: Classroom | null; on
           <DialogContent dividers>
             {loading ? (
               <Stack spacing={1}>{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={44} />)}</Stack>
+            ) : error ? (
+              <Alert severity="error">{error}</Alert>
             ) : members.length === 0 ? (
               <Typography variant="body2" color="text.secondary" sx={{ py: 3, textAlign: "center" }}>
                 No students have joined yet.
@@ -122,15 +129,18 @@ export default function FacultyClassesPage() {
   const [creating, setCreating] = React.useState(false);
   const [copied, setCopied] = React.useState<string | null>(null);
   const [viewing, setViewing] = React.useState<Classroom | null>(null);
+  const [loadError, setLoadError] = React.useState("");
+  const showToast = useToast();
 
   const load = React.useCallback(() => {
     setLoading(true);
+    setLoadError("");
     api
       .get("/api/classrooms")
       .then((r) => {
         if (r.data?.success) setClasses(r.data.data);
       })
-      .catch(() => {})
+      .catch((e) => setLoadError(apiErrorMessage(e, "Couldn't load your classes.")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -143,17 +153,19 @@ export default function FacultyClassesPage() {
     if (!name.trim()) return;
     setCreating(true);
     try {
-      await api.post("/api/classrooms", {
+      const r = await api.post("/api/classrooms", {
         name: name.trim(),
         department: department.trim() || undefined,
         section: section.trim() || undefined,
       });
+      const code = r.data?.data?.join_code;
+      showToast(code ? `Class created — join code ${code}` : "Class created", { severity: "success" });
       setName("");
       setDepartment("");
       setSection("");
       load();
-    } catch {
-      /* ignore */
+    } catch (e) {
+      showToast(apiErrorMessage(e, "Couldn't create the class."), { severity: "error" });
     } finally {
       setCreating(false);
     }
@@ -166,7 +178,9 @@ export default function FacultyClassesPage() {
         setCopied(code);
         setTimeout(() => setCopied(null), 1500);
       })
-      .catch(() => {});
+      // Clipboard access can be denied by the browser — say so, since the tick
+      // never appearing looks like the button is broken.
+      .catch(() => showToast(`Couldn't copy. The join code is ${code}`, { severity: "warning" }));
   };
 
   return (
@@ -186,6 +200,12 @@ export default function FacultyClassesPage() {
           </Stack>
         </CardContent>
       </Card>
+
+      {loadError && (
+        <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={load}>Retry</Button>}>
+          {loadError}
+        </Alert>
+      )}
 
       {/* Class list */}
       {loading ? (

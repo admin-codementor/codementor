@@ -26,6 +26,7 @@ import {
   AdminPanelSettingsOutlinedIcon,
 } from "@/components/ui/icons";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { getUser } from "@/lib/auth";
 import { changeFirebasePassword } from "@/lib/firebase";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -58,6 +59,7 @@ export default function FacultyProfilePage() {
   const [user, setUserState] = React.useState<ReturnType<typeof getUser>>(null);
   const [stats, setStats] = React.useState<FacultyStats>(DEFAULT_STATS);
   const [loading, setLoading] = React.useState(true);
+  const [statsError, setStatsError] = React.useState("");
 
   const isAdmin = user?.role === "admin";
 
@@ -83,7 +85,9 @@ export default function FacultyProfilePage() {
         const s = r.data?.data?.stats;
         if (s) setStats({ ...DEFAULT_STATS, ...s });
       })
-      .catch(() => {})
+      // Stats are secondary on this page (name/password editing still works), so
+      // report and carry on rather than blocking the whole profile.
+      .catch((e) => setStatsError(apiErrorMessage(e, "Couldn't load your stats.")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -213,6 +217,7 @@ export default function FacultyProfilePage() {
         </Card>
 
         {/* Faculty/admin stat cards */}
+        {statsError && <Alert severity="warning">{statsError}</Alert>}
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(5, 1fr)" }, gap: 2 }}>
           <StatCard icon={<GroupsOutlinedIcon />} label={isAdmin ? "Students" : "My Students"} value={loading ? "—" : stats.totalStudents} accent="primary" />
           <StatCard icon={<BoltOutlinedIcon />} label="Active (7d)" value={loading ? "—" : stats.activeStudents} helper={loading ? undefined : `${activePct}%`} accent="warning" />

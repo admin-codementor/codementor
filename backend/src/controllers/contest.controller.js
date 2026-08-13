@@ -1,3 +1,4 @@
+const { canManageOwnedBy } = require('../middleware/role.middleware');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const contestRepo = require('../repositories/contestRepository');
@@ -49,7 +50,7 @@ exports.updateScoreboardMode = async (req, res) => {
     }
 
     const contest = await contestRepo.getById(id);
-    if (!contest || contest.facultyId !== req.user.id) {
+    if (!contest || !(await canManageOwnedBy(req, contest.facultyId))) {
       return res.status(404).json({ success: false, error: 'Contest not found' });
     }
 

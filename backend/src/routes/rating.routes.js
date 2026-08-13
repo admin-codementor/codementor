@@ -1,6 +1,6 @@
 const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
-const { authorize } = require('../middleware/role.middleware');
+const { facultyStaff } = require('../middleware/role.middleware');
 const { requirePermission } = require('../middleware/permissions');
 const c = require('../controllers/rating.controller');
 
@@ -9,9 +9,9 @@ const router = express.Router();
 // All rating routes require an authenticated user.
 router.use(protect);
 
-// ── Faculty / admin: recompute ratings for a finished contest ──────────────────
+// ── Teaching staff: recompute ratings for a finished contest ───────────────────
 router.post('/contest/:id/recompute',
-  authorize('faculty', 'admin'),
+  facultyStaff,
   requirePermission('manage_contests'),
   c.recomputeForContest
 );

@@ -12,7 +12,9 @@ import Skeleton from "@mui/material/Skeleton";
 import { PolicyOutlinedIcon, ChevronRightIcon, LocalFireDepartmentIcon } from "@/components/ui/icons";
 import { ResponsiveBar } from "@nivo/bar";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
+import Alert from "@mui/material/Alert";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
@@ -39,6 +41,7 @@ export default function FacultyPlagiarismOverviewPage() {
   const chartColors = useChartColors();
   const [rows, setRows] = React.useState<OverviewRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
 
   React.useEffect(() => {
     api
@@ -46,7 +49,7 @@ export default function FacultyPlagiarismOverviewPage() {
       .then((r) => {
         if (r.data?.success) setRows(r.data.data ?? []);
       })
-      .catch(() => {})
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't load the plagiarism overview.")))
       .finally(() => setLoading(false));
   }, []);
 
@@ -60,6 +63,8 @@ export default function FacultyPlagiarismOverviewPage() {
         title="Plagiarism"
         subtitle="Run JPlag token/structure-based detection on an assignment's submissions and review similarity analytics."
       />
+
+      {error && <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>}
 
       {loading ? (
         <Stack spacing={2}>{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} variant="rounded" height={72} />)}</Stack>

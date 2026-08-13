@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -29,17 +30,19 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import { CheckCircleIcon, RadioButtonUncheckedIcon, CloseIcon, PeopleOutlineIcon, BoltOutlinedIcon, TrackChangesOutlinedIcon, DescriptionOutlinedIcon, DownloadOutlinedIcon, AddIcon, ShieldOutlinedIcon } from "@/components/ui/icons";
+import { CheckCircleIcon, RadioButtonUncheckedIcon, CloseIcon, PeopleOutlineIcon, BoltOutlinedIcon, TrackChangesOutlinedIcon, DescriptionOutlinedIcon, DownloadOutlinedIcon, AddIcon, ShieldOutlinedIcon, EditOutlinedIcon } from "@/components/ui/icons";
 import { ResponsiveBar } from "@nivo/bar";
 import { ResponsiveLine } from "@nivo/line";
 import { ResponsivePie } from "@nivo/pie";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState } from "@/components/ui/States";
+import { useToast } from "@/components/feedback/ToastProvider";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface Stats {
@@ -103,7 +106,17 @@ function initials(name: string) {
 function daysLeft(deadline: string) {
   return Math.ceil((new Date(deadline).getTime() - Date.now()) / 86_400_000);
 }
-async function downloadBlob(url: string, filename: string) {
+// `<input type="datetime-local">` only accepts `YYYY-MM-DDTHH:mm` in *local* time,
+// so an ISO/UTC string has to be shifted before it can prefill the field.
+function toLocalInputValue(iso: string) {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+// `onError` is passed in because this lives outside a component and so can't call
+// useToast itself. A failed export used to be completely silent.
+async function downloadBlob(url: string, filename: string, onError?: (message: string) => void) {
   try {
     const res = await api.get(url, { responseType: "blob" });
     const objUrl = URL.createObjectURL(res.data);
@@ -112,72 +125,228 @@ async function downloadBlob(url: string, filename: string) {
     a.download = filename;
     a.click();
     URL.revokeObjectURL(objUrl);
-  } catch {
-    /* ignore */
+  } catch (e) {
+    onError?.(apiErrorMessage(e, "Export failed."));
   }
 }
 
-// ── Create Assignment modal ───────────────────────────────────────────────────
-function CreateAssignmentDialog({ open, onClose, onCreated }: { open: boolean; onClose: () => void; onCreated: () => void }) {
+// ── Create / Edit Assignment modal ────────────────────────────────────────────
+// This dialog previously posted `problem_ids: []` unconditionally with no way to
+// pick problems, so every assignment students received was empty. Selection order
+// is preserved because it becomes the order students see.
+interface PickableProblem {
+  id: string;
+  title: string;
+  difficulty: string;
+  tags: string[];
+}
+
+function AssignmentDialog({
+  open,
+  editingId,
+  onClose,
+  onSaved,
+}: {
+  open: boolean;
+  editingId: string | null;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
   const [title, setTitle] = React.useState("");
   const [deadline, setDeadline] = React.useState("");
   const [isExam, setIsExam] = React.useState(false);
+  const [selected, setSelected] = React.useState<string[]>([]);
+  const [search, setSearch] = React.useState("");
+  const [problems, setProblems] = React.useState<PickableProblem[]>([]);
+  const [problemsLoading, setProblemsLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState("");
+  const showToast = useToast();
+
+  // Load the pickable catalogue, and the assignment itself when editing.
+  React.useEffect(() => {
+    if (!open) return;
+    setError("");
+    setSearch("");
+    setProblemsLoading(true);
+
+    api
+      .get("/api/faculty/problems")
+      .then((r) => { if (r.data?.success) setProblems(r.data.data); })
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't load your problems.")))
+      .finally(() => setProblemsLoading(false));
+
+    if (editingId) {
+      api
+        .get(`/api/faculty/assignments/${editingId}`)
+        .then((r) => {
+          if (!r.data?.success) return;
+          const a = r.data.data;
+          setTitle(a.title);
+          // datetime-local wants `YYYY-MM-DDTHH:mm` in local time.
+          setDeadline(a.deadline ? toLocalInputValue(a.deadline) : "");
+          setIsExam(!!a.is_exam);
+          setSelected((a.problems ?? []).map((p: { id: string }) => p.id));
+        })
+        .catch((e) => setError(apiErrorMessage(e, "Couldn't load this assignment.")));
+    } else {
+      setTitle("");
+      setDeadline("");
+      setIsExam(false);
+      setSelected([]);
+    }
+  }, [open, editingId]);
+
+  const toggle = (id: string) =>
+    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]));
+
+  const visible = problems.filter((p) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return p.title.toLowerCase().includes(q) || (p.tags ?? []).some((t) => t.toLowerCase().includes(q));
+  });
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !deadline) {
-      setError("Title and deadline are required");
+      setError("Title and deadline are required.");
+      return;
+    }
+    if (selected.length === 0) {
+      setError("Pick at least one problem — students can't do anything with an empty assignment.");
       return;
     }
     setSaving(true);
     setError("");
     try {
-      await api.post("/api/faculty/assignments", {
+      const payload = {
         title: title.trim(),
-        deadline,
-        problem_ids: [],
+        deadline: new Date(deadline).toISOString(),
+        problem_ids: selected,
         allowed_cidrs: [],
         is_exam: isExam,
-      });
-      onCreated();
+      };
+      if (editingId) await api.put(`/api/faculty/assignments/${editingId}`, payload);
+      else await api.post("/api/faculty/assignments", payload);
+
+      showToast(
+        `${editingId ? "Assignment updated" : "Assignment created"} — ${selected.length} problem${selected.length === 1 ? "" : "s"}`,
+        { severity: "success" },
+      );
+      onSaved();
       onClose();
-      setTitle("");
-      setDeadline("");
-      setIsExam(false);
     } catch (err) {
-      const e2 = err as { response?: { data?: { error?: string } } };
-      setError(e2?.response?.data?.error || "Failed to create assignment");
+      setError(apiErrorMessage(err, "Couldn't save the assignment."));
     } finally {
       setSaving(false);
     }
   };
 
   return (
-    <Dialog open={open} onClose={onClose} fullWidth maxWidth="sm">
-      <DialogTitle>New Assignment</DialogTitle>
+    <Dialog open={open} onClose={onClose} fullWidth maxWidth="md">
+      <DialogTitle>{editingId ? "Edit Assignment" : "New Assignment"}</DialogTitle>
       <Box component="form" onSubmit={submit}>
         <DialogContent dividers>
           <Stack spacing={2}>
-            <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth size="small" placeholder="Midterm Lab — Arrays & Strings" />
-            <TextField label="Deadline" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} fullWidth size="small" slotProps={{ inputLabel: { shrink: true } }} />
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
+              <TextField label="Title" value={title} onChange={(e) => setTitle(e.target.value)} fullWidth size="small" placeholder="Midterm Lab — Arrays & Strings" />
+              <TextField label="Deadline" type="datetime-local" value={deadline} onChange={(e) => setDeadline(e.target.value)} size="small" sx={{ minWidth: 230 }} slotProps={{ inputLabel: { shrink: true } }} />
+            </Stack>
+
             <FormControlLabel
               control={<Checkbox checked={isExam} onChange={(e) => setIsExam(e.target.checked)} />}
               label={
                 <Box>
                   <Typography variant="body2" fontWeight={500}>Proctored exam</Typography>
-                  <Typography variant="caption" color="text.secondary">Enforces fullscreen, tab-switch detection & keystroke logging.</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Enforces fullscreen, tab-switch detection &amp; keystroke logging. Also disables the AI tutor for the duration.
+                  </Typography>
                 </Box>
               }
             />
+
+            <Divider />
+
+            {/* Problem picker */}
+            <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} flexWrap="wrap" useFlexGap>
+              <Typography variant="overline" color="text.secondary">
+                Problems{selected.length > 0 ? ` · ${selected.length} selected` : ""}
+              </Typography>
+              <SearchField value={search} onChange={setSearch} placeholder="Search by title or tag" />
+            </Stack>
+
+            {selected.length > 0 && (
+              <Stack direction="row" spacing={0.75} flexWrap="wrap" useFlexGap>
+                {selected.map((id, i) => {
+                  const p = problems.find((x) => x.id === id);
+                  return (
+                    <Chip
+                      key={id}
+                      size="small"
+                      label={`${i + 1}. ${p?.title ?? id}`}
+                      onDelete={() => toggle(id)}
+                      sx={{ maxWidth: 260 }}
+                    />
+                  );
+                })}
+              </Stack>
+            )}
+
+            <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 300, overflowY: "auto" }}>
+              {problemsLoading ? (
+                <Stack spacing={1} sx={{ p: 1.5 }}>
+                  {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={36} />)}
+                </Stack>
+              ) : visible.length === 0 ? (
+                <EmptyState
+                  icon={<DescriptionOutlinedIcon />}
+                  title={problems.length === 0 ? "No problems yet" : "No problems match that search"}
+                  description={problems.length === 0 ? "Create a problem first, then attach it here." : undefined}
+                />
+              ) : (
+                visible.map((p) => {
+                  const checked = selected.includes(p.id);
+                  const order = selected.indexOf(p.id);
+                  return (
+                    <Stack
+                      key={p.id}
+                      direction="row"
+                      alignItems="center"
+                      spacing={1}
+                      onClick={() => toggle(p.id)}
+                      sx={{
+                        px: 1, py: 0.75, cursor: "pointer", borderBottom: "1px solid", borderColor: "outlineVariant",
+                        "&:last-of-type": { borderBottom: 0 },
+                        bgcolor: checked ? "primaryContainer" : "transparent",
+                      }}
+                    >
+                      <Checkbox size="small" checked={checked} tabIndex={-1} />
+                      <Box sx={{ flex: 1, minWidth: 0 }}>
+                        <Typography variant="body2" noWrap>
+                          {checked ? `${order + 1}. ` : ""}{p.title}
+                        </Typography>
+                        {(p.tags ?? []).length > 0 && (
+                          <Typography variant="caption" color="text.secondary" noWrap>{p.tags.slice(0, 4).join(" · ")}</Typography>
+                        )}
+                      </Box>
+                      <Chip
+                        label={p.difficulty}
+                        size="small"
+                        sx={{ height: 18, fontSize: 10, textTransform: "capitalize", flexShrink: 0 }}
+                      />
+                    </Stack>
+                  );
+                })
+              )}
+            </Box>
+
             {error && <Alert severity="error">{error}</Alert>}
           </Stack>
         </DialogContent>
         <DialogActions>
           <Button onClick={onClose}>Cancel</Button>
           <Button type="submit" variant="contained" color="success" disabled={saving}>
-            {saving ? "Creating…" : "Create Assignment"}
+            {saving ? "Saving…" : editingId ? "Save Assignment" : "Create Assignment"}
           </Button>
         </DialogActions>
       </Box>
@@ -217,8 +386,7 @@ function CreateContestDialog({ open, onClose }: { open: boolean; onClose: () => 
       setStartsAt("");
       setEndsAt("");
     } catch (err) {
-      const e2 = err as { response?: { data?: { error?: string } } };
-      setError(e2?.response?.data?.error || "Failed to create contest");
+      setError(apiErrorMessage(err, "Couldn't create the contest."));
     } finally {
       setSaving(false);
     }
@@ -296,17 +464,20 @@ function ProgressDialog({ target, onClose }: { target: { id: string; title: stri
   const [data, setData] = React.useState<ProgressData | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [search, setSearch] = React.useState("");
+  const [error, setError] = React.useState("");
+  const showToast = useToast();
 
   React.useEffect(() => {
     if (!target) return;
     setLoading(true);
     setData(null);
+    setError("");
     api
       .get(`/api/faculty/assignments/${target.id}/progress`)
       .then((r) => {
         if (r.data?.success) setData(r.data.data);
       })
-      .catch(() => {})
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't load progress data.")))
       .finally(() => setLoading(false));
   }, [target]);
 
@@ -326,8 +497,10 @@ function ProgressDialog({ target, onClose }: { target: { id: string; title: stri
           <DialogContent dividers>
             {loading ? (
               <Stack spacing={1}>{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} height={40} />)}</Stack>
+            ) : error ? (
+              <Alert severity="error">{error}</Alert>
             ) : !data ? (
-              <EmptyState title="Failed to load progress data" />
+              <EmptyState title="No progress data for this assignment yet" />
             ) : (
               <>
                 <SearchField value={search} onChange={setSearch} placeholder="Filter students…" label="Filter students" sx={{ mb: 2, maxWidth: 320 }} />
@@ -379,7 +552,7 @@ function ProgressDialog({ target, onClose }: { target: { id: string; title: stri
             )}
           </DialogContent>
           <DialogActions>
-            <Button startIcon={<DownloadOutlinedIcon />} onClick={() => downloadBlob(`/api/faculty/assignments/${target.id}/export`, "marks_export.csv")}>
+            <Button startIcon={<DownloadOutlinedIcon />} onClick={() => downloadBlob(`/api/faculty/assignments/${target.id}/export`, "marks_export.csv", (m) => showToast(m, { severity: "error" }))}>
               Export CSV
             </Button>
             <Button onClick={onClose}>Close</Button>
@@ -404,16 +577,18 @@ interface ProctorRow {
 function ProctorDialog({ target, onClose }: { target: { id: string; title: string } | null; onClose: () => void }) {
   const [rows, setRows] = React.useState<ProctorRow[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
   React.useEffect(() => {
     if (!target) return;
     setLoading(true);
     setRows([]);
+    setError("");
     api
       .get(`/api/proctor/assignment/${target.id}`)
       .then((r) => {
         if (r.data?.success) setRows(r.data.data);
       })
-      .catch(() => {})
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't load the proctoring report.")))
       .finally(() => setLoading(false));
   }, [target]);
   const riskColor = (r: string) => (r === "high" ? "error.main" : r === "medium" ? "warning.main" : "success.main");
@@ -429,6 +604,8 @@ function ProctorDialog({ target, onClose }: { target: { id: string; title: strin
           <DialogContent dividers>
             {loading ? (
               <Stack spacing={1}>{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={40} />)}</Stack>
+            ) : error ? (
+              <Alert severity="error">{error}</Alert>
             ) : rows.length === 0 ? (
               <EmptyState icon={<ShieldOutlinedIcon />} title="No proctoring events recorded yet" />
             ) : (
@@ -520,10 +697,15 @@ export default function FacultyDashboardPage() {
   const [selectedStudent, setSelectedStudent] = React.useState<Student | null>(null);
   const [progressTarget, setProgressTarget] = React.useState<{ id: string; title: string } | null>(null);
   const [proctorTarget, setProctorTarget] = React.useState<{ id: string; title: string } | null>(null);
-  const [showCreateAssignment, setShowCreateAssignment] = React.useState(false);
+  const [assignmentDialog, setAssignmentDialog] = React.useState<{ open: boolean; editingId: string | null }>({ open: false, editingId: null });
   const [showCreateContest, setShowCreateContest] = React.useState(false);
 
+  const [loadError, setLoadError] = React.useState("");
+  const router = useRouter();
+  const showToast = useToast();
+
   const loadDashboard = React.useCallback(() => {
+    setLoadError("");
     api
       .get("/api/faculty/dashboard")
       .then((r) => {
@@ -532,26 +714,36 @@ export default function FacultyDashboardPage() {
           setAssignments(r.data.data.assignments ?? []);
         }
       })
-      .catch(() => {})
+      .catch((e) => setLoadError(apiErrorMessage(e, "Couldn't load the dashboard.")))
       .finally(() => setLoading(false));
   }, []);
 
   React.useEffect(() => {
     loadDashboard();
-    api.get("/api/faculty/at-risk").then((r) => { if (r.data?.success) setAtRisk(r.data.data); }).catch(() => {});
-  }, [loadDashboard]);
+    // At-risk is supplementary — a failure here shouldn't take over the page, but
+    // it must not vanish silently either.
+    api.get("/api/faculty/at-risk")
+      .then((r) => { if (r.data?.success) setAtRisk(r.data.data); })
+      .catch((e) => showToast(apiErrorMessage(e, "Couldn't load at-risk students."), { severity: "warning" }));
+  }, [loadDashboard, showToast]);
 
   const loadStudents = React.useCallback(() => {
     if (students.length) return;
     setStudentsLoading(true);
-    api.get("/api/faculty/students").then((r) => { if (r.data?.success) setStudents(r.data.data); }).catch(() => {}).finally(() => setStudentsLoading(false));
-  }, [students.length]);
+    api.get("/api/faculty/students")
+      .then((r) => { if (r.data?.success) setStudents(r.data.data); })
+      .catch((e) => showToast(apiErrorMessage(e, "Couldn't load students."), { severity: "error" }))
+      .finally(() => setStudentsLoading(false));
+  }, [students.length, showToast]);
 
   const loadAnalytics = React.useCallback(() => {
     if (analytics) return;
     setAnalyticsLoading(true);
-    api.get("/api/faculty/analytics").then((r) => { if (r.data?.success) setAnalytics(r.data.data); }).catch(() => {}).finally(() => setAnalyticsLoading(false));
-  }, [analytics]);
+    api.get("/api/faculty/analytics")
+      .then((r) => { if (r.data?.success) setAnalytics(r.data.data); })
+      .catch((e) => showToast(apiErrorMessage(e, "Couldn't load analytics."), { severity: "error" }))
+      .finally(() => setAnalyticsLoading(false));
+  }, [analytics, showToast]);
 
   React.useEffect(() => {
     if (tab === "students") loadStudents();
@@ -569,7 +761,7 @@ export default function FacultyDashboardPage() {
         subtitle="Monitor student performance and class engagement."
         actions={
           <Stack direction="row" spacing={1}>
-            <Button variant="outlined" size="small" startIcon={<DownloadOutlinedIcon />} onClick={() => downloadBlob("/api/pdf/class-report", "class_report.pdf")}>
+            <Button variant="outlined" size="small" startIcon={<DownloadOutlinedIcon />} onClick={() => downloadBlob("/api/pdf/class-report", "class_report.pdf", (m) => showToast(m, { severity: "error" }))}>
               Class Report
             </Button>
             <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={() => setShowCreateContest(true)}>
@@ -578,6 +770,12 @@ export default function FacultyDashboardPage() {
           </Stack>
         }
       />
+
+      {loadError && (
+        <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={loadDashboard}>Retry</Button>}>
+          {loadError}
+        </Alert>
+      )}
 
       {/* Stat cards */}
       <Reveal>
@@ -843,7 +1041,8 @@ export default function FacultyDashboardPage() {
       {tab === "assignments" && (
         <Stack spacing={2}>
           <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-            <Button variant="contained" color="success" size="small" startIcon={<AddIcon />} onClick={() => setShowCreateAssignment(true)}>New Assignment</Button>
+            <Button variant="outlined" size="small" startIcon={<AddIcon />} onClick={() => setAssignmentDialog({ open: true, editingId: null })}>Quick add</Button>
+            <Button variant="contained" color="success" size="small" startIcon={<AddIcon />} onClick={() => router.push("/faculty/assignments/new/edit")}>New Assignment</Button>
           </Box>
           {loading ? (
             Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} variant="rounded" height={64} />)
@@ -862,8 +1061,9 @@ export default function FacultyDashboardPage() {
                       </Typography>
                     </Box>
                     <Stack direction="row" spacing={1} flexWrap="wrap">
+                      <Button size="small" variant="outlined" startIcon={<EditOutlinedIcon />} onClick={() => router.push(`/faculty/assignments/${a.id}/edit`)}>Edit</Button>
                       <Button size="small" variant="outlined" startIcon={<PeopleOutlineIcon />} onClick={() => setProgressTarget({ id: a.id, title: a.title })}>Progress</Button>
-                      <Button size="small" variant="outlined" startIcon={<DownloadOutlinedIcon />} onClick={() => downloadBlob(`/api/faculty/assignments/${a.id}/export`, "marks_export.csv")}>Export</Button>
+                      <Button size="small" variant="outlined" startIcon={<DownloadOutlinedIcon />} onClick={() => downloadBlob(`/api/faculty/assignments/${a.id}/export`, "marks_export.csv", (m) => showToast(m, { severity: "error" }))}>Export</Button>
                       <Button size="small" variant="outlined" color="warning" startIcon={<ShieldOutlinedIcon />} onClick={() => setProctorTarget({ id: a.id, title: a.title })}>Proctor</Button>
                     </Stack>
                   </CardContent>
@@ -878,7 +1078,12 @@ export default function FacultyDashboardPage() {
       <StudentDialog student={selectedStudent} onClose={() => setSelectedStudent(null)} />
       <ProgressDialog target={progressTarget} onClose={() => setProgressTarget(null)} />
       <ProctorDialog target={proctorTarget} onClose={() => setProctorTarget(null)} />
-      <CreateAssignmentDialog open={showCreateAssignment} onClose={() => setShowCreateAssignment(false)} onCreated={loadDashboard} />
+      <AssignmentDialog
+        open={assignmentDialog.open}
+        editingId={assignmentDialog.editingId}
+        onClose={() => setAssignmentDialog({ open: false, editingId: null })}
+        onSaved={loadDashboard}
+      />
       <CreateContestDialog open={showCreateContest} onClose={() => setShowCreateContest(false)} />
     </Box>
   );

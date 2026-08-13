@@ -1,7 +1,7 @@
 const express = require('express');
 const { createLimiter } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth.middleware');
-const { authorize } = require('../middleware/role.middleware');
+const { authorize, facultyStaff } = require('../middleware/role.middleware');
 const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../middleware/permissions');
 const facultyController = require('../controllers/faculty.controller');
 const plagiarismController = require('../controllers/plagiarism.controller');
@@ -12,7 +12,7 @@ const auditLogRepo = require('../repositories/auditLogRepository');
 const router = express.Router();
 
 router.use(protect);
-router.use(authorize('faculty', 'admin', 'hod'));
+router.use(facultyStaff);
 
 // JPlag runs are expensive (~minutes each) — cap them per faculty to prevent
 // accidental or malicious DoS. Keyed by user id (route is always authenticated).
@@ -31,7 +31,15 @@ router.get('/cohort-topics', facultyController.getCohortTopics);
 // Hierarchical drill-down (department-scoped for HOD/faculty; admin = all).
 router.get('/analytics/cohorts', facultyController.getCohorts);
 router.get('/analytics/cohort-students', facultyController.getCohortStudents);
+router.get('/question-bank', facultyController.getQuestionBank);
+
+// Analytics — all served from one cached snapshot (services/analyticsService.js).
+router.get('/analytics/overview',        facultyController.getAnalyticsOverview);
+router.get('/analytics/cohort',          facultyController.getCohortDetail);
+router.get('/analytics/problem/:id',     facultyController.getProblemAnalytics);
+router.get('/analytics/mcq/:id',         facultyController.getMcqItemAnalysis);
 router.get('/problems',   facultyController.getProblems);
+router.get('/problems/:id', facultyController.getProblemDetail);
 router.get('/problems/:id/test-heatmap', facultyController.getProblemTestHeatmap);
 router.post('/problems/:id/random-tests',
   requirePermission('manage_problems'),
@@ -61,6 +69,10 @@ router.put('/problems/:id',
   requirePermission('manage_problems'),
   facultyController.updateProblem
 );
+router.patch('/problems/:id/status',
+  requirePermission('manage_problems'),
+  facultyController.setProblemStatus
+);
 router.delete('/problems/:id',
   requirePermission('manage_problems'),
   facultyController.deleteProblem
@@ -71,6 +83,11 @@ router.post('/assignments',
   requirePermission('manage_assignments'),
   facultyController.createAssignment
 );
+router.put('/assignments/:id',
+  requirePermission('manage_assignments'),
+  facultyController.updateAssignment
+);
+router.get('/assignments/:id', facultyController.getAssignmentDetail);
 router.get('/assignments/:id/submissions', facultyController.getAssignmentSubmissions);
 router.get('/assignments/:id/progress',    facultyController.getAssignmentProgress);
 

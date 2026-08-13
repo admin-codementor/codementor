@@ -8,17 +8,30 @@ import Typography from "@mui/material/Typography";
 import Link from "@mui/material/Link";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Skeleton from "@mui/material/Skeleton";
-import { ResponsiveBar } from "@nivo/bar";
-import { ChevronRightIcon, GroupsOutlinedIcon, PersonOutlineIcon, TrackChangesOutlinedIcon, InsightsOutlinedIcon } from "@/components/ui/icons";
+import Alert from "@mui/material/Alert";
+import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
+import MenuItem from "@mui/material/MenuItem";
+import TextField from "@mui/material/TextField";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import { ChevronRightIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { StatCard } from "@/components/ui/StatCard";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
-import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
-import { Reveal, RevealGroup, RevealItem, SwapFade } from "@/components/ui/motion";
+import { DifficultyChip } from "@/components/ui/DifficultyChip";
+import {
+  KpiTile, ActivityHeatmap, TrendChart, StudentScatter, DistributionChart, BoxPlotRow,
+  TopicRadar, FunnelChart, TestCaseHeatmap, ItemAnalysisScatter, RankedBars, RiskChips,
+} from "@/components/faculty/analytics/Panels";
 
 type Dim = "department" | "year" | "section";
 const DIMENSIONS: { value: Dim; label: string }[] = [
@@ -26,161 +39,457 @@ const DIMENSIONS: { value: Dim; label: string }[] = [
   { value: "year", label: "Year" },
   { value: "section", label: "Section" },
 ];
+const RANGES = [
+  { value: 7, label: "7 days" },
+  { value: 30, label: "30 days" },
+  { value: 90, label: "90 days" },
+  { value: 365, label: "1 year" },
+  { value: 3650, label: "All time" },
+];
 
-interface CohortRow { cohort: string; students: number; avg_solved: number; ac_rate: number }
-interface StudentRow { id: string; name: string; rollNo: string | null; solved: number; acRate: number }
-
-const STUDENT_LIMIT = 20;
+interface BoxStats { min: number; q1: number; median: number; q3: number; max: number; mean: number; n: number }
+interface Overview {
+  scope: { department: string | null; dimension: string; days: number };
+  kpis: Record<string, { value: number; delta: number | null }>;
+  daily: { date: string; subs: number; ac: number; activeUsers: number }[];
+  activityByDayHour: number[][];
+  verdicts: { verdict: string; count: number }[];
+  languages: { name: string; subs: number; acRate: number }[];
+  cohorts: { cohort: string; students: number; avgSolved: number; acRate: number; activeStudents: number; solvedDistribution: BoxStats | null; avgAttemptsToSolve: number | null }[];
+  solvedHistogram: { bucket: string; count: number }[];
+  solvedDistribution: BoxStats | null;
+  studentScatter: { id: string; name: string; x: number; y: number; solved: number }[];
+  hardestProblems: { id: string; title: string; difficulty: string; solveRate: number; attempters: number; subs: number }[];
+  mostAttempted: { id: string; title: string; difficulty: string; subs: number; acRate: number }[];
+}
 
 export default function FacultyAnalyticsPage() {
   const me = React.useMemo(() => getUser(), []);
   const router = useRouter();
-  const nivoTheme = useNivoTheme();
-  const colors = useChartColors();
 
   const [dimension, setDimension] = React.useState<Dim>("department");
+  const [days, setDays] = React.useState(3650);
+  const [overview, setOverview] = React.useState<Overview | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState("");
+
+  // Drill-down targets. Only one is ever set.
   const [cohort, setCohort] = React.useState<string | null>(null);
+  const [problemId, setProblemId] = React.useState<string | null>(null);
+  const [cohortData, setCohortData] = React.useState<Record<string, unknown> | null>(null);
+  const [problemData, setProblemData] = React.useState<Record<string, unknown> | null>(null);
+  const [drillLoading, setDrillLoading] = React.useState(false);
 
-  const [cohorts, setCohorts] = React.useState<CohortRow[]>([]);
-  const [cohortsLoading, setCohortsLoading] = React.useState(true);
-  const [students, setStudents] = React.useState<StudentRow[]>([]);
-  const [studentsTotal, setStudentsTotal] = React.useState(0);
-  const [studentsLoading, setStudentsLoading] = React.useState(false);
+  // MCQ item analysis
+  const [tests, setTests] = React.useState<{ id: string; title: string; attempt_count: number }[]>([]);
+  const [testId, setTestId] = React.useState("");
+  const [itemData, setItemData] = React.useState<Record<string, unknown> | null>(null);
 
-  React.useEffect(() => {
-    setCohortsLoading(true);
-    setCohort(null);
+  const load = React.useCallback(() => {
+    setLoading(true);
+    setError("");
     api
-      .get(`/api/faculty/analytics/cohorts?dimension=${dimension}`)
-      .then((r) => setCohorts(r.data?.success ? r.data.data : []))
-      .catch(() => setCohorts([]))
-      .finally(() => setCohortsLoading(false));
-  }, [dimension]);
+      .get(`/api/faculty/analytics/overview?dimension=${dimension}&days=${days}`)
+      .then((r) => { if (r.data?.success) setOverview(r.data.data); })
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't load analytics.")))
+      .finally(() => setLoading(false));
+  }, [dimension, days]);
 
+  React.useEffect(() => { load(); }, [load]);
   React.useEffect(() => {
-    if (!cohort) return;
-    setStudentsLoading(true);
+    api.get("/api/mcq/tests")
+      .then((r) => { if (r.data?.success) setTests(r.data.data.filter((t: { attempt_count: number }) => t.attempt_count > 0)); })
+      .catch(() => { /* item analysis is optional; the panel explains itself when empty */ });
+  }, []);
+
+  const openCohort = (name: string) => {
+    setProblemId(null); setProblemData(null);
+    setCohort(name); setCohortData(null); setDrillLoading(true);
     api
-      .get(`/api/faculty/analytics/cohort-students?dimension=${dimension}&value=${encodeURIComponent(cohort)}&limit=${STUDENT_LIMIT}`)
-      .then((r) => {
-        if (r.data?.success) {
-          setStudents(r.data.data);
-          setStudentsTotal(r.data.total ?? r.data.data.length);
-        }
-      })
-      .catch(() => setStudents([]))
-      .finally(() => setStudentsLoading(false));
-  }, [cohort, dimension]);
+      .get(`/api/faculty/analytics/cohort?dimension=${dimension}&value=${encodeURIComponent(name)}`)
+      .then((r) => { if (r.data?.success) setCohortData(r.data.data); })
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't load that cohort.")))
+      .finally(() => setDrillLoading(false));
+  };
 
-  const level = cohort ? 2 : 1;
-  const scopeNote =
-    me?.role === "admin" ? "All departments" : me?.department ? `Department: ${me.department}` : "Your department";
+  const openProblem = (id: string) => {
+    setCohort(null); setCohortData(null);
+    setProblemId(id); setProblemData(null); setDrillLoading(true);
+    api
+      .get(`/api/faculty/analytics/problem/${id}`)
+      .then((r) => { if (r.data?.success) setProblemData(r.data.data); })
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't load that problem.")))
+      .finally(() => setDrillLoading(false));
+  };
 
-  const totalStudents = cohorts.reduce((a, c) => a + c.students, 0);
-  const overallAvg = cohorts.length ? Math.round(cohorts.reduce((a, c) => a + c.avg_solved, 0) / cohorts.length) : 0;
-  const overallAc = cohorts.length ? Math.round(cohorts.reduce((a, c) => a + c.ac_rate, 0) / cohorts.length) : 0;
+  const loadItemAnalysis = (id: string) => {
+    setTestId(id);
+    setItemData(null);
+    if (!id) return;
+    api
+      .get(`/api/faculty/analytics/mcq/${id}`)
+      .then((r) => { if (r.data?.success) setItemData(r.data.data); })
+      .catch((e) => setError(apiErrorMessage(e, "Couldn't analyse that test.")));
+  };
+
+  const scopeNote = me?.role === "admin" ? "All departments" : me?.department ? `Department: ${me.department}` : "Your department";
+  const backToOverview = () => { setCohort(null); setProblemId(null); setCohortData(null); setProblemData(null); };
 
   return (
     <Box>
-      <PageHeader title="Analytics" subtitle={`Drill from cohorts to individual students · ${scopeNote}`} />
+      <PageHeader title="Analytics" subtitle={`${scopeNote} · drill from the whole cohort down to a single question`} />
 
-      <Breadcrumbs separator={<ChevronRightIcon fontSize="small" sx={{ color: "text.disabled" }} />} sx={{ mb: 2 }}>
-        <Link component="button" type="button" underline={level === 1 ? "none" : "hover"} color={level === 1 ? "text.primary" : "text.secondary"} onClick={() => setCohort(null)} sx={{ fontWeight: 600 }}>
-          All cohorts
-        </Link>
-        {cohort && <Typography variant="body2" color="text.primary" fontWeight={600}>{cohort}</Typography>}
-      </Breadcrumbs>
+      <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
+        <Breadcrumbs separator={<ChevronRightIcon fontSize="small" sx={{ color: "text.disabled" }} />} sx={{ flex: 1 }}>
+          <Link component="button" type="button" underline={cohort || problemId ? "hover" : "none"}
+            color={cohort || problemId ? "text.secondary" : "text.primary"} onClick={backToOverview} sx={{ fontWeight: 600 }}>
+            Overview
+          </Link>
+          {cohort && <Typography variant="body2" color="text.primary" fontWeight={600}>{cohort}</Typography>}
+          {problemId && (
+            <Typography variant="body2" color="text.primary" fontWeight={600}>
+              {(problemData as { problem?: { title: string } } | null)?.problem?.title ?? "Problem"}
+            </Typography>
+          )}
+        </Breadcrumbs>
+        <SegmentedButtons<Dim> value={dimension} onChange={(v) => { backToOverview(); setDimension(v); }} segments={DIMENSIONS} ariaLabel="Group by" />
+        <TextField select size="small" label="Period" value={days} onChange={(e) => setDays(Number(e.target.value))} sx={{ width: 130 }}>
+          {RANGES.map((r) => <MenuItem key={r.value} value={r.value}>{r.label}</MenuItem>)}
+        </TextField>
+      </Stack>
 
-      <SwapFade swapKey={level === 2 ? `c:${cohort}` : `d:${dimension}`}>
-        {/* ── Level 1: cohorts ── */}
-        {level === 1 && (
-          <Stack spacing={2}>
-            <Stack direction="row" justifyContent="flex-end">
-              <SegmentedButtons<Dim> value={dimension} onChange={setDimension} segments={DIMENSIONS} ariaLabel="Group cohorts by" />
-            </Stack>
+      {error && <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={load}>Retry</Button>}>{error}</Alert>}
 
-            {!cohortsLoading && cohorts.length > 0 && (
-              <RevealGroup>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
-                  <RevealItem><StatCard icon={<GroupsOutlinedIcon />} label="Cohorts" value={cohorts.length} accent="primary" /></RevealItem>
-                  <RevealItem><StatCard icon={<PersonOutlineIcon />} label="Students" value={totalStudents} accent="tertiary" /></RevealItem>
-                  <RevealItem><StatCard icon={<TrackChangesOutlinedIcon />} label="Avg Solved" value={overallAvg} accent="success" /></RevealItem>
-                  <RevealItem><StatCard icon={<InsightsOutlinedIcon />} label="Avg AC Rate" value={`${overallAc}%`} accent="warning" /></RevealItem>
-                </Box>
-              </RevealGroup>
-            )}
+      {loading ? (
+        <Stack spacing={2}>
+          <Skeleton variant="rounded" height={96} />
+          <Skeleton variant="rounded" height={300} />
+          <Skeleton variant="rounded" height={260} />
+        </Stack>
+      ) : !overview ? (
+        <EmptyState title="No analytics yet" description="Student activity will populate this." />
+      ) : cohort ? (
+        <CohortView data={cohortData} loading={drillLoading} onStudent={(id) => router.push(`/faculty/students/${id}`)} />
+      ) : problemId ? (
+        <ProblemView data={problemData} loading={drillLoading} />
+      ) : (
+        <Stack spacing={2.5}>
+          {/* ── KPI row ── */}
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
+            <KpiTile
+              label="Submissions" value={overview.kpis.submissions.value} delta={overview.kpis.submissions.delta}
+              series={overview.daily.map((d) => d.subs)} help="In the selected period, versus the period before it."
+            />
+            <KpiTile
+              label="Acceptance rate" value={overview.kpis.acRate.value} suffix="%" delta={overview.kpis.acRate.delta}
+              series={overview.daily.map((d) => (d.subs ? Math.round((d.ac / d.subs) * 100) : 0))}
+            />
+            <KpiTile
+              label="Active students" value={overview.kpis.activeStudents.value}
+              help="Submitted at least once in the period. No trend arrow — comparing to the previous period needs per-day membership the cache doesn't hold."
+            />
+            <KpiTile
+              label="Engaged overall" value={`${overview.kpis.engagedStudents.value}/${overview.kpis.totalStudents.value}`}
+              help="Students who have ever submitted, out of everyone in scope."
+            />
+          </Box>
 
-            <Reveal>
-              <SectionCard title="Cohorts — average problems solved" icon={<GroupsOutlinedIcon sx={{ fontSize: 20, color: "text.secondary" }} />}>
-                {cohortsLoading ? (
-                  <Skeleton variant="rounded" height={320} />
-                ) : cohorts.length === 0 ? (
-                  <EmptyState icon={<GroupsOutlinedIcon />} title="No cohort data yet" description="Student activity will populate these cohorts." />
-                ) : (
-                  <>
-                    <Box sx={{ height: 340 }}>
-                      <ResponsiveBar
-                        data={cohorts.map((c) => ({ cohort: c.cohort, value: c.avg_solved }))}
-                        keys={["value"]}
-                        indexBy="cohort"
-                        margin={{ top: 16, right: 16, bottom: 44, left: 44 }}
-                        padding={0.35}
-                        borderRadius={6}
-                        colors={[colors[0]]}
-                        theme={nivoTheme}
-                        enableLabel={false}
-                        axisLeft={{ tickSize: 0, tickPadding: 8 }}
-                        axisBottom={{ tickSize: 0, tickPadding: 8 }}
-                        onClick={(d) => setCohort(String(d.indexValue))}
-                        role="application"
-                        ariaLabel="Average problems solved per cohort"
-                      />
-                    </Box>
-                    <Typography variant="caption" color="text.secondary">Click a bar to drill into that cohort&apos;s students.</Typography>
-                  </>
-                )}
-              </SectionCard>
-            </Reveal>
-          </Stack>
-        )}
+          {/* ── Distribution first: the headline number hides the shape ── */}
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
+            <SectionCard title="How many problems each student has solved">
+              {overview.solvedDistribution && (
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                  Median {overview.solvedDistribution.median} · mean {overview.solvedDistribution.mean} · range {overview.solvedDistribution.min}–{overview.solvedDistribution.max}.
+                  {overview.solvedDistribution.median === 0 && " Half the cohort has solved nothing — the mean alone would hide that."}
+                </Typography>
+              )}
+              <DistributionChart histogram={overview.solvedHistogram} label="Problems solved" />
+            </SectionCard>
 
-        {/* ── Level 2: students in cohort ── */}
-        {level === 2 && (
+            <SectionCard title="Effort vs. success — one dot per student">
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                Bottom-right means grinding without success; top-left means efficient. Click a dot to open that student.
+              </Typography>
+              <StudentScatter points={overview.studentScatter} onPick={(id) => router.push(`/faculty/students/${id}`)} />
+            </SectionCard>
+          </Box>
+
+          <SectionCard title="When the work actually happens">
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+              Submissions by day of week and hour — useful for scheduling labs and spotting all-nighters before a deadline.
+            </Typography>
+            <ActivityHeatmap grid={overview.activityByDayHour} />
+          </SectionCard>
+
+          <SectionCard title="Activity over time">
+            {overview.daily.length > 1
+              ? <TrendChart daily={overview.daily} />
+              : <Typography variant="body2" color="text.secondary">Not enough days in this period to plot a trend.</Typography>}
+          </SectionCard>
+
+          {/* ── Cohort comparison ── */}
+          <SectionCard title={`Cohorts by ${dimension} — spread, not just the average`}>
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+              Each bar is one cohort&apos;s interquartile range with its median marked. Two cohorts with the same
+              average can look completely different here. Click a row below to drill in.
+            </Typography>
+            <BoxPlotRow rows={overview.cohorts.map((c) => ({ label: `${c.cohort} (${c.students})`, box: c.solvedDistribution }))} />
+            <TableContainer sx={{ mt: 2 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600 } }}>
+                    <TableCell>Cohort</TableCell>
+                    <TableCell align="right">Students</TableCell>
+                    <TableCell align="right">Active</TableCell>
+                    <TableCell align="right">Median solved</TableCell>
+                    <TableCell align="right">AC rate</TableCell>
+                    <TableCell align="right">Attempts / solve</TableCell>
+                    <TableCell />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {overview.cohorts.map((c) => (
+                    <TableRow key={c.cohort} hover sx={{ cursor: "pointer" }} onClick={() => openCohort(c.cohort)}>
+                      <TableCell><Typography variant="body2" fontWeight={500}>{c.cohort}</Typography></TableCell>
+                      <TableCell align="right">{c.students}</TableCell>
+                      <TableCell align="right">
+                        <Typography variant="body2" color={c.activeStudents === 0 ? "error.main" : undefined}>
+                          {c.activeStudents}
+                        </Typography>
+                      </TableCell>
+                      <TableCell align="right">{c.solvedDistribution?.median ?? "—"}</TableCell>
+                      <TableCell align="right">{c.acRate}%</TableCell>
+                      <TableCell align="right">{c.avgAttemptsToSolve ?? "—"}</TableCell>
+                      <TableCell align="right"><ChevronRightIcon fontSize="small" sx={{ color: "text.disabled" }} /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </SectionCard>
+
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
+            <SectionCard title="Verdicts">
+              <RankedBars rows={overview.verdicts as unknown as Record<string, string | number>[]} valueKey="count" indexKey="verdict" colorIndex={0} />
+            </SectionCard>
+            <SectionCard title="Languages used">
+              <RankedBars rows={overview.languages as unknown as Record<string, string | number>[]} valueKey="subs" indexKey="name" colorIndex={1} />
+            </SectionCard>
+          </Box>
+
+          <SectionCard title="Problems students struggle with most">
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+              Ranked by the share of students who attempted and never solved it. Click one for its funnel and failing test cases.
+            </Typography>
+            <TableContainer>
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600 } }}>
+                    <TableCell>Problem</TableCell>
+                    <TableCell sx={{ width: 110 }}>Difficulty</TableCell>
+                    <TableCell align="right">Tried</TableCell>
+                    <TableCell align="right">Solve rate</TableCell>
+                    <TableCell />
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {overview.hardestProblems.length === 0 ? (
+                    <TableRow><TableCell colSpan={5}><Typography variant="body2" color="text.secondary">Not enough attempts yet.</Typography></TableCell></TableRow>
+                  ) : overview.hardestProblems.map((p) => (
+                    <TableRow key={p.id} hover sx={{ cursor: "pointer" }} onClick={() => openProblem(p.id)}>
+                      <TableCell><Typography variant="body2">{p.title}</Typography></TableCell>
+                      <TableCell><DifficultyChip difficulty={p.difficulty} /></TableCell>
+                      <TableCell align="right">{p.attempters}</TableCell>
+                      <TableCell align="right">
+                        <Chip
+                          size="small" label={`${p.solveRate}%`}
+                          sx={{
+                            height: 20, fontSize: 11, fontWeight: 600,
+                            bgcolor: p.solveRate < 40 ? "errorContainer" : p.solveRate < 70 ? "warningContainer" : "successContainer",
+                            color: p.solveRate < 40 ? "onErrorContainer" : p.solveRate < 70 ? "onWarningContainer" : "onSuccessContainer",
+                          }}
+                        />
+                      </TableCell>
+                      <TableCell align="right"><ChevronRightIcon fontSize="small" sx={{ color: "text.disabled" }} /></TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </SectionCard>
+
+          {/* ── MCQ item analysis ── */}
           <SectionCard
-            title={`${cohort} — top students by problems solved`}
-            icon={<GroupsOutlinedIcon sx={{ fontSize: 20, color: "text.secondary" }} />}
-            action={<Typography variant="caption" color="text.secondary">{studentsTotal > STUDENT_LIMIT ? `Top ${STUDENT_LIMIT} of ${studentsTotal}` : `${studentsTotal} student${studentsTotal !== 1 ? "s" : ""}`}</Typography>}
+            title="MCQ question quality"
+            action={
+              <TextField select size="small" label="Test" value={testId} onChange={(e) => loadItemAnalysis(e.target.value)} sx={{ minWidth: 220 }}>
+                <MenuItem value="">Choose a test…</MenuItem>
+                {tests.map((t) => <MenuItem key={t.id} value={t.id}>{t.title} ({t.attempt_count})</MenuItem>)}
+              </TextField>
+            }
           >
-            {studentsLoading ? (
-              <Skeleton variant="rounded" height={340} />
-            ) : students.length === 0 ? (
-              <EmptyState icon={<PersonOutlineIcon />} title="No students in this cohort" />
+            {tests.length === 0 ? (
+              <Typography variant="body2" color="text.secondary">No MCQ test has submitted attempts yet.</Typography>
+            ) : !itemData ? (
+              <Typography variant="body2" color="text.secondary">
+                Pick a test to see which questions actually separate strong students from weak ones.
+              </Typography>
             ) : (
               <>
-                <Box sx={{ height: 360 }}>
-                  <ResponsiveBar
-                    data={students.map((s) => ({ name: s.name, solved: s.solved, id: s.id }))}
-                    keys={["solved"]}
-                    indexBy="name"
-                    margin={{ top: 16, right: 16, bottom: 88, left: 44 }}
-                    padding={0.3}
-                    borderRadius={6}
-                    colors={[colors[1]]}
-                    theme={nivoTheme}
-                    enableLabel={false}
-                    axisLeft={{ tickSize: 0, tickPadding: 8 }}
-                    axisBottom={{ tickSize: 0, tickPadding: 8, tickRotation: -35 }}
-                    onClick={(d) => router.push(`/faculty/students/${(d.data as { id: string }).id}`)}
-                    role="application"
-                    ariaLabel="Problems solved per student"
-                  />
-                </Box>
-                <Typography variant="caption" color="text.secondary">Click a student&apos;s bar to open their full profile.</Typography>
+                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                  {`${(itemData as { attempts: number }).attempts} attempts. `}
+                  Questions low on the vertical axis don&apos;t distinguish who knows the material — everyone answers them
+                  the same way, so they add length without adding information.
+                  {(itemData as { problematic: number }).problematic > 0 && ` ${(itemData as { problematic: number }).problematic} flagged.`}
+                </Typography>
+                <ItemAnalysisScatter items={(itemData as { items: never[] }).items} />
+                <Stack spacing={0.5} sx={{ mt: 1 }}>
+                  {((itemData as { items: { position: number; question_text: string; flag: string | null }[] }).items)
+                    .filter((i) => i.flag)
+                    .map((i) => (
+                      <Typography key={i.position} variant="caption" color="warning.main">
+                        Q{i.position}: {i.flag} — “{i.question_text.slice(0, 70)}…”
+                      </Typography>
+                    ))}
+                </Stack>
               </>
             )}
           </SectionCard>
-        )}
-      </SwapFade>
+        </Stack>
+      )}
     </Box>
+  );
+}
+
+// ── Level 2: one cohort ───────────────────────────────────────────────────────
+function CohortView({ data, loading, onStudent }: { data: Record<string, unknown> | null; loading: boolean; onStudent: (id: string) => void }) {
+  if (loading) return <Stack spacing={2}><Skeleton variant="rounded" height={120} /><Skeleton variant="rounded" height={300} /></Stack>;
+  if (!data) return <EmptyState title="Couldn't load this cohort" />;
+  const d = data as unknown as {
+    cohort: string; size: number; empty?: boolean;
+    summary: { active: number; acRate: number; solvedDistribution: BoxStats | null };
+    solvedHistogram: { bucket: string; count: number }[];
+    topicMastery: { topic: string; accuracy: number; attempts: number; students: number }[];
+    students: { id: string; name: string; rollNo: string | null; solved: number; subs: number; acRate: number; avgAttemptsToSolve: number | null; riskReasons: string[] }[];
+  };
+  if (d.empty) return <EmptyState title="No students in this cohort" />;
+
+  const atRisk = d.students.filter((s) => s.riskReasons.length > 0);
+
+  return (
+    <Stack spacing={2.5}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
+        <KpiTile label="Students" value={d.size} />
+        <KpiTile label="Active" value={d.summary.active} help="Have submitted at least once." />
+        <KpiTile label="Acceptance rate" value={d.summary.acRate} suffix="%" />
+        <KpiTile label="Needing attention" value={atRisk.length} help="Students with at least one risk signal." />
+      </Box>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
+        <SectionCard title="Spread of problems solved">
+          <DistributionChart histogram={d.solvedHistogram} label="Problems solved" />
+        </SectionCard>
+        <SectionCard title="Topic mastery">
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Share of attempts that ended in a solve, per topic — the shape shows where to spend the next lecture.
+          </Typography>
+          <TopicRadar topics={d.topicMastery} />
+        </SectionCard>
+      </Box>
+
+      <SectionCard title="Students — those needing attention first">
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600 } }}>
+                <TableCell>Student</TableCell>
+                <TableCell align="right">Solved</TableCell>
+                <TableCell align="right">Subs</TableCell>
+                <TableCell align="right">AC rate</TableCell>
+                <TableCell align="right">Attempts/solve</TableCell>
+                <TableCell>Signals</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {d.students.map((s) => (
+                <TableRow key={s.id} hover sx={{ cursor: "pointer" }} onClick={() => onStudent(s.id)}>
+                  <TableCell>
+                    <Typography variant="body2" fontWeight={500}>{s.name}</Typography>
+                    {s.rollNo && <Typography variant="caption" color="text.secondary">{s.rollNo}</Typography>}
+                  </TableCell>
+                  <TableCell align="right">{s.solved}</TableCell>
+                  <TableCell align="right">{s.subs}</TableCell>
+                  <TableCell align="right">{s.acRate}%</TableCell>
+                  <TableCell align="right">{s.avgAttemptsToSolve ?? "—"}</TableCell>
+                  <TableCell><RiskChips reasons={s.riskReasons} /></TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </SectionCard>
+    </Stack>
+  );
+}
+
+// ── Level 3: one problem ──────────────────────────────────────────────────────
+function ProblemView({ data, loading }: { data: Record<string, unknown> | null; loading: boolean }) {
+  if (loading) return <Stack spacing={2}><Skeleton variant="rounded" height={120} /><Skeleton variant="rounded" height={280} /></Stack>;
+  if (!data) return <EmptyState title="Couldn't load this problem" />;
+  const d = data as unknown as {
+    problem: { title: string; difficulty: string; tags: string[] };
+    funnel: { stage: string; value: number }[];
+    summary: {
+      submissions: number; attempters: number; solvers: number; solveRate: number;
+      neededMultipleAttempts: number; gaveUp: number;
+      attemptsToSolve: BoxStats | null; timeToSolveMinutes: BoxStats | null;
+    };
+    attemptsHistogram: { bucket: string; count: number }[];
+    verdicts: { verdict: string; count: number }[];
+    testHeatmap: { testIndex: number; isPublic: boolean; attempts: number; failures: number; failRate: number }[];
+    studentsAnalyzed: number;
+  };
+
+  return (
+    <Stack spacing={2.5}>
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
+        <KpiTile label="Attempted by" value={d.summary.attempters} />
+        <KpiTile label="Solved by" value={d.summary.solvers} />
+        <KpiTile label="Solve rate" value={d.summary.solveRate} suffix="%" help="Of the students who attempted it." />
+        <KpiTile label="Gave up" value={d.summary.gaveUp} help="Attempted but never got an accepted submission." />
+      </Box>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
+        <SectionCard title="Funnel">
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Separates &quot;nobody tried it&quot; from &quot;everybody tried and failed&quot; — a single solve-rate number can&apos;t.
+          </Typography>
+          <FunnelChart stages={d.funnel} />
+        </SectionCard>
+        <SectionCard title="Attempts needed to solve">
+          {d.summary.attemptsToSolve ? (
+            <>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                Median {d.summary.attemptsToSolve.median}, up to {d.summary.attemptsToSolve.max}.
+                {d.summary.neededMultipleAttempts > 0 && ` ${d.summary.neededMultipleAttempts} students needed more than one go.`}
+              </Typography>
+              <DistributionChart histogram={d.attemptsHistogram} label="Attempts before solving" />
+            </>
+          ) : <Typography variant="body2" color="text.secondary">Nobody has solved this yet.</Typography>}
+        </SectionCard>
+      </Box>
+
+      <SectionCard title="Which test case fails">
+        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+          From each student&apos;s most recent submission ({d.studentsAnalyzed} analysed). A dark square is the specific
+          edge case the class is missing — usually worth one slide.
+        </Typography>
+        <TestCaseHeatmap rows={d.testHeatmap} />
+      </SectionCard>
+
+      <SectionCard title="Verdicts on this problem">
+        <RankedBars rows={d.verdicts as unknown as Record<string, string | number>[]} valueKey="count" indexKey="verdict" colorIndex={4} />
+      </SectionCard>
+    </Stack>
   );
 }

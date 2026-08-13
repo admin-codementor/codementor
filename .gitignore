@@ -25,6 +25,7 @@ yarn.lock
 *.env
 
 # ── Firebase secrets ─────────────────────────────────────────
+backend/service-account.json
 backend/firebase-service-account.json
 
 # ── Build Outputs ────────────────────────────────────────────
@@ -87,3 +88,15 @@ _cleanup.js
 backend/_cleanup.js
 # Local design reference (not part of the app)
 Problem Solving Page Design After claude/
+
+# ── Internal planning docs (kept out of a public repo) ───────
+# The scale-readiness programme documents unfixed security findings, live
+# infrastructure details, and internal cost/negotiation notes. Keep these out
+# of git while the repository is public. If the repo is made private, consider
+# tracking them again — Chapters 16–18 are the runbook and incident playbooks,
+# and they are only useful if the whole team can reach them.
+docs/scale-readiness/
+# Compiled export of the same programme — excluding the source folder achieves
+# nothing if the assembled document is committed alongside it.
+docs/CodeMentor-Scale-Readiness-Programme.docx
+docs.zip

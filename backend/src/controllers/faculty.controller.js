@@ -1,16 +1,20 @@
 const { Parser } = require('json2csv');
-const { getGeminiClient } = require('./ai.controller');
+const aiGateway = require('../services/aiGateway');
+const { generateVerifiedTestCases } = require('../services/testCaseGenerator');
 const { logAction } = require('../middleware/audit');
-const { scopeDept, canSeeDepartment } = require('../middleware/role.middleware');
+const { scopeDept, canSeeDepartment, canManageResource, canManageOwnedBy } = require('../middleware/role.middleware');
 const { cached } = require('../utils/cache');
 const { computeStrengthsWeaknesses } = require('../utils/topicScores');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
+const classroomRepo = require('../repositories/classroomRepository');
 const ratingHistoryRepo = require('../repositories/ratingHistoryRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const codingProfileRepo = require('../repositories/codingProfileRepository');
 const contestRepo = require('../repositories/contestRepository');
+const mcqRepo = require('../repositories/mcqRepository');
+const analytics = require('../services/analyticsService');
 const submissionRepo = require('../repositories/submissionRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 
@@ -32,6 +36,20 @@ const toISO = (value) => {
 // when the dimension is interpolated into GROUP BY / WHERE).
 const COHORT_DIMS = { department: 'department', year: 'year', section: 'section' };
 
+// Absent status means published — see problems.controller.js for why.
+const problemStatus = (p) => (p?.status ?? 'published');
+
+// Fetch a problem and confirm the requester may modify it. Admin bypasses; an HOD
+// may manage problems authored by staff in their own department (decision D1);
+// faculty get only their own. Sends the 404 and returns null when not allowed, so
+// callers can `if (!problem) return;`.
+async function assertProblemAccess(req, res, problemId) {
+  const problem = await problemRepo.getById(problemId);
+  if (problem && (await canManageOwnedBy(req, problem.createdBy))) return problem;
+  res.status(404).json({ success: false, error: 'Problem not found or not authorized' });
+  return null;
+}
+
 exports.getDashboardData = async (req, res) => {
   try {
     // 1. Total Students
@@ -50,8 +68,10 @@ exports.getDashboardData = async (req, res) => {
 
     const problemsSolved = new Set(allSubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId)).size;
 
-    // 5. Assignments List (for this faculty member)
-    const assignments = (await assignmentRepo.listByFacultyId(req.user.id))
+    // 5. Assignments list — own for faculty, all for admin/HOD oversight (D1).
+    // An HOD used to see an empty dashboard here because nothing is authored by them.
+    const seesAll = req.user.role === 'admin' || req.user.role === 'hod';
+    const assignments = (seesAll ? await assignmentRepo.getAll() : await assignmentRepo.listByFacultyId(req.user.id))
       .sort((a, b) => (a.deadline?.toMillis?.() ?? new Date(a.deadline).getTime()) - (b.deadline?.toMillis?.() ?? new Date(b.deadline).getTime()))
       .map(a => ({ id: a.id, title: a.title, deadline: a.deadline, created_at: a.createdAt }));
 
@@ -68,47 +88,161 @@ exports.getDashboardData = async (req, res) => {
   }
 };
 
+// Shared validation for assignment create/update. Returns { error } on failure or
+// the normalised fields on success.
+async function normaliseAssignmentInput({ title, deadline, problem_ids, allowed_cidrs, is_exam, classroom_ids }, req) {
+  if (typeof title !== 'string' || !title.trim() || title.length > 200) {
+    return { error: 'Title is required and must be ≤ 200 characters.' };
+  }
+  if (!deadline || Number.isNaN(new Date(deadline).getTime())) {
+    return { error: 'A valid deadline is required.' };
+  }
+  if (!Array.isArray(problem_ids) || problem_ids.length === 0) {
+    return { error: 'Select at least one problem — an assignment with no problems is not usable by students.' };
+  }
+  if (problem_ids.length > 50) {
+    return { error: 'An assignment can hold at most 50 problems.' };
+  }
+
+  // Every referenced problem must exist, otherwise students open an assignment
+  // whose problems 404. This is the check that was missing when the UI shipped
+  // `problem_ids: []` unconditionally.
+  const found = await problemRepo.getMapByIds(problem_ids);
+  const missing = problem_ids.filter(pid => !found.has(pid));
+  if (missing.length) {
+    return { error: `Unknown problem id(s): ${missing.slice(0, 3).join(', ')}` };
+  }
+
+  // A draft problem 404s for students, so assigning one hands out an assignment
+  // that cannot be opened.
+  const drafts = problem_ids.filter(pid => (found.get(pid)?.status ?? 'published') === 'draft');
+  if (drafts.length) {
+    const titles = drafts.slice(0, 3).map(pid => found.get(pid)?.title || pid);
+    return {
+      error: `These problems are still drafts and aren't visible to students: ${titles.join(', ')}. Publish them first.`,
+    };
+  }
+
+  const { validateCIDR } = require('../middleware/cidrCheck');
+  const cidrs = Array.isArray(allowed_cidrs) ? allowed_cidrs.map(c => String(c).trim()).filter(Boolean) : [];
+  for (const cidr of cidrs) {
+    if (!validateCIDR(cidr)) return { error: `Invalid CIDR: "${cidr}"` };
+  }
+
+  // Class targeting. An EMPTY list means "every student", which is what every
+  // assignment created before targeting existed effectively was — so omitting the
+  // field keeps the old behaviour rather than silently hiding existing work.
+  let classroomIds = [];
+  if (Array.isArray(classroom_ids) && classroom_ids.length) {
+    classroomIds = [...new Set(classroom_ids.map(String))].slice(0, 50);
+    const unknown = [];
+    for (const cid of classroomIds) {
+      const c = await classroomRepo.getById(cid);
+      // Only classes the requester may act on — otherwise an assignment could be
+      // pushed into another faculty member's class.
+      if (!c || !(req && await canManageOwnedBy(req, c.facultyId))) unknown.push(cid);
+    }
+    if (unknown.length) {
+      return { error: `Unknown or inaccessible class id(s): ${unknown.slice(0, 3).join(', ')}` };
+    }
+  }
+
+  return {
+    fields: {
+      title: title.trim(),
+      deadline,
+      allowedCidrs: cidrs,
+      isExam: is_exam === true,
+      problemIds: [...new Set(problem_ids)],
+      classroomIds,
+    },
+  };
+}
+
 exports.createAssignment = async (req, res) => {
   try {
-    const { title, deadline, problem_ids, allowed_cidrs, is_exam } = req.body;
+    const { error, fields } = await normaliseAssignmentInput(req.body, req);
+    if (error) return res.status(400).json({ success: false, error });
 
-    if (!title || !deadline || !problem_ids || !Array.isArray(problem_ids)) {
-      return res.status(400).json({ success: false, error: 'Invalid input' });
-    }
-    if (typeof title !== 'string' || title.length > 200) {
-      return res.status(400).json({ success: false, error: 'Title must be ≤ 200 characters.' });
-    }
+    const assignment = await assignmentRepo.create({ facultyId: req.user.id, ...fields });
 
-    // Validate CIDRs if provided
-    const { validateCIDR } = require('../middleware/cidrCheck');
-    const cidrs = Array.isArray(allowed_cidrs) ? allowed_cidrs : [];
-    for (const cidr of cidrs) {
-      if (!validateCIDR(cidr.trim())) {
-        return res.status(400).json({ success: false, error: `Invalid CIDR: "${cidr}"` });
-      }
-    }
-
-    await assignmentRepo.create({
-      facultyId: req.user.id, title, deadline, allowedCidrs: cidrs, isExam: is_exam === true,
-      problemIds: problem_ids,
-    });
-
-    res.json({ success: true, message: 'Assignment created successfully' });
+    logAction(req, 'assignment.create', `"${fields.title}" (${fields.problemIds.length} problems)`);
+    res.json({ success: true, message: 'Assignment created successfully', data: { id: assignment.id } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
 
-// Verify the requesting faculty owns the assignment (admins bypass). Returns the
-// assignment if access is allowed; otherwise sends a 404 and returns null.
+exports.updateAssignment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const assignment = await assertAssignmentAccess(req, res, id);
+    if (!assignment) return;
+
+    const { error, fields } = await normaliseAssignmentInput(req.body, req);
+    if (error) return res.status(400).json({ success: false, error });
+
+    await assignmentRepo.update(id, fields);
+
+    logAction(req, 'assignment.update', `"${fields.title}" (${fields.problemIds.length} problems)`);
+    res.json({ success: true, message: 'Assignment updated', data: { id } });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// Assignment detail for the edit form — includes the attached problem titles so
+// the picker can show what is already selected.
+exports.getAssignmentDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const assignment = await assertAssignmentAccess(req, res, id);
+    if (!assignment) return;
+
+    const problemIds = assignment.problemIds || [];
+    const problemsMap = await problemRepo.getMapByIds(problemIds);
+
+    // Resolve class names so the builder can show what is already targeted.
+    const classroomIds = assignment.classroomIds || [];
+    const classes = [];
+    for (const cid of classroomIds) {
+      const c = await classroomRepo.getById(cid);
+      classes.push({ id: cid, name: c?.name || '(deleted class)', member_count: c ? await classroomRepo.getMemberCount(cid) : 0 });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        id: assignment.id,
+        title: assignment.title || '',
+        deadline: toISO(assignment.deadline),
+        is_exam: !!assignment.isExam,
+        allowed_cidrs: assignment.allowedCidrs || [],
+        classroom_ids: classroomIds,
+        classes,
+        problems: problemIds.map(pid => ({
+          id: pid,
+          title: problemsMap.get(pid)?.title || '(deleted problem)',
+          difficulty: problemsMap.get(pid)?.difficulty || null,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('Get Assignment Detail Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch assignment' });
+  }
+};
+
+// Verify the requester may act on the assignment. Admin bypasses; an HOD may act
+// on assignments authored by staff in their own department (decision D1); faculty
+// get only their own. Sends a 404 and returns null when not allowed.
 async function assertAssignmentAccess(req, res, assignmentId) {
   const assignment = await assignmentRepo.getById(assignmentId);
-  if (!assignment || (assignment.facultyId !== req.user.id && req.user.role !== 'admin')) {
-    res.status(404).json({ success: false, error: 'Assignment not found' });
-    return null;
-  }
-  return assignment;
+  if (assignment && (await canManageOwnedBy(req, assignment.facultyId))) return assignment;
+  res.status(404).json({ success: false, error: 'Assignment not found' });
+  return null;
 }
 
 exports.getAssignmentSubmissions = async (req, res) => {
@@ -209,6 +343,11 @@ exports.createProblem = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Description must be ≤ 20000 characters.' });
     }
 
+    // Only an explicit 'draft' creates a draft. Everything that existed before the
+    // lifecycle (the quick dialog, ZIP import, import-commit) keeps publishing
+    // directly, so this is additive rather than a behaviour change.
+    const status = req.body.status === 'draft' ? 'draft' : 'published';
+
     const stubsObj = (stubs && typeof stubs === 'object' && !Array.isArray(stubs)) ? stubs : {};
     const mode   = ['acm', 'oi'].includes(scoring_mode) ? scoring_mode : 'acm';
     const mScore = Number.isInteger(max_score) && max_score > 0 ? max_score : 100;
@@ -227,10 +366,10 @@ exports.createProblem = async (req, res) => {
       scoringMode: mode, maxScore: mScore, editorial: editorial || null,
       editorialVisibleAt: editorial_visible_at || null,
       usesChecker, checkerCode, checkerLanguageId: checkerLangId,
-      timeLimit: 2, memoryLimit: 256,
+      timeLimit: 2, memoryLimit: 256, status,
     }, test_cases || []);
 
-    res.json({ success: true, message: 'Problem added successfully', data: { id: problem.id } });
+    res.json({ success: true, message: 'Problem added successfully', data: { id: problem.id, status } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -241,13 +380,11 @@ exports.updateProblem = async (req, res) => {
   try {
     const { id } = req.params;
     const { title, description, difficulty, tags, stubs, scoring_mode, max_score,
-            editorial, editorial_visible_at,
+            editorial, editorial_visible_at, test_cases,
             uses_checker, checker_code, checker_language_id } = req.body;
 
-    const existing = await problemRepo.getById(id);
-    if (!existing || existing.createdBy !== req.user.id) {
-      return res.status(404).json({ success: false, error: 'Problem not found or not authorized' });
-    }
+    const existing = await assertProblemAccess(req, res, id);
+    if (!existing) return;
 
     const partial = {};
     if (title !== undefined) partial.title = title;
@@ -264,7 +401,27 @@ exports.updateProblem = async (req, res) => {
     if (Number.isInteger(checker_language_id) && checker_language_id > 0) partial.checkerLanguageId = checker_language_id;
 
     await problemRepo.update(id, partial);
-    res.json({ success: true, message: 'Problem updated' });
+
+    // Test cases used to be silently ignored here, so a problem's tests could
+    // never be corrected after creation. `test_cases` is treated as the complete
+    // replacement set — omit the key entirely to leave the existing tests alone.
+    let testCount;
+    if (Array.isArray(test_cases)) {
+      const clean = test_cases.filter(
+        tc => tc && typeof tc.input === 'string' && typeof tc.output === 'string' && tc.input.trim() && tc.output.trim()
+      );
+      if (clean.length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'A problem needs at least one test case with both input and expected output.',
+        });
+      }
+      await problemRepo.replaceTestCases(id, clean);
+      testCount = clean.length;
+    }
+
+    logAction(req, 'problem.update', `problem ${id}`);
+    res.json({ success: true, message: 'Problem updated', data: { id, test_count: testCount } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -274,10 +431,7 @@ exports.updateProblem = async (req, res) => {
 exports.deleteProblem = async (req, res) => {
   try {
     const { id } = req.params;
-    const existing = await problemRepo.getById(id);
-    if (!existing || existing.createdBy !== req.user.id) {
-      return res.status(404).json({ success: false, error: 'Problem not found or not authorized' });
-    }
+    if (!(await assertProblemAccess(req, res, id))) return;
 
     await problemRepo.remove(id);
 
@@ -289,58 +443,55 @@ exports.deleteProblem = async (req, res) => {
   }
 };
 
+// Expected outputs come from running a reference solution through Judge0, never
+// from the model — see services/testCaseGenerator.js for the reasoning. The old
+// implementation asked the model for input/output pairs directly, which risked
+// marking an entire cohort wrong in the same way.
 exports.generateAITestCases = async (req, res) => {
   try {
-    const { title, description } = req.body;
+    const { title, description, count } = req.body;
 
     if (!title || !description) {
       return res.status(400).json({ success: false, error: 'Title and description are required' });
     }
 
-    const ai = getGeminiClient();
-
-    if (!ai) {
-      const mockCases = Array.from({ length: 15 }).map((_, i) => ({
-        input: `Mock Input ${i + 1}`,
-        output: `Mock Output ${i + 1}`
-      }));
-      return res.json({
-        success: true,
-        data: { suggestedDifficulty: 'medium', testCases: mockCases }
+    if (!aiGateway.isConfigured()) {
+      return res.status(503).json({
+        success: false,
+        error: 'No AI provider is configured. Set GEMINI_API_KEY (or AI_PROVIDER/AI_BASE_URL) and check with: node src/scripts/checkAiKey.js',
       });
     }
 
-    const prompt = `You are an expert algorithmic judge. The faculty member is creating a new coding problem.
-Title: ${title}
-Description: ${description}
+    const result = await generateVerifiedTestCases({ title, description, count });
 
-Generate EXACTLY 15 edge-case test inputs automatically.
-Include edge cases such as: empty input, maximum constraints, duplicates, negative numbers, and single elements.
-Also suggest a difficulty rating.
-
-Output strictly valid JSON matching this schema:
-{
-  "suggestedDifficulty": "easy" | "medium" | "hard",
-  "testCases": [
-    { "input": "string", "output": "string" }
-  ]
-}`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-      config: { responseMimeType: 'application/json' }
-    });
-
-    const parsed = JSON.parse(response.text);
-    if (!parsed.testCases || !Array.isArray(parsed.testCases)) {
-      throw new Error('Invalid AI Response Structure');
-    }
-
-    res.json({ success: true, data: parsed });
+    logAction(req, 'ai.generate-tests', `"${title}" → ${result.testCases.length} verified case(s)`);
+    res.json({ success: true, data: result });
   } catch (error) {
+    // These are expected outcomes, not crashes: report them precisely so the
+    // faculty member knows whether to retry, fix the statement, or start Judge0.
+    if (error.code === 'REFERENCE_UNRELIABLE') {
+      return res.status(422).json({
+        success: false, code: error.code, error: error.message, details: error.details ?? null,
+      });
+    }
+    if (error.code === 'NO_CASES') {
+      return res.status(422).json({
+        success: false, code: error.code, error: error.message, details: error.details ?? null,
+      });
+    }
+    if (error.code === 'JUDGE0_UNREACHABLE') {
+      return res.status(503).json({
+        success: false, code: error.code,
+        error: 'Judge0 is not reachable, so generated outputs cannot be verified. Start Judge0 and try again.',
+      });
+    }
+    if (error.name === 'AiError') {
+      return res.status(error.status && error.status >= 400 && error.status < 600 ? error.status : 502).json({
+        success: false, error: `AI provider error: ${error.message}`,
+      });
+    }
     console.error('AI Test Generation Failed:', error);
-    res.status(500).json({ success: false, error: 'AI Generation Failed' });
+    res.status(500).json({ success: false, error: 'Test-case generation failed' });
   }
 };
 
@@ -469,9 +620,7 @@ exports.generateRandomTests = async (req, res) => {
       return res.status(400).json({ success: false, error: 'generator and reference code + language ids are required' });
     }
 
-    // Ownership check
-    const own = await problemRepo.getById(id);
-    if (!own || own.createdBy !== req.user.id) return res.status(404).json({ success: false, error: 'Problem not found' });
+    if (!(await assertProblemAccess(req, res, id))) return;
 
     const { runOnJudge0 } = require('../utils/judge0Run');
     const n = Math.min(Math.max(parseInt(count, 10) || 5, 1), 25);
@@ -552,19 +701,34 @@ exports.getProblemTestHeatmap = async (req, res) => {
 
 exports.getProblems = async (req, res) => {
   try {
-    const mine = (await problemRepo.getAll()).filter(p => p.createdBy === req.user.id);
-    const subsPerProblem = await Promise.all(mine.map(p => submissionRepo.listByProblem(p.id)));
+    // Admins and HODs get catalogue-wide visibility for oversight (decision D1);
+    // faculty see their own. Editing someone else's is still gated separately by
+    // assertProblemAccess, so `canEdit` tells the UI which rows are actionable.
+    const seesAll = req.user.role === 'admin' || req.user.role === 'hod';
+    const all = await problemRepo.getAll();
+    const visible = seesAll ? all : all.filter(p => p.createdBy === req.user.id);
 
-    const problems = mine
+    const [subsPerProblem, usersMap] = await Promise.all([
+      Promise.all(visible.map(p => submissionRepo.listByProblem(p.id))),
+      seesAll ? userRepo.getAllUsersMap() : Promise.resolve(new Map()),
+    ]);
+
+    const problems = visible
       .map((p, i) => {
         const subs = subsPerProblem[i];
         const total = subs.length;
         const accepted = subs.filter(s => s.verdict === 'Accepted').length;
+        const owner = usersMap.get(p.createdBy);
         return {
           id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [], created_at: p.createdAt,
           totalSubmissions: total,
           acceptedCount: accepted,
           acceptanceRate: total > 0 ? Math.round((accepted / total) * 100) : 0,
+          status: problemStatus(p),
+          author: p.createdBy === req.user.id ? 'You' : (owner?.name || null),
+          canEdit: p.createdBy === req.user.id
+            || req.user.role === 'admin'
+            || canManageResource(req, p.createdBy, owner?.department ?? null),
         };
       })
       .sort((a, b) => (b.created_at?.toMillis?.() ?? 0) - (a.created_at?.toMillis?.() ?? 0));
@@ -573,6 +737,205 @@ exports.getProblems = async (req, res) => {
   } catch (error) {
     console.error('Get Faculty Problems Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch problems' });
+  }
+};
+
+// Question bank: every reusable item in one place, with how often each is used.
+// @route GET /api/faculty/question-bank
+//
+// The point is reuse. Faculty were re-typing problems that already existed because
+// nothing showed them the catalogue with enough context to judge "can I use this?"
+// — so this returns usage counts (assignments, contests, submissions) alongside the
+// filterable metadata, plus MCQ questions from every test they can see.
+exports.getQuestionBank = async (req, res) => {
+  try {
+    const seesAll = req.user.role === 'admin' || req.user.role === 'hod';
+
+    const [allProblems, assignments, contests, usersMap] = await Promise.all([
+      problemRepo.getAll(),
+      assignmentRepo.getAll(),
+      contestRepo.listAll(),
+      userRepo.getAllUsersMap(),
+    ]);
+
+    // Count references once, rather than per problem.
+    const assignmentUse = new Map();
+    for (const a of assignments) {
+      for (const pid of a.problemIds || []) {
+        assignmentUse.set(pid, (assignmentUse.get(pid) || 0) + 1);
+      }
+    }
+    const contestUse = new Map();
+    for (const c of contests) {
+      for (const pid of c.problemIds || []) {
+        contestUse.set(pid, (contestUse.get(pid) || 0) + 1);
+      }
+    }
+
+    const visibleProblems = seesAll ? allProblems : allProblems.filter(p => p.createdBy === req.user.id);
+
+    const problems = await Promise.all(visibleProblems.map(async (p) => {
+      const owner = usersMap.get(p.createdBy);
+      const testCount = (await problemRepo.getTestCases(p.id)).length;
+      return {
+        kind: 'problem',
+        id: p.id,
+        title: p.title,
+        difficulty: (p.difficulty || 'easy').toLowerCase(),
+        tags: p.tags || [],
+        status: problemStatus(p),
+        test_case_count: testCount,
+        used_in_assignments: assignmentUse.get(p.id) || 0,
+        used_in_contests: contestUse.get(p.id) || 0,
+        author: p.createdBy === req.user.id ? 'You' : (owner?.name || null),
+        can_edit: p.createdBy === req.user.id
+          || req.user.role === 'admin'
+          || canManageResource(req, p.createdBy, owner?.department ?? null),
+        created_at: p.createdAt,
+      };
+    }));
+
+    // MCQ questions, flattened out of their tests so they can be browsed by topic.
+    const tests = seesAll ? await mcqRepo.listAll() : await mcqRepo.listByFaculty(req.user.id);
+    const mcqQuestions = [];
+    for (const t of tests) {
+      const qs = await mcqRepo.getQuestions(t.id);
+      for (const q of qs) {
+        mcqQuestions.push({
+          kind: 'mcq',
+          id: q.id,
+          test_id: t.id,
+          test_title: t.title,
+          title: q.questionText,
+          topic: q.topic || null,
+          category: t.category,
+          marks: q.marks ?? 1,
+          option_count: (q.options || []).length,
+          is_published: !!t.isPublished,
+          author: t.facultyId === req.user.id ? 'You' : (usersMap.get(t.facultyId)?.name || null),
+        });
+      }
+    }
+
+    problems.sort((a, b) => (b.created_at?.toMillis?.() ?? 0) - (a.created_at?.toMillis?.() ?? 0));
+
+    res.json({
+      success: true,
+      data: {
+        problems,
+        mcqQuestions,
+        summary: {
+          problems: problems.length,
+          publishedProblems: problems.filter(p => p.status === 'published').length,
+          unusedProblems: problems.filter(p => p.used_in_assignments === 0 && p.used_in_contests === 0).length,
+          mcqQuestions: mcqQuestions.length,
+          tests: tests.length,
+        },
+      },
+    });
+  } catch (error) {
+    console.error('Question bank error:', error);
+    res.status(500).json({ success: false, error: 'Could not load the question bank.' });
+  }
+};
+
+// Publish or unpublish a problem.
+// @route PATCH /api/faculty/problems/:id/status   { status: 'draft' | 'published' }
+//
+// Publishing is gated on the problem actually being gradeable. Unpublishing is
+// always allowed — pulling a broken problem back must never be blocked.
+exports.setProblemStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const target = req.body?.status;
+    if (target !== 'draft' && target !== 'published') {
+      return res.status(400).json({ success: false, error: "status must be 'draft' or 'published'." });
+    }
+
+    const problem = await assertProblemAccess(req, res, id);
+    if (!problem) return;
+
+    if (target === 'published') {
+      const testCases = await problemRepo.getTestCases(id);
+      const complete = testCases.filter(t => String(t.inputData ?? '').trim() && String(t.expectedOutput ?? '').trim());
+      const missing = [];
+      if (!problem.title?.trim()) missing.push('a title');
+      if (!problem.description?.trim()) missing.push('a problem statement');
+      if (complete.length === 0) missing.push('at least one complete test case');
+      if (missing.length) {
+        return res.status(422).json({
+          success: false,
+          code: 'INCOMPLETE',
+          error: `This problem still needs ${missing.join(', ')} before students can see it.`,
+        });
+      }
+    }
+
+    await problemRepo.update(id, { status: target });
+
+    // Unpublishing is allowed unconditionally, but if the problem is already in an
+    // assignment the faculty member needs to know students just lost access to it.
+    let warnings = [];
+    if (target === 'draft') {
+      const affected = (await assignmentRepo.getAll())
+        .filter(a => (a.problemIds || []).includes(id))
+        .map(a => a.title);
+      if (affected.length) {
+        warnings.push(
+          `This problem is used by ${affected.length} assignment(s): ${affected.slice(0, 3).join(', ')}. Students can no longer open it there.`,
+        );
+      }
+    }
+
+    logAction(req, 'problem.status', `problem ${id} → ${target}`);
+    res.json({ success: true, data: { id, status: target, warnings } });
+  } catch (error) {
+    console.error('Set problem status error:', error);
+    res.status(500).json({ success: false, error: 'Could not change the problem status.' });
+  }
+};
+
+// Full problem detail (including test cases) for the authoring form. Without this
+// the edit dialog only had the list row's title/difficulty/tags and blanked the
+// statement, tests, stubs, editorial and checker every time it opened.
+exports.getProblemDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const problem = await assertProblemAccess(req, res, id);
+    if (!problem) return;
+
+    const testCases = await problemRepo.getTestCases(id);
+
+    res.json({
+      success: true,
+      data: {
+        id: problem.id,
+        title: problem.title || '',
+        description: problem.description || '',
+        status: problemStatus(problem),
+        difficulty: (problem.difficulty || 'easy').toLowerCase(),
+        tags: problem.tags || [],
+        stubs: problem.stubs || {},
+        scoring_mode: problem.scoringMode || 'acm',
+        max_score: problem.maxScore ?? 100,
+        editorial: problem.editorial || '',
+        editorial_visible_at: problem.editorialVisibleAt || '',
+        uses_checker: !!problem.usesChecker,
+        checker_code: problem.checkerCode || '',
+        checker_language_id: problem.checkerLanguageId ?? null,
+        time_limit: problem.timeLimit ?? 2,
+        memory_limit: problem.memoryLimit ?? 256,
+        test_cases: testCases.map(tc => ({
+          input: tc.inputData ?? '',
+          output: tc.expectedOutput ?? '',
+          is_public: !!tc.isPublic,
+          score: tc.score ?? 0,
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('Get Problem Detail Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch problem' });
   }
 };
 
@@ -815,6 +1178,341 @@ exports.getClassAnalytics = async (req, res) => {
 };
 
 // Per-student deep-dive: learning curve, topic mastery radar, verdict mix, totals.
+// ── Analytics overview: institution / department level ────────────────────────
+// Everything here comes from one cached snapshot (services/analyticsService.js)
+// rather than a full-collection read per panel.
+//
+// The deliberate emphasis is on *distributions* over averages: a cohort mean of
+// "12 solved" reads the same whether every student solved 12, or half solved 24
+// and half solved none — and those need opposite responses from a lecturer.
+exports.getAnalyticsOverview = async (req, res) => {
+  try {
+    const dept = scopeDept(req);
+    const dimension = analytics.COHORT_DIMS[req.query.dimension] ? req.query.dimension : 'department';
+    const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 7), 365);
+
+    const snap = await analytics.getSnapshot(dept);
+
+    const now = Date.now();
+    const windowStart = now - days * analytics.DAY_MS;
+    const prevStart = windowStart - days * analytics.DAY_MS;
+
+    const inRange = (d, from, to) => {
+      const ms = new Date(`${d}T00:00:00Z`).getTime();
+      return ms >= from && ms < to;
+    };
+    const current = snap.perDay.filter((d) => inRange(d.date, windowStart, now + analytics.DAY_MS));
+    const previous = snap.perDay.filter((d) => inRange(d.date, prevStart, windowStart));
+
+    const sum = (rows, key) => rows.reduce((a, r) => a + r[key], 0);
+    const rate = (rows) => (sum(rows, 'subs') ? Math.round((sum(rows, 'ac') / sum(rows, 'subs')) * 100) : 0);
+
+    // "Active in the window" = last activity falls inside it, which is exactly
+    // equivalent to "submitted at least once in the window".
+    //
+    // The same trick does NOT work for the previous window: a student active in
+    // both periods has their lastActive in the current one, so a previous-period
+    // count would undercount. Rather than show a wrong arrow, this KPI has no
+    // delta — computing one honestly needs per-day membership the snapshot
+    // deliberately doesn't carry (it would not fit in the cache at scale).
+    const activeInWindow = snap.studentStats.filter((s) => s.lastActiveMs && s.lastActiveMs >= windowStart).length;
+
+    // A trend is only meaningful with something to compare against.
+    const delta = (cur, prev) => (prev === 0 ? null : Math.round(((cur - prev) / prev) * 100));
+
+    const cohorts = analytics.cohortsFrom(snap, dimension);
+    const solvedValues = snap.studentStats.map((s) => s.solved);
+
+    res.json({
+      success: true,
+      data: {
+        scope: { department: dept, dimension, days, generatedAt: snap.generatedAt },
+        kpis: {
+          submissions: { value: sum(current, 'subs'), delta: delta(sum(current, 'subs'), sum(previous, 'subs')) },
+          acRate: { value: rate(current), delta: delta(rate(current), rate(previous)) },
+          activeStudents: { value: activeInWindow, delta: null },
+          totalStudents: { value: snap.totalStudents, delta: null },
+          engagedStudents: {
+            value: snap.studentStats.filter((s) => s.subs > 0).length,
+            delta: null,
+          },
+        },
+        // Sparkline + trend series.
+        daily: current.map((d) => ({ date: d.date, subs: d.subs, ac: d.ac, activeUsers: d.activeUsers })),
+        // day × hour rhythm — when work actually happens.
+        activityByDayHour: snap.dayHour,
+        verdicts: snap.verdicts,
+        languages: snap.languages,
+        cohorts,
+        // The class-wide shape the averages hide.
+        solvedHistogram: analytics.histogram(solvedValues, 5),
+        solvedDistribution: analytics.boxStats(solvedValues),
+        // One dot per student: effort against success, for spotting quadrants.
+        studentScatter: snap.studentStats
+          .filter((s) => s.subs > 0)
+          .map((s) => ({
+            id: s.id, name: s.name, x: s.subs, y: s.acRate, solved: s.solved,
+            cohort: s[analytics.COHORT_DIMS[dimension]] || 'Unassigned',
+          })),
+        hardestProblems: snap.problemStats
+          .filter((p) => p.attempters >= 2)
+          .sort((a, b) => a.solveRate - b.solveRate)
+          .slice(0, 10),
+        mostAttempted: snap.problemStats.slice(0, 10),
+      },
+    });
+  } catch (error) {
+    console.error('Analytics overview error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load analytics.' });
+  }
+};
+
+// ── Analytics: one cohort in depth ────────────────────────────────────────────
+exports.getCohortDetail = async (req, res) => {
+  try {
+    const dept = scopeDept(req);
+    const dimension = analytics.COHORT_DIMS[req.query.dimension] ? req.query.dimension : 'department';
+    const dim = analytics.COHORT_DIMS[dimension];
+    const value = String(req.query.value ?? 'Unassigned');
+
+    if (dimension === 'department' && dept !== null && value !== dept) {
+      return res.status(403).json({ success: false, error: 'Outside your department scope.' });
+    }
+
+    const snap = await analytics.getSnapshot(dept);
+    const members = snap.studentStats.filter((s) => (s[dim] || 'Unassigned') === value);
+    if (members.length === 0) {
+      return res.json({ success: true, data: { cohort: value, students: [], empty: true } });
+    }
+
+    // Topic mastery is per-student and small, so it is fetched only for the
+    // cohort being inspected rather than for everyone in the snapshot.
+    const masteryByTopic = new Map();
+    await Promise.all(members.map(async (m) => {
+      const rows = await topicMasteryRepo.listByUser(m.id);
+      for (const r of rows) {
+        const topic = r.topic || 'general';
+        if (!masteryByTopic.has(topic)) masteryByTopic.set(topic, { attempts: 0, solved: 0, students: new Set() });
+        const t = masteryByTopic.get(topic);
+        t.attempts += r.attempts ?? 0;
+        t.solved += r.solved ?? 0;
+        t.students.add(m.id);
+      }
+    }));
+
+    const solved = members.map((m) => m.solved);
+    const idleMs = Date.now() - 14 * analytics.DAY_MS;
+
+    res.json({
+      success: true,
+      data: {
+        cohort: value,
+        dimension,
+        size: members.length,
+        summary: {
+          active: members.filter((m) => m.subs > 0).length,
+          solvedDistribution: analytics.boxStats(solved),
+          acRate: (() => {
+            const s = members.reduce((a, m) => a + m.subs, 0);
+            const a = members.reduce((x, m) => x + m.ac, 0);
+            return s ? Math.round((a / s) * 100) : 0;
+          })(),
+        },
+        solvedHistogram: analytics.histogram(solved, 5),
+        topicMastery: [...masteryByTopic.entries()]
+          .map(([topic, t]) => ({
+            topic,
+            accuracy: t.attempts ? Math.round((t.solved / t.attempts) * 100) : 0,
+            attempts: t.attempts,
+            students: t.students.size,
+          }))
+          .sort((a, b) => b.attempts - a.attempts)
+          .slice(0, 8),
+        students: members
+          .map((m) => ({
+            ...m,
+            // Surfaced as chips so "at risk" is explainable, not a black box.
+            riskReasons: [
+              m.subs === 0 ? 'never submitted' : null,
+              m.subs > 0 && m.acRate < 25 ? `low accuracy (${m.acRate}%)` : null,
+              m.lastActiveMs && m.lastActiveMs < idleMs ? 'inactive 14+ days' : null,
+              m.avgAttemptsToSolve != null && m.avgAttemptsToSolve >= 5 ? `${m.avgAttemptsToSolve} attempts per solve` : null,
+            ].filter(Boolean),
+          }))
+          .sort((a, b) => b.riskReasons.length - a.riskReasons.length || a.solved - b.solved),
+      },
+    });
+  } catch (error) {
+    console.error('Cohort detail error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load cohort analytics.' });
+  }
+};
+
+// ── Analytics: one problem in depth ───────────────────────────────────────────
+// The funnel is the useful part: it separates "nobody tried" from "everybody
+// tried and failed", which look identical in a solve-rate number.
+exports.getProblemAnalytics = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const problem = await problemRepo.getById(id);
+    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+
+    const dept = scopeDept(req);
+    const [snap, subs, testCases] = await Promise.all([
+      analytics.getSnapshot(dept),
+      submissionRepo.listByProblem(id),
+      problemRepo.getTestCases(id),
+    ]);
+
+    const inScope = new Set(snap.studentStats.map((s) => s.id));
+    const mine = subs.filter((s) => inScope.has(s.userId));
+
+    const attemptsByUser = new Map();
+    const firstSub = new Map();
+    const firstAc = new Map();
+    for (const s of mine) {
+      attemptsByUser.set(s.userId, (attemptsByUser.get(s.userId) || 0) + 1);
+      const ms = analytics.toMillis(s.submittedAt);
+      if (!firstSub.has(s.userId) || ms < firstSub.get(s.userId)) firstSub.set(s.userId, ms);
+      if (s.verdict === 'Accepted' && (!firstAc.has(s.userId) || ms < firstAc.get(s.userId))) firstAc.set(s.userId, ms);
+    }
+
+    const attemptsToSolve = [...firstAc.keys()].map((u) => attemptsByUser.get(u) || 1);
+    const timeToSolveMin = [...firstAc.entries()]
+      .map(([u, ac]) => Math.round((ac - (firstSub.get(u) ?? ac)) / 60000))
+      .filter((m) => m >= 0);
+
+    // Per-test failure hotspots, from the latest attempt of each student.
+    const withResults = mine.filter((s) => Array.isArray(s.testResults))
+      .sort((a, b) => analytics.toMillis(b.submittedAt) - analytics.toMillis(a.submittedAt));
+    const latestPerUser = new Map();
+    for (const s of withResults) if (!latestPerUser.has(s.userId)) latestPerUser.set(s.userId, s);
+    const attempts = [], failures = [];
+    for (const s of latestPerUser.values()) {
+      s.testResults.forEach((passed, i) => {
+        attempts[i] = (attempts[i] || 0) + 1;
+        if (!passed) failures[i] = (failures[i] || 0) + 1;
+      });
+    }
+    const publicCount = testCases.filter((t) => t.isPublic).length;
+
+    const verdictCounts = new Map();
+    for (const s of mine) verdictCounts.set(s.verdict || 'Unknown', (verdictCounts.get(s.verdict || 'Unknown') || 0) + 1);
+
+    res.json({
+      success: true,
+      data: {
+        problem: { id, title: problem.title, difficulty: (problem.difficulty || 'easy').toLowerCase(), tags: problem.tags || [] },
+        // Strictly nested stages — each is a subset of the one above, so the shape
+        // is readable as a funnel. "Needed more than one attempt" is NOT a stage
+        // (most students who solve do it first try, so it isn't between attempted
+        // and solved); it's reported separately below as a struggle signal.
+        funnel: [
+          { stage: 'In scope', value: snap.totalStudents },
+          { stage: 'Attempted', value: attemptsByUser.size },
+          { stage: 'Solved', value: firstAc.size },
+        ],
+        summary: {
+          submissions: mine.length,
+          attempters: attemptsByUser.size,
+          solvers: firstAc.size,
+          solveRate: attemptsByUser.size ? Math.round((firstAc.size / attemptsByUser.size) * 100) : 0,
+          // Struggle signals, deliberately outside the funnel.
+          neededMultipleAttempts: [...attemptsByUser.values()].filter((n) => n > 1).length,
+          gaveUp: [...attemptsByUser.keys()].filter((u) => !firstAc.has(u)).length,
+          attemptsToSolve: analytics.boxStats(attemptsToSolve),
+          timeToSolveMinutes: analytics.boxStats(timeToSolveMin),
+        },
+        attemptsHistogram: analytics.histogram(attemptsToSolve, 1),
+        verdicts: [...verdictCounts.entries()].map(([verdict, count]) => ({ verdict, count })).sort((a, b) => b.count - a.count),
+        testHeatmap: attempts.map((att, i) => ({
+          testIndex: i + 1,
+          isPublic: i < publicCount,
+          attempts: att,
+          failures: failures[i] || 0,
+          failRate: att ? Math.round(((failures[i] || 0) / att) * 100) : 0,
+        })),
+        studentsAnalyzed: latestPerUser.size,
+      },
+    });
+  } catch (error) {
+    console.error('Problem analytics error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load problem analytics.' });
+  }
+};
+
+// ── Analytics: MCQ item analysis ──────────────────────────────────────────────
+// Difficulty index (p) against discrimination index (D). D is the classic
+// upper-third minus lower-third split: a question everyone gets right, or that
+// strong and weak students answer identically, teaches nothing about who knows
+// the material — regardless of how reasonable it looks to the author.
+exports.getMcqItemAnalysis = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const test = await mcqRepo.getById(id);
+    if (!test) return res.status(404).json({ success: false, error: 'Test not found' });
+    if (!(await canManageOwnedBy(req, test.facultyId)) && req.user.role !== 'hod' && req.user.role !== 'admin') {
+      return res.status(404).json({ success: false, error: 'Test not found' });
+    }
+
+    const [questions, attempts] = await Promise.all([
+      mcqRepo.getQuestions(id),
+      mcqRepo.listSubmittedAttempts(id),
+    ]);
+
+    if (attempts.length === 0) {
+      return res.json({ success: true, data: { test: { id, title: test.title }, items: [], attempts: 0, empty: true } });
+    }
+
+    const ranked = [...attempts].sort((a, b) => (b.score ?? 0) - (a.score ?? 0));
+    const groupSize = Math.max(1, Math.floor(ranked.length / 3));
+    const upper = ranked.slice(0, groupSize);
+    const lower = ranked.slice(-groupSize);
+
+    const correctIn = (group, q) => group.filter((a) => (a.responses || {})[q.id] === q.correctIndex).length;
+
+    const items = questions.map((q, i) => {
+      const answered = attempts.filter((a) => (a.responses || {})[q.id] != null).length;
+      const correct = attempts.filter((a) => (a.responses || {})[q.id] === q.correctIndex).length;
+      const p = attempts.length ? correct / attempts.length : 0;
+      const d = groupSize ? (correctIn(upper, q) - correctIn(lower, q)) / groupSize : 0;
+
+      // Standard interpretation bands from classical test theory.
+      let flag = null;
+      if (p >= 0.95) flag = 'too easy — nearly everyone got it';
+      else if (p <= 0.1) flag = 'too hard, or the keyed answer may be wrong';
+      else if (d < 0.1) flag = 'does not separate strong from weak students';
+      else if (d < 0.2) flag = 'weak discrimination';
+
+      return {
+        id: q.id,
+        position: i + 1,
+        question_text: q.questionText,
+        topic: q.topic || null,
+        answered,
+        correct,
+        difficultyIndex: Math.round(p * 100) / 100,
+        discriminationIndex: Math.round(d * 100) / 100,
+        flag,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        test: { id, title: test.title, category: test.category },
+        attempts: attempts.length,
+        groupSize,
+        items,
+        problematic: items.filter((i) => i.flag).length,
+      },
+    });
+  } catch (error) {
+    console.error('MCQ item analysis error:', error);
+    res.status(500).json({ success: false, error: 'Failed to analyse this test.' });
+  }
+};
+
 // ── Hierarchical drill-down analytics (class → cohort → student) ───────────────
 
 // Level 1: cohort aggregates for the class bar chart. Department-scoped (admin = all),

@@ -20,8 +20,17 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
+    // `suppressHydrationWarning` on <html> covers the color-scheme class that
+    // InitColorSchemeScript writes before React hydrates.
+    //
+    // It is on <body> for a different reason: browser extensions commonly stamp a
+    // class onto <body> before hydration (a screen-recorder adding
+    // `class="kapture-loaded"` is what surfaced this), which React reports as a
+    // mismatch the app cannot prevent. The flag only applies one level deep — to
+    // this element's own attributes and text — so it cannot hide a genuine
+    // mismatch inside the tree.
     <html lang="en" suppressHydrationWarning>
-      <body>
+      <body suppressHydrationWarning>
         {/* Sets the color-scheme class before hydration to prevent a flash. */}
         <InitColorSchemeScript attribute="class" defaultMode="system" />
         <ThemeRegistry>{children}</ThemeRegistry>

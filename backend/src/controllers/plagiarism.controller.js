@@ -3,6 +3,7 @@ const fs = require('fs');
 const { execFile } = require('child_process');
 const os = require('os');
 const { logAction } = require('../middleware/audit');
+const { canManageOwnedBy } = require('../middleware/role.middleware');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
@@ -114,24 +115,17 @@ function parseCSV(csvPath) {
 exports.runPlagiarism = async (req, res) => {
   const { id: assignmentId } = req.params;
 
-  // 1. Verify assignment exists and belongs to this faculty
+  // 1. Verify assignment exists and the requester may act on it (author, admin,
+  //    or the HOD of the author's department — decision D1)
   const assignment = await assignmentRepo.getById(assignmentId);
-  if (!assignment || assignment.facultyId !== req.user.id) {
+  if (!assignment || !(await canManageOwnedBy(req, assignment.facultyId))) {
     return res.status(404).json({ success: false, error: 'Assignment not found' });
   }
 
-  // 2. JPlag shells out to a local `java` binary — there is no JVM in Vercel's
-  // serverless runtime and no way to bundle one, so this feature is disabled
-  // there intentionally (not just incidentally via a missing JAR — `VERCEL`
-  // is set automatically by the platform on every deployment).
-  if (process.env.VERCEL) {
-    return res.status(501).json({
-      success: false,
-      error: 'Plagiarism checking is not available on this deployment (requires a Java runtime, which Vercel serverless functions don\'t provide). Run it from a build with a JVM available.',
-    });
-  }
-
-  // 4. Check JPlag JAR exists
+  // 2. Check JPlag JAR exists. JPlag shells out to a local `java` binary, so
+  // this only works on a host with a JVM — the backend Dockerfile installs
+  // Java 17 and fetches the JAR. On a builder that skips the Dockerfile
+  // (e.g. Nixpacks) the JAR is absent and this degrades to a clear 503.
   if (!fs.existsSync(JPLAG_JAR)) {
     return res.status(503).json({
       success: false,
@@ -225,7 +219,7 @@ exports.getPlagiarismResults = async (req, res) => {
   const { id: assignmentId } = req.params;
 
   const assignment = await assignmentRepo.getById(assignmentId);
-  if (!assignment || assignment.facultyId !== req.user.id) {
+  if (!assignment || !(await canManageOwnedBy(req, assignment.facultyId))) {
     return res.status(404).json({ success: false, error: 'Assignment not found' });
   }
 
@@ -279,7 +273,7 @@ exports.getPairDiff = async (req, res) => {
 
     // Ownership check.
     const assignment = await assignmentRepo.getById(assignmentId);
-    if (!assignment || assignment.facultyId !== req.user.id) {
+    if (!assignment || !(await canManageOwnedBy(req, assignment.facultyId))) {
       return res.status(404).json({ success: false, error: 'Assignment not found' });
     }
 

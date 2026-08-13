@@ -17,6 +17,7 @@ import { useTheme } from "@mui/material/styles";
 import { keyframes } from "@emotion/react";
 import { SmartToyOutlinedIcon, BugReportOutlinedIcon, CodeOutlinedIcon, PersonOutlineIcon, SendIcon, AutoAwesomeOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 
 const AI = "var(--mui-palette-ai)";
 
@@ -214,8 +215,15 @@ export default function AITutorPage() {
         aiText = JSON.stringify(res.data?.review || res.data?.data?.review || {});
       }
       setMessages((prev) => [...prev, { id: Date.now() + 1, role: "ai", content: aiText, mode }]);
-    } catch {
-      setMessages((prev) => [...prev, { id: Date.now() + 1, role: "ai", content: "Sorry, I couldn't connect to the AI service right now. Please try again.", mode }]);
+    } catch (e) {
+      // A graded exam in progress locks the AI out server-side — say so plainly
+      // rather than letting it look like an outage.
+      const err = e as { response?: { status?: number; data?: { code?: string } } };
+      const examLocked = err?.response?.status === 403 && err?.response?.data?.code === "EXAM_IN_PROGRESS";
+      const content = examLocked
+        ? "AI assistance is disabled while you're sitting a graded exam. I'll be here as soon as you submit."
+        : apiErrorMessage(e, "Sorry, I couldn't reach the AI service. Please try again.");
+      setMessages((prev) => [...prev, { id: Date.now() + 1, role: "ai", content, mode }]);
     } finally {
       setIsTyping(false);
     }

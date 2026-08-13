@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const { canManageOwnedBy } = require('../middleware/role.middleware');
 const userRepo = require('../repositories/userRepository');
 const classroomRepo = require('../repositories/classroomRepository');
 
@@ -47,9 +48,15 @@ exports.createClassroom = async (req, res) => {
 // ── List classrooms (role-aware) ───────────────────────────────────────────────
 exports.listClassrooms = async (req, res) => {
   try {
-    const isFaculty = req.user.role === 'faculty' || req.user.role === 'admin';
-    if (isFaculty) {
-      const classrooms = await classroomRepo.listByFacultyId(req.user.id);
+    // 'hod' used to fall through to the student branch here, so an HOD's class
+    // list came back empty (they are enrolled in nothing). Staff see their own
+    // classes; admin/HOD see all of them for oversight (decision D1).
+    const isStaff = ['faculty', 'admin', 'hod'].includes(req.user.role);
+    if (isStaff) {
+      const seesAll = req.user.role === 'admin' || req.user.role === 'hod';
+      const classrooms = seesAll
+        ? await classroomRepo.listAll()
+        : await classroomRepo.listByFacultyId(req.user.id);
       const data = await Promise.all(classrooms.map(async (c) => ({
         ...c, join_code: c.joinCode, member_count: await classroomRepo.getMemberCount(c.id),
       })));
@@ -94,7 +101,7 @@ exports.getMembers = async (req, res) => {
   try {
     const { id } = req.params;
     const classroom = await classroomRepo.getById(id);
-    if (!classroom || classroom.facultyId !== req.user.id) {
+    if (!classroom || !(await canManageOwnedBy(req, classroom.facultyId))) {
       return res.status(404).json({ success: false, error: 'Classroom not found' });
     }
 

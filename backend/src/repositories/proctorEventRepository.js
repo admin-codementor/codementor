@@ -16,4 +16,14 @@ async function listByAssignment(assignmentId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-module.exports = { create, listByAssignment };
+// Two equality filters only — Firestore serves this from single-field indexes, so
+// no composite index is needed (matching the convention in the other repos).
+// Sorted newest-first in application code for the same reason.
+async function listByUserAndType(userId, eventType) {
+  const snap = await col().where('userId', '==', userId).where('eventType', '==', eventType).get();
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+}
+
+module.exports = { create, listByAssignment, listByUserAndType };

@@ -1,6 +1,6 @@
 const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
-const { authorize } = require('../middleware/role.middleware');
+const { facultyStaff } = require('../middleware/role.middleware');
 const { requirePermission } = require('../middleware/permissions');
 const c = require('../controllers/contest.controller');
 
@@ -14,13 +14,13 @@ router.get('/:id/scoreboard',        protect, c.getScoreboard);
 router.post('/:id/virtual',          protect, c.startVirtual);
 router.get('/:id/virtual/scoreboard', protect, c.getVirtualScoreboard);
 
-// ── Faculty only ──────────────────────────────────────────────────────────────
+// ── Teaching staff only ───────────────────────────────────────────────────────
 router.post('/',
-  protect, authorize('faculty', 'admin'), requirePermission('manage_contests'),
+  protect, facultyStaff, requirePermission('manage_contests'),
   c.createContest
 );
 router.patch('/:id/scoreboard-mode',
-  protect, authorize('faculty', 'admin'), requirePermission('manage_contests'),
+  protect, facultyStaff, requirePermission('manage_contests'),
   c.updateScoreboardMode
 );
 

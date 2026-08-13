@@ -27,7 +27,7 @@ import {
   Shield, Bot, LayoutDashboard, Timer, Lightbulb, Target, FileUp, Upload, LayoutGrid,
   Eye, EyeOff, TriangleAlert, Briefcase,
   SignalLow, SignalMedium, SignalHigh, Type, Hash, ArrowRightLeft, ArrowDownUp, GitFork,
-  Boxes, Binary, PenTool, Waypoints, TrendingUp, TrendingDown,
+  Boxes, Binary, PenTool, Waypoints, TrendingUp, TrendingDown, GripVertical,
 } from "lucide-react";
 
 export type IconFontSize = "small" | "medium" | "large" | "inherit";
@@ -142,6 +142,7 @@ export const LogoutIcon = makeIcon(LogOut, "LogoutIcon");
 export const MailOutlineIcon = makeIcon(Mail, "MailOutlineIcon");
 export const MemoryOutlinedIcon = makeIcon(MemoryStick, "MemoryOutlinedIcon");
 export const MenuIcon = makeIcon(Menu, "MenuIcon");
+export const DragHandleIcon = makeIcon(GripVertical, "DragHandleIcon");
 export const MenuBookOutlinedIcon = makeIcon(BookOpen, "MenuBookOutlinedIcon");
 export const MilitaryTechOutlinedIcon = makeIcon(Medal, "MilitaryTechOutlinedIcon");
 export const MonitorHeartOutlinedIcon = makeIcon(Activity, "MonitorHeartOutlinedIcon");

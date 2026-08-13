@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
@@ -9,6 +10,7 @@ import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import IconButton from "@mui/material/IconButton";
 import Chip from "@mui/material/Chip";
+import Tooltip from "@mui/material/Tooltip";
 import Skeleton from "@mui/material/Skeleton";
 import Alert from "@mui/material/Alert";
 import Radio from "@mui/material/Radio";
@@ -28,6 +30,7 @@ import { AddIcon, DeleteOutlineIcon, CloseIcon, ChevronLeftIcon, SaveOutlinedIco
 import { ResponsiveBar } from "@nivo/bar";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
@@ -42,6 +45,8 @@ interface TestRow {
   is_published: boolean;
   question_count: number;
   attempt_count: number;
+  author?: string | null;
+  can_edit?: boolean;
 }
 interface QForm {
   question_text: string;
@@ -85,8 +90,7 @@ function CreateTestDialog({ open, onClose, onCreated }: { open: boolean; onClose
         setDuration(30);
       }
     } catch (e2) {
-      const err = e2 as { response?: { data?: { error?: string } } };
-      setError(err?.response?.data?.error || "Failed to create test");
+      setError(apiErrorMessage(e2, "Couldn't create the test."));
     } finally {
       setSaving(false);
     }
@@ -124,6 +128,7 @@ export default function FacultyMcqPage() {
   const [tests, setTests] = React.useState<TestRow[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [showCreate, setShowCreate] = React.useState(false);
+  const router = useRouter();
   const showToast = useToast();
   const confirm = useConfirm();
 
@@ -132,9 +137,15 @@ export default function FacultyMcqPage() {
     [showToast],
   );
 
+  const [loadError, setLoadError] = React.useState("");
+
   const load = React.useCallback(() => {
     setLoading(true);
-    api.get("/api/mcq/tests").then((r) => { if (r.data?.success) setTests(r.data.data); }).catch(() => {}).finally(() => setLoading(false));
+    setLoadError("");
+    api.get("/api/mcq/tests")
+      .then((r) => { if (r.data?.success) setTests(r.data.data); })
+      .catch((e) => setLoadError(apiErrorMessage(e, "Couldn't load your tests.")))
+      .finally(() => setLoading(false));
   }, []);
 
   React.useEffect(() => {
@@ -148,10 +159,16 @@ export default function FacultyMcqPage() {
   const [buildLoading, setBuildLoading] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
-  const openBuilder = async (id: string) => {
+  // `readOnly` reflects the API's can_edit: an HOD/admin can inspect a test from
+  // another department but must not be offered a Save button for it.
+  const [buildReadOnly, setBuildReadOnly] = React.useState(false);
+
+  const openBuilder = async (id: string, readOnly = false) => {
     setMode("build");
     setBuildId(id);
+    setBuildReadOnly(readOnly);
     setBuildLoading(true);
+    setQuestions([]);
     try {
       const r = await api.get(`/api/mcq/tests/${id}`);
       if (r.data?.success) {
@@ -166,6 +183,11 @@ export default function FacultyMcqPage() {
         }));
         setQuestions(qs.length ? qs : [blankQ()]);
       }
+    } catch (e) {
+      // Previously this threw silently and left an empty builder, which then
+      // refused to save — indistinguishable from "MCQ tests don't work".
+      flash(apiErrorMessage(e, "Couldn't open this test's questions."));
+      setMode("list");
     } finally {
       setBuildLoading(false);
     }
@@ -179,11 +201,10 @@ export default function FacultyMcqPage() {
     setSaving(true);
     try {
       await api.put(`/api/mcq/tests/${buildId}/questions`, { questions });
-      flash("Questions saved", "success");
+      flash(`Saved ${questions.length} question${questions.length === 1 ? "" : "s"}`, "success");
       load();
     } catch (e) {
-      const err = e as { response?: { data?: { error?: string } } };
-      flash(err?.response?.data?.error || "Save failed");
+      flash(apiErrorMessage(e, "Couldn't save the questions."));
     } finally {
       setSaving(false);
     }
@@ -199,18 +220,19 @@ export default function FacultyMcqPage() {
     try {
       const r = await api.get(`/api/mcq/tests/${t.id}/results`);
       if (r.data?.success) setResults(r.data.data);
-    } catch {
-      /* ignore */
+    } catch (e) {
+      flash(apiErrorMessage(e, "Couldn't load results."));
+      setMode("list");
     }
   };
 
   const togglePublish = async (t: TestRow) => {
     try {
       await api.patch(`/api/mcq/tests/${t.id}/publish`, { is_published: !t.is_published });
+      flash(t.is_published ? "Test unpublished" : "Test published to students", "success");
       load();
     } catch (e) {
-      const err = e as { response?: { data?: { error?: string } } };
-      flash(err?.response?.data?.error || "Failed");
+      flash(apiErrorMessage(e, "Couldn't change the publish state."));
     }
   };
   const doDelete = async (t: TestRow) => {
@@ -223,9 +245,10 @@ export default function FacultyMcqPage() {
     if (!ok) return;
     try {
       await api.delete(`/api/mcq/tests/${t.id}`);
+      flash("Test deleted", "success");
       load();
-    } catch {
-      flash("Delete failed");
+    } catch (e) {
+      flash(apiErrorMessage(e, "Couldn't delete the test."));
     }
   };
 
@@ -241,7 +264,11 @@ export default function FacultyMcqPage() {
             <ListAltOutlinedIcon sx={{ color: "primary.main" }} />
             <Typography variant="h5" fontWeight={600}>{buildTitle}</Typography>
           </Stack>
-          <Button variant="contained" color="success" startIcon={<SaveOutlinedIcon />} onClick={saveQuestions} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+          {buildReadOnly ? (
+            <Chip label="Read-only — another department's test" size="small" sx={{ bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }} />
+          ) : (
+            <Button variant="contained" color="success" startIcon={<SaveOutlinedIcon />} onClick={saveQuestions} disabled={saving}>{saving ? "Saving…" : "Save"}</Button>
+          )}
         </Stack>
 
         {buildLoading ? (
@@ -370,6 +397,12 @@ export default function FacultyMcqPage() {
         actions={<Button variant="contained" color="success" startIcon={<AddIcon />} onClick={() => setShowCreate(true)}>New Test</Button>}
       />
 
+      {loadError && (
+        <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={load}>Retry</Button>}>
+          {loadError}
+        </Alert>
+      )}
+
       {loading ? (
         <Stack spacing={2}>{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} variant="rounded" height={80} />)}</Stack>
       ) : tests.length === 0 ? (
@@ -391,15 +424,39 @@ export default function FacultyMcqPage() {
                       sx={{ height: 18, fontSize: 10, fontWeight: 600, bgcolor: t.is_published ? "successContainer" : "surfaceContainerHigh", color: t.is_published ? "onSuccessContainer" : "onSurfaceVariant" }}
                     />
                   </Stack>
-                  <Typography variant="caption" color="text.secondary">{t.question_count} questions · {t.duration_minutes} min · {t.attempt_count} attempts</Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    {t.question_count} questions · {t.duration_minutes} min · {t.attempt_count} attempts
+                    {t.author && t.author !== "You" ? ` · by ${t.author}` : ""}
+                  </Typography>
                 </Box>
-                <Stack direction="row" spacing={1} flexWrap="wrap">
-                  <Button size="small" variant="outlined" startIcon={<ListAltOutlinedIcon />} onClick={() => openBuilder(t.id)}>Questions</Button>
-                  <Button size="small" variant="outlined" startIcon={t.is_published ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />} onClick={() => togglePublish(t)}>
-                    {t.is_published ? "Unpublish" : "Publish"}
-                  </Button>
+                <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
+                  {/* Questions and Results are reads — available to HOD/admin across
+                      departments. Publish and Delete are writes, so they're disabled
+                      on tests outside the viewer's scope rather than 404-ing. */}
+                  {/* Editable tests open the full authoring flow; read-only ones
+                      (another department's) stay in the inline viewer. */}
+                  {t.can_edit === false ? (
+                    <Button size="small" variant="outlined" startIcon={<ListAltOutlinedIcon />} onClick={() => openBuilder(t.id, true)}>
+                      View questions
+                    </Button>
+                  ) : (
+                    <Button size="small" variant="outlined" startIcon={<ListAltOutlinedIcon />} onClick={() => router.push(`/faculty/mcq/${t.id}/edit`)}>
+                      Questions
+                    </Button>
+                  )}
+                  <Tooltip title={t.can_edit === false ? `Only ${t.author ?? "the author"}'s department can publish this` : ""}>
+                    <span>
+                      <Button size="small" variant="outlined" disabled={t.can_edit === false} startIcon={t.is_published ? <VisibilityOffOutlinedIcon /> : <VisibilityOutlinedIcon />} onClick={() => togglePublish(t)}>
+                        {t.is_published ? "Unpublish" : "Publish"}
+                      </Button>
+                    </span>
+                  </Tooltip>
                   <Button size="small" variant="outlined" startIcon={<BarChartOutlinedIcon />} onClick={() => openResults(t)}>Results</Button>
-                  <IconButton size="small" color="error" onClick={() => doDelete(t)} aria-label="Delete test"><DeleteOutlineIcon fontSize="small" /></IconButton>
+                  <Tooltip title={t.can_edit === false ? "You can't delete another department's test" : "Delete test"}>
+                    <span>
+                      <IconButton size="small" color="error" disabled={t.can_edit === false} onClick={() => doDelete(t)} aria-label="Delete test"><DeleteOutlineIcon fontSize="small" /></IconButton>
+                    </span>
+                  </Tooltip>
                 </Stack>
               </CardContent>
             </Card>
@@ -407,7 +464,7 @@ export default function FacultyMcqPage() {
         </Stack>
       )}
 
-      <CreateTestDialog open={showCreate} onClose={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); load(); openBuilder(id); }} />
+      <CreateTestDialog open={showCreate} onClose={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); router.push(`/faculty/mcq/${id}/edit`); }} />
     </Box>
   );
 }

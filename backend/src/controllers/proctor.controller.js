@@ -1,3 +1,4 @@
+const { canManageOwnedBy } = require('../middleware/role.middleware');
 const userRepo = require('../repositories/userRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
 const proctorEventRepo = require('../repositories/proctorEventRepository');
@@ -30,9 +31,10 @@ exports.getAssignmentReport = async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Ownership: only the assignment's faculty (or an admin) may view its proctor report.
+    // Ownership: the assignment's faculty, an admin, or the HOD of the author's
+    // department (decision D1) may view its proctor report.
     const assignment = await assignmentRepo.getById(id);
-    if (!assignment || (assignment.facultyId !== req.user.id && req.user.role !== 'admin')) {
+    if (!assignment || !(await canManageOwnedBy(req, assignment.facultyId))) {
       return res.status(404).json({ success: false, error: 'Assignment not found' });
     }
 

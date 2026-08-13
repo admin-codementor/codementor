@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
@@ -25,14 +26,17 @@ import DialogActions from "@mui/material/DialogActions";
 import TextField from "@mui/material/TextField";
 import MenuItem from "@mui/material/MenuItem";
 import FormControlLabel from "@mui/material/FormControlLabel";
+import Alert from "@mui/material/Alert";
 import { AddIcon, EditOutlinedIcon, DeleteOutlineIcon, UploadFileOutlinedIcon, DescriptionOutlinedIcon, AutoAwesomeOutlinedIcon, CloseIcon, ExpandMoreIcon, CodeOffOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
+import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
+import { ImportWizard } from "@/components/faculty/ImportWizard";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 const STUB_LANGUAGES = [
@@ -55,6 +59,9 @@ interface Problem {
   tags: string[];
   totalSubmissions: number;
   acceptanceRate: number;
+  author?: string | null;
+  canEdit?: boolean;
+  status?: string;
 }
 
 // ── Collapsible form section ──────────────────────────────────────────────────
@@ -110,14 +117,17 @@ function ProblemDialog({
   const [checkerCode, setCheckerCode] = React.useState("");
   const [saving, setSaving] = React.useState(false);
   const [aiGenerating, setAiGenerating] = React.useState(false);
+  const [hydrating, setHydrating] = React.useState(false);
+  const [loadError, setLoadError] = React.useState("");
+  // Outcome of the last generation attempt — kept inline next to the test cases
+  // rather than in a toast, because it explains what was and wasn't verified.
+  const [genNotice, setGenNotice] = React.useState<{ severity: "success" | "warning" | "error"; text: string } | null>(null);
 
-  // Reset form whenever the dialog opens (create or edit).
-  React.useEffect(() => {
-    if (!open) return;
-    setTitle(editing?.title ?? "");
+  const resetForm = React.useCallback(() => {
+    setTitle("");
     setDescription("");
-    setDifficulty(editing?.difficulty?.toLowerCase() ?? "easy");
-    setTagsInput((editing?.tags ?? []).join(", "));
+    setDifficulty("easy");
+    setTagsInput("");
     setTestCases([{ input: "", output: "", is_public: true }]);
     setStubs({});
     setScoringMode("acm");
@@ -127,7 +137,44 @@ function ProblemDialog({
     setUsesChecker(false);
     setCheckerLanguageId(STUB_LANGUAGES[0].id);
     setCheckerCode("");
-  }, [open, editing]);
+  }, []);
+
+  // On open: blank for create, or load the full problem for edit.
+  //
+  // This used to reset every field and only copy title/difficulty/tags from the
+  // list row — so opening "Edit" wiped the statement and test cases from the form,
+  // and saving wrote that emptiness back. Hydrate from the server instead.
+  React.useEffect(() => {
+    if (!open) return;
+    setLoadError("");
+    resetForm();
+    if (!editing) return;
+
+    setHydrating(true);
+    api
+      .get(`/api/faculty/problems/${editing.id}`)
+      .then((r) => {
+        if (!r.data?.success) return;
+        const p = r.data.data;
+        setTitle(p.title ?? "");
+        setDescription(p.description ?? "");
+        setDifficulty((p.difficulty ?? "easy").toLowerCase());
+        setTagsInput((p.tags ?? []).join(", "));
+        setTestCases(
+          (p.test_cases ?? []).length > 0 ? p.test_cases : [{ input: "", output: "", is_public: true }],
+        );
+        setStubs(p.stubs ?? {});
+        setScoringMode(p.scoring_mode === "oi" ? "oi" : "acm");
+        setMaxScore(p.max_score ?? 100);
+        setEditorial(p.editorial ?? "");
+        setEditorialVisibleAt(p.editorial_visible_at ? String(p.editorial_visible_at).slice(0, 16) : "");
+        setUsesChecker(!!p.uses_checker);
+        setCheckerLanguageId(p.checker_language_id ?? STUB_LANGUAGES[0].id);
+        setCheckerCode(p.checker_code ?? "");
+      })
+      .catch((e) => setLoadError(apiErrorMessage(e, "Couldn't load this problem for editing.")))
+      .finally(() => setHydrating(false));
+  }, [open, editing, resetForm]);
 
   const updateTC = (i: number, field: keyof TestCase, val: string | boolean | number) =>
     setTestCases((tcs) => tcs.map((tc, idx) => (idx === i ? { ...tc, [field]: val } : tc)));
@@ -138,15 +185,46 @@ function ProblemDialog({
       return;
     }
     setAiGenerating(true);
+    setGenNotice(null);
     try {
       const res = await api.post("/api/faculty/ai/generate-tests", { title, description });
-      if (res.data?.success && res.data.data?.testCases) {
-        setTestCases(res.data.data.testCases.map((tc: { input: string; output: string }) => ({ input: tc.input, output: tc.output, is_public: false })));
-        if (res.data.data.suggestedDifficulty) setDifficulty(res.data.data.suggestedDifficulty);
-        toast(`Generated ${res.data.data.testCases.length} test cases`);
+      const data = res.data?.data;
+      if (res.data?.success && data?.testCases) {
+        // Expected outputs are produced by running a reference solution through
+        // Judge0, and the sample flags come back from the server — don't override them.
+        setTestCases(data.testCases.map((tc: TestCase) => ({
+          input: tc.input, output: tc.output, is_public: !!tc.is_public,
+        })));
+        if (data.suggestedDifficulty) setDifficulty(data.suggestedDifficulty);
+
+        const v = data.verification;
+        const dropped = v?.rejected?.length ?? 0;
+        setGenNotice({
+          severity: "success",
+          text: `${data.testCases.length} test case${data.testCases.length === 1 ? "" : "s"} verified by executing a reference solution`
+            + (v?.samplesChecked ? ` (it reproduced ${v.samplesPassed}/${v.samplesChecked} example${v.samplesChecked === 1 ? "" : "s"} from your statement)` : "")
+            + (dropped ? `. ${dropped} generated input${dropped === 1 ? " was" : "s were"} dropped because the reference couldn't run on ${dropped === 1 ? "it" : "them"}.` : "."),
+        });
+        toast(`Generated ${data.testCases.length} verified test cases`);
       }
-    } catch {
-      toast("AI generation failed", "error");
+    } catch (e) {
+      const err = e as { response?: { status?: number; data?: { code?: string; error?: string } } };
+      const code = err?.response?.data?.code;
+      // These are meaningful outcomes, not generic failures — the pipeline refuses
+      // to hand over test cases it could not verify.
+      if (code === "REFERENCE_UNRELIABLE" || code === "NO_CASES") {
+        setGenNotice({
+          severity: "warning",
+          text: `${err.response?.data?.error} Nothing was added — check the examples in your statement, then try again.`,
+        });
+      } else if (code === "JUDGE0_UNREACHABLE") {
+        setGenNotice({
+          severity: "error",
+          text: "Judge0 isn't reachable, so expected outputs can't be verified. Test cases are never generated unverified — start Judge0 and try again.",
+        });
+      } else {
+        toast(apiErrorMessage(e, "AI generation failed."), "error");
+      }
     } finally {
       setAiGenerating(false);
     }
@@ -157,6 +235,11 @@ function ProblemDialog({
       toast("Title and description are required", "error");
       return;
     }
+    const usableTests = testCases.filter((tc) => tc.input.trim() && tc.output.trim());
+    if (usableTests.length === 0) {
+      toast("Add at least one test case with both an input and an expected output", "error");
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -164,7 +247,7 @@ function ProblemDialog({
         description,
         difficulty,
         tags: tagsInput.split(",").map((t) => t.trim()).filter(Boolean),
-        test_cases: testCases.filter((tc) => tc.input.trim() && tc.output.trim()),
+        test_cases: usableTests,
         stubs,
         scoring_mode: scoringMode,
         max_score: maxScore,
@@ -176,15 +259,15 @@ function ProblemDialog({
       };
       if (editing) {
         await api.put(`/api/faculty/problems/${editing.id}`, payload);
-        toast("Problem updated");
+        toast(`Problem updated — ${usableTests.length} test case${usableTests.length === 1 ? "" : "s"} saved`);
       } else {
         await api.post("/api/faculty/problems", payload);
-        toast("Problem created");
+        toast(`Problem created — ${usableTests.length} test case${usableTests.length === 1 ? "" : "s"}`);
       }
       onSaved();
       onClose();
-    } catch {
-      toast("Failed to save problem", "error");
+    } catch (e) {
+      toast(apiErrorMessage(e, "Couldn't save the problem."), "error");
     } finally {
       setSaving(false);
     }
@@ -197,7 +280,15 @@ function ProblemDialog({
         <IconButton onClick={onClose} sx={{ position: "absolute", right: 8, top: 8 }} aria-label="Close"><CloseIcon /></IconButton>
       </DialogTitle>
       <DialogContent dividers>
-        <Stack spacing={2.5}>
+        {loadError && <Alert severity="error" sx={{ mb: 2 }}>{loadError}</Alert>}
+        {hydrating && (
+          <Stack spacing={1.5} sx={{ mb: 2 }}>
+            <Skeleton variant="rounded" height={40} />
+            <Skeleton variant="rounded" height={100} />
+            <Typography variant="caption" color="text.secondary">Loading the saved problem…</Typography>
+          </Stack>
+        )}
+        <Stack spacing={2.5} sx={{ opacity: hydrating ? 0.4 : 1, pointerEvents: hydrating ? "none" : "auto" }}>
           <TextField label="Title" required value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Two Sum" size="small" fullWidth />
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2}>
             <TextField select label="Difficulty" value={difficulty} onChange={(e) => setDifficulty(e.target.value)} size="small" sx={{ width: { sm: 160 } }}>
@@ -237,6 +328,11 @@ function ProblemDialog({
                 <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => setTestCases((t) => [...t, { input: "", output: "", is_public: false }])}>Add</Button>
               </Stack>
             </Stack>
+            {genNotice && (
+              <Alert severity={genNotice.severity} sx={{ mb: 1.5 }} onClose={() => setGenNotice(null)}>
+                {genNotice.text}
+              </Alert>
+            )}
             <Stack spacing={1.5} sx={{ maxHeight: 260, overflowY: "auto", pr: 0.5 }}>
               {testCases.map((tc, i) => (
                 <Box key={i} sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, p: 1.5 }}>
@@ -305,7 +401,7 @@ function ProblemDialog({
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="contained" onClick={handleSave} disabled={saving}>
+        <Button variant="contained" onClick={handleSave} disabled={saving || hydrating || !!loadError}>
           {saving ? "Saving…" : editing ? "Update Problem" : "Create Problem"}
         </Button>
       </DialogActions>
@@ -319,6 +415,9 @@ export default function FacultyProblemsPage() {
   const [loading, setLoading] = React.useState(true);
   const [dialogOpen, setDialogOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<Problem | null>(null);
+  const [importOpen, setImportOpen] = React.useState(false);
+  const [creatingDraft, setCreatingDraft] = React.useState(false);
+  const router = useRouter();
   const toast = useToast();
   const confirm = useConfirm();
 
@@ -328,7 +427,6 @@ export default function FacultyProblemsPage() {
   const [paperTitle, setPaperTitle] = React.useState("");
   const [exportingPaper, setExportingPaper] = React.useState(false);
 
-  const fileRef = React.useRef<HTMLInputElement>(null);
 
   const showToast = React.useCallback(
     (message: string, type: "success" | "error" = "success") => toast(message, { severity: type }),
@@ -342,13 +440,34 @@ export default function FacultyProblemsPage() {
       .then((r) => {
         if (r.data?.success) setProblems(r.data.data);
       })
-      .catch(() => showToast("Failed to load problems", "error"))
+      .catch((e) => showToast(apiErrorMessage(e, "Couldn't load problems."), "error"))
       .finally(() => setLoading(false));
   }, [showToast]);
 
   React.useEffect(() => {
     fetchProblems();
   }, [fetchProblems]);
+
+  // Create the draft up front so the authoring page has something to autosave
+  // into from the first keystroke. It stays invisible to students until published.
+  const startAuthoring = async () => {
+    setCreatingDraft(true);
+    try {
+      const r = await api.post("/api/faculty/problems", {
+        title: "Untitled problem",
+        description: "",
+        difficulty: "easy",
+        status: "draft",
+        test_cases: [],
+      });
+      const id = r.data?.data?.id;
+      if (!id) throw new Error("no id returned");
+      router.push(`/faculty/problems/${id}/edit`);
+    } catch (e) {
+      showToast(apiErrorMessage(e, "Couldn't start a new problem."), "error");
+      setCreatingDraft(false);
+    }
+  };
 
   const handleDelete = async (id: string) => {
     const ok = await confirm({
@@ -362,33 +481,11 @@ export default function FacultyProblemsPage() {
       await api.delete(`/api/faculty/problems/${id}`);
       showToast("Problem deleted");
       fetchProblems();
-    } catch {
-      showToast("Failed to delete", "error");
+    } catch (e) {
+      showToast(apiErrorMessage(e, "Couldn't delete the problem."), "error");
     }
   };
 
-  const handleBulkImport = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      try {
-        const data = JSON.parse(ev.target?.result as string);
-        const list = Array.isArray(data) ? data : [data];
-        let created = 0;
-        for (const p of list) {
-          await api.post("/api/faculty/problems", p);
-          created++;
-        }
-        showToast(`Imported ${created} problem${created > 1 ? "s" : ""}`);
-        fetchProblems();
-      } catch {
-        showToast("Import failed — check JSON format", "error");
-      }
-    };
-    reader.readAsText(file);
-    if (fileRef.current) fileRef.current.value = "";
-  };
 
   const toggleSelect = (id: string) =>
     setSelectedIds((prev) => {
@@ -417,8 +514,8 @@ export default function FacultyProblemsPage() {
       setPaperMode(false);
       setSelectedIds(new Set());
       setPaperTitle("");
-    } catch {
-      showToast("Failed to export question paper", "error");
+    } catch (e) {
+      showToast(apiErrorMessage(e, "Couldn't export the question paper."), "error");
     } finally {
       setExportingPaper(false);
     }
@@ -426,18 +523,19 @@ export default function FacultyProblemsPage() {
 
   return (
     <Box>
-      <input ref={fileRef} type="file" accept=".json" hidden onChange={handleBulkImport} />
-
       <PageHeader
         title="Manage Problems"
         subtitle={`${problems.length} problems created`}
         actions={
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
-            <Button size="small" variant="outlined" startIcon={<UploadFileOutlinedIcon />} onClick={() => fileRef.current?.click()}>Import JSON</Button>
+            <Button size="small" variant="outlined" startIcon={<UploadFileOutlinedIcon />} onClick={() => setImportOpen(true)}>Import</Button>
             <Button size="small" variant={paperMode ? "contained" : "outlined"} color="secondary" startIcon={<DescriptionOutlinedIcon />} onClick={() => { setPaperMode((m) => !m); setSelectedIds(new Set()); }}>
               Question Paper
             </Button>
-            <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setEditing(null); setDialogOpen(true); }}>Add Problem</Button>
+            <Button size="small" variant="outlined" startIcon={<AddIcon />} onClick={() => { setEditing(null); setDialogOpen(true); }}>Quick add</Button>
+            <Button size="small" variant="contained" startIcon={<AddIcon />} disabled={creatingDraft} onClick={startAuthoring}>
+              {creatingDraft ? "Creating…" : "Author a problem"}
+            </Button>
           </Stack>
         }
       />
@@ -463,6 +561,7 @@ export default function FacultyProblemsPage() {
               <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600, borderColor: "outlineVariant" } }}>
                 {paperMode && <TableCell padding="checkbox" />}
                 <TableCell>Title</TableCell>
+                <TableCell sx={{ width: 104 }}>Status</TableCell>
                 <TableCell sx={{ width: 120 }}>Difficulty</TableCell>
                 <TableCell align="right" sx={{ width: 120 }}>Submissions</TableCell>
                 <TableCell align="right" sx={{ width: 100 }}>AC Rate</TableCell>
@@ -472,11 +571,13 @@ export default function FacultyProblemsPage() {
             <TableBody>
               {loading ? (
                 Array.from({ length: 5 }).map((_, i) => (
-                  <TableRow key={i}>{Array.from({ length: paperMode ? 5 : 5 }).map((_, j) => <TableCell key={j}><Skeleton /></TableCell>)}</TableRow>
+                  <TableRow key={i}>{Array.from({ length: 6 }).map((_, j) => <TableCell key={j}><Skeleton /></TableCell>)}</TableRow>
                 ))
               ) : problems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={paperMode ? 5 : 6} sx={{ border: 0 }}>
+                  {/* paperMode swaps the Actions column for a checkbox column;
+                      both layouts are 6 wide now that Status exists. */}
+                  <TableCell colSpan={6} sx={{ border: 0 }}>
                     <EmptyState icon={<CodeOffOutlinedIcon />} title="No problems yet" description='Click "Add Problem" to create one.' />
                   </TableCell>
                 </TableRow>
@@ -496,6 +597,9 @@ export default function FacultyProblemsPage() {
                       )}
                       <TableCell>
                         <Typography variant="body2" fontWeight={500}>{p.title}</Typography>
+                        {p.author && p.author !== "You" && (
+                          <Typography variant="caption" color="text.secondary">by {p.author}</Typography>
+                        )}
                         {p.tags?.length > 0 && (
                           <Stack direction="row" spacing={0.75} sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.5 }}>
                             {p.tags.slice(0, 3).map((t) => (
@@ -504,16 +608,37 @@ export default function FacultyProblemsPage() {
                           </Stack>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {p.status === "draft" ? (
+                          <Chip
+                            label="Draft" size="small"
+                            sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }}
+                          />
+                        ) : (
+                          <Chip
+                            label="Live" size="small"
+                            sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: "successContainer", color: "onSuccessContainer" }}
+                          />
+                        )}
+                      </TableCell>
                       <TableCell><DifficultyChip difficulty={p.difficulty} /></TableCell>
                       <TableCell align="right" sx={{ fontFamily: "ui-monospace, monospace" }}>{p.totalSubmissions}</TableCell>
                       <TableCell align="right" sx={{ fontFamily: "ui-monospace, monospace" }}>{p.acceptanceRate}%</TableCell>
                       {!paperMode && (
                         <TableCell align="right" onClick={(e) => e.stopPropagation()}>
-                          <Tooltip title="Edit">
-                            <IconButton size="small" onClick={() => { setEditing(p); setDialogOpen(true); }} aria-label="Edit problem"><EditOutlinedIcon fontSize="small" /></IconButton>
+                          {/* `canEdit` comes from the API: an HOD/admin sees the whole
+                              catalogue but may only modify problems inside their scope. */}
+                          {/* Editing opens the full authoring flow (autosaved, with
+                              a publish step) rather than the quick dialog. */}
+                          <Tooltip title={p.canEdit === false ? `Authored by ${p.author ?? "another faculty member"}` : "Open in the authoring flow"}>
+                            <span>
+                              <IconButton size="small" disabled={p.canEdit === false} onClick={() => router.push(`/faculty/problems/${p.id}/edit`)} aria-label="Edit problem"><EditOutlinedIcon fontSize="small" /></IconButton>
+                            </span>
                           </Tooltip>
-                          <Tooltip title="Delete">
-                            <IconButton size="small" color="error" onClick={() => handleDelete(p.id)} aria-label="Delete problem"><DeleteOutlineIcon fontSize="small" /></IconButton>
+                          <Tooltip title={p.canEdit === false ? "You can't delete another faculty member's problem" : "Delete"}>
+                            <span>
+                              <IconButton size="small" color="error" disabled={p.canEdit === false} onClick={() => handleDelete(p.id)} aria-label="Delete problem"><DeleteOutlineIcon fontSize="small" /></IconButton>
+                            </span>
                           </Tooltip>
                         </TableCell>
                       )}
@@ -527,6 +652,7 @@ export default function FacultyProblemsPage() {
       </Card>
 
       <ProblemDialog open={dialogOpen} editing={editing} onClose={() => setDialogOpen(false)} onSaved={fetchProblems} toast={showToast} />
+      <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} onPublished={fetchProblems} />
     </Box>
   );
 }

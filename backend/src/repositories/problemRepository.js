@@ -27,9 +27,20 @@ async function getMapByIds(ids) {
   return new Map(docs.filter((d) => d.exists).map((d) => [d.id, { id: d.id, ...d.data() }]));
 }
 
+// Ordered by the explicit `_order` field, falling back to createdAt for rows
+// written before it existed. Ordering on createdAt alone was unstable: test cases
+// are written in a single batch, so every doc shares one serverTimestamp and the
+// displayed order could shuffle on each save.
 async function getTestCases(problemId) {
-  const snap = await testCasesCol(problemId).orderBy('createdAt', 'asc').get();
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+  const snap = await testCasesCol(problemId).get();
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() }))
+    .sort((a, b) => {
+      const ao = a._order ?? Number.MAX_SAFE_INTEGER;
+      const bo = b._order ?? Number.MAX_SAFE_INTEGER;
+      if (ao !== bo) return ao - bo;
+      return (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0);
+    });
 }
 
 async function getPublicTestCases(problemId) {
@@ -89,6 +100,11 @@ async function replaceTestCases(problemId, testCases) {
 }
 
 async function addTestCases(problemId, testCases) {
+  // Continue the existing `_order` sequence so appended tests sort after the
+  // current ones rather than landing at an arbitrary position.
+  const existing = await testCasesCol(problemId).get();
+  let next = existing.docs.reduce((max, d) => Math.max(max, (d.data()._order ?? -1) + 1), existing.size);
+
   const batch = db.batch();
   testCases.forEach((tc) => {
     batch.set(testCasesCol(problemId).doc(), {
@@ -97,6 +113,7 @@ async function addTestCases(problemId, testCases) {
       isPublic: !!(tc.is_public ?? tc.isPublic),
       score: tc.score || 0,
       createdAt: FieldValue.serverTimestamp(),
+      _order: next++,
     });
   });
   await batch.commit();

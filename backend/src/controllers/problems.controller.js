@@ -2,6 +2,15 @@ const problemRepo = require('../repositories/problemRepository');
 
 const ALLOWED_DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 
+// A problem is student-visible unless it is explicitly a draft.
+//
+// The absence of `status` means "published" on purpose: every problem authored
+// before the draft lifecycle existed has no status field, and those must stay
+// visible. Only the authoring flow sets status:'draft', so the default is safe.
+// This route is public and unauthenticated, so it is the boundary that keeps
+// half-written problems away from students.
+const isPublished = (p) => (p?.status ?? 'published') !== 'draft';
+
 // @desc    Get all problems (with optional filters)
 // @route   GET /api/problems
 exports.getProblems = async (req, res) => {
@@ -14,7 +23,7 @@ exports.getProblems = async (req, res) => {
     search = search ? String(search).slice(0, 100).toLowerCase() : null;
     const parsedLimit = Math.min(Math.max(parseInt(limit) || 100, 1), 200);
 
-    let problems = await problemRepo.getAll();
+    let problems = (await problemRepo.getAll()).filter(isPublished);
     if (difficulty) problems = problems.filter(p => (p.difficulty || '').toLowerCase() === String(difficulty).toLowerCase());
     if (tag) problems = problems.filter(p => (p.tags || []).includes(tag));
     if (search) problems = problems.filter(p => (p.title || '').toLowerCase().includes(search));
@@ -40,7 +49,10 @@ exports.getAdjacentProblems = async (req, res) => {
   try {
     const { id } = req.params;
 
+    // Drafts are excluded so prev/next never lands on an unpublished problem and
+    // the "position of total" counter matches what the student can actually see.
     const problems = (await problemRepo.getAll())
+      .filter(isPublished)
       .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
 
     const idx = problems.findIndex(r => r.id === id);
@@ -70,7 +82,9 @@ exports.getProblemById = async (req, res) => {
     const { id } = req.params;
 
     const p = await problemRepo.getById(id);
-    if (!p) {
+    // A draft is indistinguishable from "does not exist" to a student — including
+    // to anyone guessing an id from a colleague's screen share.
+    if (!p || !isPublished(p)) {
       return res.status(404).json({ success: false, error: 'Problem not found' });
     }
 

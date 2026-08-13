@@ -27,4 +27,9 @@ async function listByFacultyId(facultyId) {
   return snap.docs.map(toAssignment);
 }
 
-module.exports = { create, getById, getAll, listByFacultyId };
+async function update(id, partial) {
+  await col().doc(id).set(partial, { merge: true });
+  return getById(id);
+}
+
+module.exports = { create, getById, getAll, listByFacultyId, update };
