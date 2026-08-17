@@ -72,13 +72,20 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /** When work actually happens — the rhythm a totals chart can't show. */
 export function ActivityHeatmap({ grid }: { grid: number[][] }) {
   const theme = useNivoTheme();
-  const data = React.useMemo(
-    () => grid.map((row, d) => ({
+  const data = React.useMemo(() => {
+    // Most cohorts are only ever active in a handful of hours (a lab slot, an
+    // evening study window). Showing all 24 turns the grid into mostly-empty
+    // noise, so trim to the active hours plus one hour of padding either side.
+    const active: number[] = [];
+    grid.forEach((row) => row.forEach((v, h) => { if (v > 0) active.push(h); }));
+    const lo = active.length ? Math.max(0, Math.min(...active) - 1) : 0;
+    const hi = active.length ? Math.min(23, Math.max(...active) + 1) : 23;
+    const hours = Array.from({ length: hi - lo + 1 }, (_, i) => lo + i);
+    return grid.map((row, d) => ({
       id: DAYS[d],
-      data: row.map((v, h) => ({ x: `${String(h).padStart(2, "0")}`, y: v })),
-    })).reverse(),
-    [grid],
-  );
+      data: hours.map((h) => ({ x: String(h).padStart(2, "0"), y: row[h] ?? 0 })),
+    })).reverse();
+  }, [grid]);
   const max = Math.max(1, ...grid.flat());
 
   return (
@@ -103,13 +110,29 @@ export function ActivityHeatmap({ grid }: { grid: number[][] }) {
   );
 }
 
-/** Submissions and accepted over time. */
+/** Submissions and accepted over time. Buckets into weeks past ~6 weeks of
+ * data — daily counts in the single digits zigzag every day and read as noise
+ * once there are months of them; a weekly total shows the actual trend. */
 export function TrendChart({ daily }: { daily: { date: string; subs: number; ac: number }[] }) {
   const theme = useNivoTheme();
   const colors = useChartColors();
+  const weekly = daily.length > 45;
+  const points = React.useMemo(() => {
+    if (!weekly) return daily;
+    const buckets: { date: string; subs: number; ac: number }[] = [];
+    for (let i = 0; i < daily.length; i += 7) {
+      const slice = daily.slice(i, i + 7);
+      buckets.push({
+        date: slice[0].date,
+        subs: slice.reduce((s, d) => s + d.subs, 0),
+        ac: slice.reduce((s, d) => s + d.ac, 0),
+      });
+    }
+    return buckets;
+  }, [daily, weekly]);
   const data = [
-    { id: "Submissions", data: daily.map((d) => ({ x: d.date, y: d.subs })) },
-    { id: "Accepted", data: daily.map((d) => ({ x: d.date, y: d.ac })) },
+    { id: "Submissions", data: points.map((d) => ({ x: d.date, y: d.subs })) },
+    { id: "Accepted", data: points.map((d) => ({ x: d.date, y: d.ac })) },
   ];
   return (
     <Box sx={{ height: 280 }}>
@@ -121,12 +144,12 @@ export function TrendChart({ daily }: { daily: { date: string; subs: number; ac:
         colors={[colors[0], colors[2]]}
         theme={theme}
         curve="monotoneX"
-        enablePoints={false}
+        enablePoints={points.length <= 20}
         enableSlices="x"
         axisBottom={{
           tickSize: 0, tickPadding: 8, tickRotation: -45,
           // Thin the labels so a long window stays readable.
-          format: (v: string) => (daily.length <= 14 || daily.findIndex((d) => d.date === v) % Math.ceil(daily.length / 10) === 0 ? v.slice(5) : ""),
+          format: (v: string) => (points.length <= 14 || points.findIndex((d) => d.date === v) % Math.ceil(points.length / 10) === 0 ? v.slice(5) : ""),
         }}
         axisLeft={{ tickSize: 0, tickPadding: 8 }}
         legends={[{

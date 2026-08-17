@@ -31,10 +31,6 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import { CheckCircleIcon, RadioButtonUncheckedIcon, CloseIcon, PeopleOutlineIcon, BoltOutlinedIcon, TrackChangesOutlinedIcon, DescriptionOutlinedIcon, DownloadOutlinedIcon, AddIcon, ShieldOutlinedIcon, EditOutlinedIcon } from "@/components/ui/icons";
-import { ResponsiveBar } from "@nivo/bar";
-import { ResponsiveLine } from "@nivo/line";
-import { ResponsivePie } from "@nivo/pie";
-import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
@@ -79,15 +75,6 @@ interface AtRiskStudent {
   section?: string | null;
   reasons: string[];
 }
-interface Analytics {
-  topicWeakness: { topic: string; solved_count: string; failed_count: string }[];
-  submissionsTimeline: { date: string; count: number }[];
-  difficultyDistribution: { difficulty: string; count: string }[];
-  verdictDistribution?: { name: string; value: number }[];
-  topStudents?: { name: string; solved: number }[];
-  topicMastery?: { topic: string; solved: number; failed: number }[];
-  languageDistribution?: { name: string; value: number }[];
-}
 interface ProgressData {
   problems: { id: string; title: string; difficulty: string }[];
   progress: {
@@ -98,7 +85,7 @@ interface ProgressData {
   }[];
 }
 
-type Tab = "overview" | "students" | "analytics" | "assignments";
+type Tab = "overview" | "students" | "assignments";
 
 function initials(name: string) {
   return name.split(" ").map((n) => n[0]).join("").slice(0, 2).toUpperCase();
@@ -644,26 +631,6 @@ function ProctorDialog({ target, onClose }: { target: { id: string; title: strin
   );
 }
 
-// ── Simple horizontal bar list ────────────────────────────────────────────────
-function BarList({ rows }: { rows: { label: string; value: number; detail?: string; color?: string }[] }) {
-  const max = Math.max(...rows.map((r) => r.value), 1);
-  return (
-    <Stack spacing={1.5}>
-      {rows.map((r) => (
-        <Box key={r.label}>
-          <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-            <Typography variant="caption" fontWeight={500} sx={{ textTransform: "capitalize" }}>{r.label}</Typography>
-            <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace" }}>{r.detail ?? r.value}</Typography>
-          </Stack>
-          <Box sx={{ height: 8, borderRadius: 4, bgcolor: "surfaceContainerHighest", overflow: "hidden" }}>
-            <Box sx={{ height: "100%", width: `${Math.round((r.value / max) * 100)}%`, bgcolor: r.color ?? "primary.main", borderRadius: 4 }} />
-          </Box>
-        </Box>
-      ))}
-    </Stack>
-  );
-}
-
 function SectionCard({ title, icon, action, children }: { title: string; icon?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
@@ -681,17 +648,13 @@ function SectionCard({ title, icon, action, children }: { title: string; icon?: 
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FacultyDashboardPage() {
-  const nivoTheme = useNivoTheme();
-  const chartColors = useChartColors();
   const [tab, setTab] = React.useState<Tab>("overview");
   const [stats, setStats] = React.useState<Stats>({ totalStudents: 0, activeStudents: 0, problemsSolved: 0, totalSubs: 0, acRate: 0 });
   const [assignments, setAssignments] = React.useState<AssignmentItem[]>([]);
   const [atRisk, setAtRisk] = React.useState<AtRiskStudent[]>([]);
   const [students, setStudents] = React.useState<Student[]>([]);
-  const [analytics, setAnalytics] = React.useState<Analytics | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [studentsLoading, setStudentsLoading] = React.useState(false);
-  const [analyticsLoading, setAnalyticsLoading] = React.useState(false);
   const [studentSearch, setStudentSearch] = React.useState("");
 
   const [selectedStudent, setSelectedStudent] = React.useState<Student | null>(null);
@@ -736,19 +699,9 @@ export default function FacultyDashboardPage() {
       .finally(() => setStudentsLoading(false));
   }, [students.length, showToast]);
 
-  const loadAnalytics = React.useCallback(() => {
-    if (analytics) return;
-    setAnalyticsLoading(true);
-    api.get("/api/faculty/analytics")
-      .then((r) => { if (r.data?.success) setAnalytics(r.data.data); })
-      .catch((e) => showToast(apiErrorMessage(e, "Couldn't load analytics."), { severity: "error" }))
-      .finally(() => setAnalyticsLoading(false));
-  }, [analytics, showToast]);
-
   React.useEffect(() => {
     if (tab === "students") loadStudents();
-    if (tab === "analytics") loadAnalytics();
-  }, [tab, loadStudents, loadAnalytics]);
+  }, [tab, loadStudents]);
 
   const filteredStudents = students.filter(
     (s) => s.name.toLowerCase().includes(studentSearch.toLowerCase()) || s.email.toLowerCase().includes(studentSearch.toLowerCase()),
@@ -790,7 +743,6 @@ export default function FacultyDashboardPage() {
       <Tabs value={tab} onChange={(_, v: Tab) => setTab(v)} sx={{ mb: 3, borderBottom: "1px solid", borderColor: "outlineVariant" }}>
         <Tab value="overview" label="Overview" />
         <Tab value="students" label="Students" />
-        <Tab value="analytics" label="Analytics" />
         <Tab value="assignments" label="Assignments" />
       </Tabs>
 
@@ -919,122 +871,6 @@ export default function FacultyDashboardPage() {
             </TableContainer>
           </Card>
         </Stack>
-      )}
-
-      {/* Analytics */}
-      {tab === "analytics" && (
-        <>
-          {analyticsLoading ? (
-            <Box sx={{ display: "grid", placeItems: "center", py: 8 }}><Skeleton variant="rounded" width="100%" height={300} /></Box>
-          ) : !analytics ? (
-            <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}><EmptyState title="Failed to load analytics" /></Card>
-          ) : (
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "2fr 1fr" }, gap: 3 }}>
-              <SectionCard title="Topic Weakness (class-wide)">
-                {analytics.topicWeakness.length === 0 ? (
-                  <EmptyState title="No topic data yet" />
-                ) : (
-                  <BarList
-                    rows={analytics.topicWeakness.map((t) => {
-                      const failed = parseInt(t.failed_count) || 0;
-                      const solved = parseInt(t.solved_count) || 0;
-                      const failPct = Math.round((failed / Math.max(failed + solved, 1)) * 100);
-                      return { label: t.topic, value: failed, detail: `${failPct}% fail · ${failed}f/${solved}s`, color: "var(--mui-palette-error-main)" };
-                    })}
-                  />
-                )}
-              </SectionCard>
-
-              <SectionCard title="Difficulty Distribution">
-                {analytics.difficultyDistribution.length === 0 ? (
-                  <EmptyState title="No solved problems yet" />
-                ) : (
-                  <Box sx={{ height: 240 }}>
-                    <ResponsiveBar
-                      data={analytics.difficultyDistribution.map((d) => ({ difficulty: d.difficulty, value: parseInt(d.count) || 0 }))}
-                      keys={["value"]}
-                      indexBy="difficulty"
-                      margin={{ top: 16, right: 16, bottom: 40, left: 44 }}
-                      padding={0.35}
-                      borderRadius={6}
-                      colors={[chartColors[0]]}
-                      theme={nivoTheme}
-                      enableLabel={false}
-                      axisLeft={{ tickSize: 0, tickPadding: 8 }}
-                      axisBottom={{ tickSize: 0, tickPadding: 8 }}
-                    />
-                  </Box>
-                )}
-              </SectionCard>
-
-              <Box sx={{ gridColumn: { lg: "1 / -1" } }}>
-                <SectionCard title="Submission Activity (last 30 days)">
-                  {analytics.submissionsTimeline.length === 0 ? (
-                    <EmptyState title="No submissions in last 30 days" />
-                  ) : (
-                    <Box sx={{ height: 240 }}>
-                      <ResponsiveLine
-                        data={[{ id: "submissions", data: analytics.submissionsTimeline.map((d) => ({ x: d.date.slice(5), y: d.count })) }]}
-                        margin={{ top: 16, right: 20, bottom: 40, left: 44 }}
-                        xScale={{ type: "point" }}
-                        yScale={{ type: "linear", min: 0, max: "auto" }}
-                        curve="monotoneX"
-                        colors={[chartColors[0]]}
-                        theme={nivoTheme}
-                        enableArea
-                        areaOpacity={0.12}
-                        enablePoints={false}
-                        enableGridX={false}
-                        axisBottom={{ tickSize: 0, tickPadding: 8, tickRotation: -35 }}
-                        axisLeft={{ tickSize: 0, tickPadding: 8 }}
-                        useMesh
-                      />
-                    </Box>
-                  )}
-                </SectionCard>
-              </Box>
-
-              <SectionCard title="Verdict Distribution">
-                {(analytics.verdictDistribution ?? []).length === 0 ? (
-                  <EmptyState title="No submissions yet" />
-                ) : (
-                  <Box sx={{ height: 240 }}>
-                    <ResponsivePie
-                      data={(analytics.verdictDistribution ?? []).map((v) => ({ id: v.name, label: v.name, value: v.value }))}
-                      margin={{ top: 16, right: 16, bottom: 16, left: 16 }}
-                      innerRadius={0.55}
-                      padAngle={1.2}
-                      cornerRadius={4}
-                      colors={chartColors}
-                      theme={nivoTheme}
-                      borderWidth={0}
-                      enableArcLinkLabels={false}
-                      arcLabelsSkipAngle={16}
-                    />
-                  </Box>
-                )}
-              </SectionCard>
-
-              <SectionCard title="Top Students (by problems solved)">
-                {(analytics.topStudents ?? []).length === 0 ? (
-                  <EmptyState title="No data yet" />
-                ) : (
-                  <BarList rows={(analytics.topStudents ?? []).slice(0, 10).map((s) => ({ label: s.name, value: s.solved, color: "var(--mui-palette-success-main)" }))} />
-                )}
-              </SectionCard>
-
-              <Box sx={{ gridColumn: { lg: "1 / -1" } }}>
-                <SectionCard title="Language Distribution">
-                  {(analytics.languageDistribution ?? []).length === 0 ? (
-                    <EmptyState title="No submissions yet" />
-                  ) : (
-                    <BarList rows={(analytics.languageDistribution ?? []).map((l) => ({ label: l.name, value: l.value }))} />
-                  )}
-                </SectionCard>
-              </Box>
-            </Box>
-          )}
-        </>
       )}
 
       {/* Assignments */}

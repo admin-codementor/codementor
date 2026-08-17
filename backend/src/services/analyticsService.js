@@ -50,17 +50,25 @@ const languageName = (raw) => {
 };
 
 /**
- * Build the full analytics snapshot. Department-scoped: `dept === null` means
- * everything (admin), otherwise only students in that department are counted.
+ * Build the full analytics snapshot for a scope. Two mutually exclusive scope
+ * shapes:
+ *  - `{ dept }` — department-scoped. `dept === null` means everything (admin),
+ *    otherwise only students in that department are counted (HOD).
+ *  - `{ studentIds }` — an explicit set of student ids, used for faculty, who
+ *    see only students enrolled in classrooms *they* created rather than a
+ *    whole department (a department can span several faculty's classes).
  */
-async function buildSnapshot(dept) {
+async function buildSnapshot(scope) {
+  const { dept = null, memberIds = null } = scope;
   const [studentsMap, submissions, problems] = await Promise.all([
     userRepo.getMapByRole('student'),
     submissionRepo.listAllForAnalytics(),
     problemRepo.getAll(),
   ]);
 
-  const students = [...studentsMap.values()].filter((s) => dept === null || (s.department || null) === dept);
+  const students = [...studentsMap.values()].filter((s) => (
+    memberIds ? memberIds.has(s.id) : (dept === null || (s.department || null) === dept)
+  ));
   const studentIds = new Set(students.map((s) => s.id));
   const problemsById = new Map(problems.map((p) => [p.id, p]));
 
@@ -282,9 +290,15 @@ function cohortsFrom(snapshot, dimension) {
   }).sort((a, b) => String(a.cohort).localeCompare(String(b.cohort)));
 }
 
-/** Cached snapshot accessor. */
-async function getSnapshot(dept) {
-  return cached(`analytics:snapshot:v${SNAPSHOT_VERSION}:${dept ?? 'all'}`, SNAPSHOT_TTL, () => buildSnapshot(dept));
+/**
+ * Cached snapshot accessor. `scope` is `{ dept }` (department/institution scope)
+ * or `{ memberIds, cacheKey }` (a faculty member's own classroom rosters — the
+ * member-id set isn't a stable cache key by itself, so the caller supplies one,
+ * typically the faculty member's own id).
+ */
+async function getSnapshot(scope) {
+  const key = scope.memberIds ? `faculty:${scope.cacheKey}` : (scope.dept ?? 'all');
+  return cached(`analytics:snapshot:v${SNAPSHOT_VERSION}:${key}`, SNAPSHOT_TTL, () => buildSnapshot(scope));
 }
 
 module.exports = {

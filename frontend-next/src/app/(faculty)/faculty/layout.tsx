@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, ReceiptLongOutlinedIcon, LayersOutlinedIcon } from "@/components/ui/icons";
+import { SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, ReceiptLongOutlinedIcon, LayersOutlinedIcon, MenuBookOutlinedIcon } from "@/components/ui/icons";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { getRole } from "@/lib/auth";
@@ -11,6 +11,7 @@ const BASE_NAV: NavItem[] = [
   { label: "Analytics", href: "/faculty/analytics", icon: <InsightsOutlinedIcon /> },
   { label: "Problems", href: "/faculty/problems", icon: <CodeOutlinedIcon /> },
   { label: "Question Bank", href: "/faculty/bank", icon: <LayersOutlinedIcon /> },
+  { label: "Courses", href: "/faculty/courses", icon: <MenuBookOutlinedIcon /> },
   { label: "Classes", href: "/faculty/classes", icon: <SchoolOutlinedIcon /> },
   { label: "MCQ Tests", href: "/faculty/mcq", icon: <QuizOutlinedIcon /> },
   { label: "Plagiarism", href: "/faculty/plagiarism", icon: <PolicyOutlinedIcon /> },

@@ -17,7 +17,7 @@ import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
-import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon } from "@/components/ui/icons";
+import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon, MenuBookOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
@@ -32,6 +32,7 @@ import type {
   DashboardData,
   Assignment,
   RecommendedProblem,
+  CourseSummary,
 } from "@/lib/types";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
@@ -209,6 +210,7 @@ interface PageData {
   dashboard: DashboardData;
   assignments: Assignment[];
   recommendations: RecommendedProblem[];
+  courses: CourseSummary[];
 }
 
 export default function DashboardPage() {
@@ -225,7 +227,7 @@ export default function DashboardPage() {
     setLoading(true);
     setError(false);
     try {
-      const [dashRes, assignRes, recRes] = await Promise.allSettled([
+      const [dashRes, assignRes, recRes, coursesRes] = await Promise.allSettled([
         api.get<{ success: boolean; data: DashboardData }>(
           "/api/student/dashboard"
         ),
@@ -234,6 +236,9 @@ export default function DashboardPage() {
         ),
         api.get<{ success: boolean; data: RecommendedProblem[] }>(
           "/api/student/recommendations"
+        ),
+        api.get<{ success: boolean; data: CourseSummary[] }>(
+          "/api/courses"
         ),
       ]);
 
@@ -250,6 +255,8 @@ export default function DashboardPage() {
             : [],
         recommendations:
           recRes.status === "fulfilled" ? recRes.value.data.data ?? [] : [],
+        courses:
+          coursesRes.status === "fulfilled" ? coursesRes.value.data.data ?? [] : [],
       });
     } catch {
       setError(true);
@@ -272,7 +279,7 @@ export default function DashboardPage() {
       />
     );
 
-  const { dashboard, assignments, recommendations } = data;
+  const { dashboard, assignments, recommendations, courses } = data;
   const { stats, topics, recentSubmissions, heatmap } = dashboard;
   const isNewUser = stats.totalSubs === 0;
 
@@ -287,6 +294,18 @@ export default function DashboardPage() {
 
   const topTopics = topics.slice(0, 6);
   const topRecs = recommendations.slice(0, 5);
+
+  // "Continue where you left off": courses already started (and not finished)
+  // sort first, so the dashboard surfaces progress rather than a flat list.
+  const courseRows = [...courses]
+    .filter((c) => c.problemCount > 0)
+    .sort((a, b) => {
+      const aStarted = a.solvedCount > 0 && a.solvedCount < a.problemCount;
+      const bStarted = b.solvedCount > 0 && b.solvedCount < b.problemCount;
+      if (aStarted !== bStarted) return aStarted ? -1 : 1;
+      return b.solvedCount / b.problemCount - a.solvedCount / a.problemCount;
+    })
+    .slice(0, 3);
 
   const greeting = (() => {
     const h = new Date().getHours();
@@ -429,6 +448,59 @@ export default function DashboardPage() {
                 </List>
               )}
             </SectionCard>
+
+            {/* Continue Learning — modules/courses already in progress surface first. */}
+            {courseRows.length > 0 && (
+              <SectionCard
+                title="Continue Learning"
+                aria-label="Courses"
+                action={
+                  <Link
+                    component={NextLink}
+                    href="/app/courses"
+                    variant="body2"
+                    sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                  >
+                    All courses <ArrowForwardIcon sx={{ fontSize: 16 }} />
+                  </Link>
+                }
+              >
+                <Stack spacing={2}>
+                  {courseRows.map((c) => {
+                    const pct = c.problemCount > 0 ? Math.round((c.solvedCount / c.problemCount) * 100) : 0;
+                    return (
+                      <Box
+                        key={c.id}
+                        component={NextLink}
+                        href={`/app/courses/${c.id}`}
+                        sx={{
+                          display: "block", textDecoration: "none", p: 1.5, borderRadius: 2,
+                          border: "1px solid", borderColor: "outlineVariant",
+                          "&:hover": { bgcolor: "surfaceContainerHigh" }, transition: "background-color 150ms",
+                        }}
+                      >
+                        <Stack direction="row" alignItems="center" spacing={1.5}>
+                          <MenuBookOutlinedIcon sx={{ fontSize: 20, color: "text.secondary", flexShrink: 0 }} />
+                          <Typography variant="body2" fontWeight={500} color="text.primary" sx={{ flex: 1 }} noWrap>
+                            {c.title}
+                          </Typography>
+                          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace", flexShrink: 0 }}>
+                            {c.solvedCount}/{c.problemCount}
+                          </Typography>
+                        </Stack>
+                        <LinearProgress
+                          variant="determinate"
+                          value={pct}
+                          color={pct === 100 ? "success" : "primary"}
+                          sx={{ height: 4, borderRadius: 2, mt: 1 }}
+                          aria-label={`${c.title}: ${c.solvedCount} of ${c.problemCount} problems solved`}
+                        />
+                      </Box>
+                    );
+                  })}
+                </Stack>
+              </SectionCard>
+            )}
 
             {/* Topic Mastery */}
             {topTopics.length > 0 && (

@@ -191,7 +191,15 @@ export default function FacultyClassesPage() {
       <Card variant="outlined" sx={{ borderColor: "outlineVariant", mb: 3 }}>
         <CardContent>
           <Stack component="form" onSubmit={create} direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ xs: "stretch", sm: "flex-end" }}>
-            <TextField label="Class name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. CSE-A DSA 2025" size="small" sx={{ flex: 1 }} />
+            <TextField
+              label="Class name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. CSE-A DSA 2025"
+              size="small"
+              sx={{ flex: 1 }}
+              helperText={name.trim() ? " " : "Required — the Create button turns on once this has a name"}
+            />
             <TextField label="Department" value={department} onChange={(e) => setDepartment(e.target.value)} placeholder="CSE" size="small" sx={{ width: { sm: 120 } }} />
             <TextField label="Section" value={section} onChange={(e) => setSection(e.target.value)} placeholder="A" size="small" sx={{ width: { sm: 90 } }} />
             <Button type="submit" variant="contained" startIcon={<AddIcon />} disabled={creating || !name.trim()} sx={{ minWidth: 120 }}>

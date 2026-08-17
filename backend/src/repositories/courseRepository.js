@@ -16,6 +16,13 @@ async function listPublished() {
   return snap.docs.map(toCourse).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
 }
 
+// Faculty management view — draft and published alike, since a faculty member
+// needs to see (and finish) a course before it's ready to publish.
+async function listAll() {
+  const snap = await col().get();
+  return snap.docs.map(toCourse).sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+}
+
 async function getById(id) {
   return toCourse(await col().doc(id).get());
 }
@@ -33,10 +40,40 @@ async function create(data) {
   return getById(id);
 }
 
+async function update(id, data) {
+  await col().doc(id).set(data, { merge: true });
+  return getById(id);
+}
+
 async function addModule(courseId, data) {
   const id = uuidv4();
   await modulesCol(courseId).doc(id).set(data);
   return { id, ...data };
 }
 
-module.exports = { listPublished, getById, getModules, create, addModule };
+async function updateModule(courseId, moduleId, data) {
+  await modulesCol(courseId).doc(moduleId).set(data, { merge: true });
+  const doc = await modulesCol(courseId).doc(moduleId).get();
+  return doc.exists ? { id: doc.id, ...doc.data() } : null;
+}
+
+async function deleteModule(courseId, moduleId) {
+  await modulesCol(courseId).doc(moduleId).delete();
+}
+
+// Wipes every course and its modules subcollection. Firestore doesn't cascade
+// subcollection deletes on its own, so each course's modules are deleted
+// first. Used by the seed script's "safe to re-run" reset — not exposed to
+// any authenticated route.
+async function removeAll() {
+  const snap = await col().get();
+  for (const doc of snap.docs) {
+    const modSnap = await modulesCol(doc.id).get();
+    await Promise.all(modSnap.docs.map((m) => m.ref.delete()));
+    await doc.ref.delete();
+  }
+}
+
+module.exports = {
+  listPublished, listAll, getById, getModules, create, update, addModule, updateModule, deleteModule, removeAll,
+};

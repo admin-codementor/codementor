@@ -91,6 +91,30 @@ router.get('/assignments/:id', facultyController.getAssignmentDetail);
 router.get('/assignments/:id/submissions', facultyController.getAssignmentSubmissions);
 router.get('/assignments/:id/progress',    facultyController.getAssignmentProgress);
 
+// ── Courses / modules (student practice catalogue) ──────────────────────────
+router.get('/courses',    facultyController.getFacultyCourses);
+router.get('/courses/:id', facultyController.getFacultyCourseDetail);
+router.post('/courses',
+  requirePermission('manage_problems'),
+  facultyController.createCourse
+);
+router.patch('/courses/:id',
+  requirePermission('manage_problems'),
+  facultyController.updateCourse
+);
+router.post('/courses/:id/modules',
+  requirePermission('manage_problems'),
+  facultyController.createModule
+);
+router.patch('/courses/:id/modules/:moduleId',
+  requirePermission('manage_problems'),
+  facultyController.updateModule
+);
+router.delete('/courses/:id/modules/:moduleId',
+  requirePermission('manage_problems'),
+  facultyController.deleteModule
+);
+
 // ── Export (CSV / reports) ────────────────────────────────────────────────────
 router.get('/assignments/:id/export',
   requirePermission('export_data'),

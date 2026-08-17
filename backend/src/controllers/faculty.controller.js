@@ -9,6 +9,7 @@ const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
 const classroomRepo = require('../repositories/classroomRepository');
+const courseRepo = require('../repositories/courseRepository');
 const ratingHistoryRepo = require('../repositories/ratingHistoryRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const codingProfileRepo = require('../repositories/codingProfileRepository');
@@ -1177,6 +1178,21 @@ exports.getClassAnalytics = async (req, res) => {
   }
 };
 
+// Resolves how much of the student population an analytics caller may see.
+// Admin: everything. HOD: their own department (every faculty's classes in
+// it) — unchanged from before. Faculty: ONLY students enrolled in classrooms
+// *they personally created* — a department can hold several faculty's
+// classes, and a faculty member shouldn't see a colleague's students.
+async function resolveAnalyticsScope(req) {
+  if (req.user?.role === 'faculty') {
+    const classrooms = await classroomRepo.listByFacultyId(req.user.id);
+    const memberLists = await Promise.all(classrooms.map((c) => classroomRepo.listMembers(c.id)));
+    const memberIds = new Set(memberLists.flat().map((m) => m.userId));
+    return { ownClasses: true, dept: req.user.department ?? null, memberIds, cacheKey: req.user.id, classroomCount: classrooms.length };
+  }
+  return { ownClasses: false, dept: scopeDept(req), memberIds: null };
+}
+
 // Per-student deep-dive: learning curve, topic mastery radar, verdict mix, totals.
 // ── Analytics overview: institution / department level ────────────────────────
 // Everything here comes from one cached snapshot (services/analyticsService.js)
@@ -1187,11 +1203,11 @@ exports.getClassAnalytics = async (req, res) => {
 // and half solved none — and those need opposite responses from a lecturer.
 exports.getAnalyticsOverview = async (req, res) => {
   try {
-    const dept = scopeDept(req);
+    const scope = await resolveAnalyticsScope(req);
     const dimension = analytics.COHORT_DIMS[req.query.dimension] ? req.query.dimension : 'department';
     const days = Math.min(Math.max(parseInt(req.query.days, 10) || 30, 7), 365);
 
-    const snap = await analytics.getSnapshot(dept);
+    const snap = await analytics.getSnapshot(scope);
 
     const now = Date.now();
     const windowStart = now - days * analytics.DAY_MS;
@@ -1226,7 +1242,10 @@ exports.getAnalyticsOverview = async (req, res) => {
     res.json({
       success: true,
       data: {
-        scope: { department: dept, dimension, days, generatedAt: snap.generatedAt },
+        scope: {
+          department: scope.dept, dimension, days, generatedAt: snap.generatedAt,
+          ownClasses: scope.ownClasses, classroomCount: scope.classroomCount ?? null,
+        },
         kpis: {
           submissions: { value: sum(current, 'subs'), delta: delta(sum(current, 'subs'), sum(previous, 'subs')) },
           acRate: { value: rate(current), delta: delta(rate(current), rate(previous)) },
@@ -1270,16 +1289,19 @@ exports.getAnalyticsOverview = async (req, res) => {
 // ── Analytics: one cohort in depth ────────────────────────────────────────────
 exports.getCohortDetail = async (req, res) => {
   try {
-    const dept = scopeDept(req);
+    const scope = await resolveAnalyticsScope(req);
     const dimension = analytics.COHORT_DIMS[req.query.dimension] ? req.query.dimension : 'department';
     const dim = analytics.COHORT_DIMS[dimension];
     const value = String(req.query.value ?? 'Unassigned');
 
-    if (dimension === 'department' && dept !== null && value !== dept) {
+    // Faculty are already restricted to their own classrooms' students by the
+    // snapshot itself, so a department-name mismatch isn't a scope violation for
+    // them the way it is for an HOD (whose scope IS the department boundary).
+    if (!scope.ownClasses && dimension === 'department' && scope.dept !== null && value !== scope.dept) {
       return res.status(403).json({ success: false, error: 'Outside your department scope.' });
     }
 
-    const snap = await analytics.getSnapshot(dept);
+    const snap = await analytics.getSnapshot(scope);
     const members = snap.studentStats.filter((s) => (s[dim] || 'Unassigned') === value);
     if (members.length === 0) {
       return res.json({ success: true, data: { cohort: value, students: [], empty: true } });
@@ -1357,9 +1379,9 @@ exports.getProblemAnalytics = async (req, res) => {
     const problem = await problemRepo.getById(id);
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
 
-    const dept = scopeDept(req);
+    const scope = await resolveAnalyticsScope(req);
     const [snap, subs, testCases] = await Promise.all([
-      analytics.getSnapshot(dept),
+      analytics.getSnapshot(scope),
       submissionRepo.listByProblem(id),
       problemRepo.getTestCases(id),
     ]);
@@ -1482,7 +1504,7 @@ exports.getMcqItemAnalysis = async (req, res) => {
       if (p >= 0.95) flag = 'too easy — nearly everyone got it';
       else if (p <= 0.1) flag = 'too hard, or the keyed answer may be wrong';
       else if (d < 0.1) flag = 'does not separate strong from weak students';
-      else if (d < 0.2) flag = 'weak discrimination';
+      else if (d < 0.2) flag = 'only weakly separates strong from weak students';
 
       return {
         id: q.id,
@@ -1876,5 +1898,226 @@ exports.getCohortTopics = async (req, res) => {
   } catch (error) {
     console.error('Cohort Topics Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch cohort topics' });
+  }
+};
+
+// ── Courses & modules: the student practice catalogue ─────────────────────────
+// A course is a curated, free-browsing (not gated/sequential) collection of
+// modules, each an ordered list of existing problems. Shared and visible to
+// every faculty/HOD/admin (like the question bank) rather than siloed per
+// creator, since a curriculum is meant to be a collaborative resource — but
+// editing an existing course is still ownership-gated the same way problems
+// are (creator, or HOD in the same department, or admin).
+
+// @route GET /api/faculty/courses
+exports.getFacultyCourses = async (req, res) => {
+  try {
+    const [courses, usersMap] = await Promise.all([
+      courseRepo.listAll(),
+      userRepo.getAllUsersMap(),
+    ]);
+    const data = await Promise.all(courses.map(async (c) => {
+      const modules = await courseRepo.getModules(c.id);
+      const problemCount = new Set(modules.flatMap((m) => m.problemIds || [])).size;
+      const owner = usersMap.get(c.createdBy);
+      return {
+        id: c.id,
+        title: c.title,
+        description: c.description || '',
+        isPublished: !!c.isPublished,
+        moduleCount: modules.length,
+        problemCount,
+        author: owner?.name || 'Unknown',
+        canEdit: c.createdBy === req.user.id || req.user.role === 'admin'
+          || canManageResource(req, c.createdBy, owner?.department ?? null),
+      };
+    }));
+    data.sort((a, b) => (a.title || '').localeCompare(b.title || ''));
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Get Faculty Courses Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch courses' });
+  }
+};
+
+// @route GET /api/faculty/courses/:id — full detail for the authoring view,
+// draft or published (unlike the student-facing GET /api/courses/:id).
+exports.getFacultyCourseDetail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const course = await courseRepo.getById(id);
+    if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+
+    const [modules, owner] = await Promise.all([
+      courseRepo.getModules(id),
+      course.createdBy ? userRepo.getById(course.createdBy, 'faculty') : null,
+    ]);
+    const allProblemIds = [...new Set(modules.flatMap((m) => m.problemIds || []))];
+    const problemsMap = await problemRepo.getMapByIds(allProblemIds);
+
+    res.json({
+      success: true,
+      data: {
+        id: course.id,
+        title: course.title,
+        description: course.description || '',
+        isPublished: !!course.isPublished,
+        canEdit: course.createdBy === req.user.id || req.user.role === 'admin'
+          || canManageResource(req, course.createdBy, owner?.department ?? null),
+        modules: modules.map((m) => ({
+          id: m.id,
+          title: m.title,
+          description: m.description || '',
+          problems: (m.problemIds || [])
+            .map((pid) => problemsMap.get(pid))
+            .filter(Boolean)
+            .map((p) => ({ id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [] })),
+        })),
+      },
+    });
+  } catch (error) {
+    console.error('Get Faculty Course Detail Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch course' });
+  }
+};
+
+// @route POST /api/faculty/courses — any faculty/HOD/admin may start a new
+// course; it always begins as a draft since an empty course has nothing to
+// publish to students yet.
+exports.createCourse = async (req, res) => {
+  try {
+    const title = String(req.body.title || '').trim();
+    if (!title) return res.status(400).json({ success: false, error: 'Title is required.' });
+
+    const course = await courseRepo.create({
+      title,
+      description: String(req.body.description || '').trim(),
+      sortOrder: 0,
+      isPublished: false,
+      createdBy: req.user.id,
+    });
+    res.status(201).json({ success: true, data: course });
+  } catch (error) {
+    console.error('Create Course Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create course' });
+  }
+};
+
+// @route PATCH /api/faculty/courses/:id
+exports.updateCourse = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const course = await courseRepo.getById(id);
+    if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
+    if (!(await canManageOwnedBy(req, course.createdBy))) {
+      return res.status(403).json({ success: false, error: 'You cannot edit this course.' });
+    }
+
+    const patch = {};
+    if (req.body.title !== undefined) {
+      const title = String(req.body.title).trim();
+      if (!title) return res.status(400).json({ success: false, error: 'Title cannot be empty.' });
+      patch.title = title;
+    }
+    if (req.body.description !== undefined) patch.description = String(req.body.description).trim();
+
+    if (req.body.isPublished === true && !course.isPublished) {
+      // Publishing is gated on having actual content — same "gate publish,
+      // never gate unpublish" rule problems use — so a half-empty course
+      // never reaches a student. Pulling a published course always works.
+      const modules = await courseRepo.getModules(id);
+      const hasContent = modules.some((m) => (m.problemIds || []).length > 0);
+      if (!hasContent) {
+        return res.status(422).json({
+          success: false, error: 'INCOMPLETE',
+          message: 'Add at least one problem to a module before publishing.',
+        });
+      }
+      patch.isPublished = true;
+    } else if (req.body.isPublished === false) {
+      patch.isPublished = false;
+    }
+
+    const updated = await courseRepo.update(id, patch);
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    console.error('Update Course Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update course' });
+  }
+};
+
+async function assertCourseEditable(req, res, courseId) {
+  const course = await courseRepo.getById(courseId);
+  if (!course) {
+    res.status(404).json({ success: false, error: 'Course not found' });
+    return null;
+  }
+  if (!(await canManageOwnedBy(req, course.createdBy))) {
+    res.status(403).json({ success: false, error: 'You cannot edit this course.' });
+    return null;
+  }
+  return course;
+}
+
+// @route POST /api/faculty/courses/:id/modules
+exports.createModule = async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!(await assertCourseEditable(req, res, id))) return;
+
+    const title = String(req.body.title || '').trim();
+    if (!title) return res.status(400).json({ success: false, error: 'Module title is required.' });
+    const problemIds = Array.isArray(req.body.problem_ids)
+      ? [...new Set(req.body.problem_ids.filter(Boolean))]
+      : [];
+
+    const existing = await courseRepo.getModules(id);
+    const created = await courseRepo.addModule(id, {
+      title,
+      description: String(req.body.description || '').trim(),
+      problemIds,
+      sortOrder: existing.length,
+    });
+    res.status(201).json({ success: true, data: created });
+  } catch (error) {
+    console.error('Create Module Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to create module' });
+  }
+};
+
+// @route PATCH /api/faculty/courses/:id/modules/:moduleId
+exports.updateModule = async (req, res) => {
+  try {
+    const { id, moduleId } = req.params;
+    if (!(await assertCourseEditable(req, res, id))) return;
+
+    const patch = {};
+    if (req.body.title !== undefined) {
+      const title = String(req.body.title).trim();
+      if (!title) return res.status(400).json({ success: false, error: 'Module title cannot be empty.' });
+      patch.title = title;
+    }
+    if (req.body.description !== undefined) patch.description = String(req.body.description).trim();
+    if (Array.isArray(req.body.problem_ids)) patch.problemIds = [...new Set(req.body.problem_ids.filter(Boolean))];
+
+    const updated = await courseRepo.updateModule(id, moduleId, patch);
+    if (!updated) return res.status(404).json({ success: false, error: 'Module not found' });
+    res.json({ success: true, data: updated });
+  } catch (error) {
+    console.error('Update Module Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to update module' });
+  }
+};
+
+// @route DELETE /api/faculty/courses/:id/modules/:moduleId
+exports.deleteModule = async (req, res) => {
+  try {
+    const { id, moduleId } = req.params;
+    if (!(await assertCourseEditable(req, res, id))) return;
+    await courseRepo.deleteModule(id, moduleId);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Delete Module Error:', error);
+    res.status(500).json({ success: false, error: 'Failed to delete module' });
   }
 };
