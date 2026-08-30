@@ -48,6 +48,18 @@ jobs:
 
       - name: Build
         working-directory: frontend-next
+        # These NEXT_PUBLIC_* values are public, non-secret browser config (see
+        # frontend-next/.env.example) — placeholders here just satisfy Firebase's
+        # client-side init check during build-time prerendering of /login, /register.
+        # Real values are never needed for a "does it build" check.
+        env:
+          NEXT_PUBLIC_FIREBASE_API_KEY: AIzaSyCI00000000000000000000000000000
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ci-placeholder.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: ci-placeholder
+          NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ci-placeholder.firebasestorage.app
+          NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "000000000000"
+          NEXT_PUBLIC_FIREBASE_APP_ID: "1:000000000000:web:0000000000000000000000"
+          NEXT_PUBLIC_GOOGLE_CLIENT_ID: ci-placeholder.apps.googleusercontent.com
         run: npm run build
 
       - name: Build Docker image
