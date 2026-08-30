@@ -1,0 +1,23 @@
+name: Regenerate lockfile (one-off diagnostic)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  regen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: npm install (regenerate lock for this platform)
+        working-directory: frontend-next
+        run: npm install
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frontend-next-package-lock
+          path: frontend-next/package-lock.json
