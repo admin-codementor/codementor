@@ -18,7 +18,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
 import Tooltip from "@mui/material/Tooltip";
 import {
-  AddIcon, CloseIcon, DragHandleIcon, GroupsOutlinedIcon, DescriptionOutlinedIcon, ShieldOutlinedIcon,
+  CloseIcon, DragHandleIcon, GroupsOutlinedIcon, DescriptionOutlinedIcon, ShieldOutlinedIcon,
   ExpandLessIcon, ExpandMoreIcon,
 } from "@/components/ui/icons";
 import api from "@/lib/api";

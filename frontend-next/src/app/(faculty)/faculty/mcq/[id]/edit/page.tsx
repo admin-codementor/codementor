@@ -261,7 +261,9 @@ export default function McqBuilderPage() {
 
   // Test metadata lives on its own endpoint, separate from the question list.
   const metaRef = React.useRef({ title: "", category: "aptitude", duration: 30 });
-  metaRef.current = { title, category, duration };
+  React.useEffect(() => {
+    metaRef.current = { title, category, duration };
+  });
   const metaTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const saveMeta = React.useCallback(() => {
