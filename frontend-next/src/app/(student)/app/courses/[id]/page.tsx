@@ -45,19 +45,40 @@ function moduleIcon(title: string) {
   if (t.includes("bit")) return <BinaryIcon sx={sx} />;
   if (t.includes("design")) return <PenToolIcon sx={sx} />;
   if (t.includes("basic")) return <AutoAwesomeOutlinedIcon sx={sx} />;
-  // Company modules in the "Advanced DSA for Top Companies" course.
-  if (/tcs|accenture|wipro|infosys|cognizant|capgemini|microsoft|amazon|google|adobe|company|placement/.test(t))
-    return <WorkOutlineOutlinedIcon sx={sx} />;
   return <ViewModuleOutlinedIcon sx={sx} />;
+}
+
+// "TCS Programs" -> "TCS", "Advanced DSA" -> null. Company-program modules get a
+// distinct colored initials avatar instead of a generic icon, since every company
+// module was otherwise using the exact same briefcase glyph -- indistinguishable
+// at a glance, which is the opposite of what a module list is for.
+function companyName(title: string): string | null {
+  const m = title.match(/^(.+?)\s+Programs?$/i);
+  return m ? m[1].trim() : null;
+}
+
+function initialsOf(name: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  return words.length >= 2 ? (words[0][0] + words[1][0]).toUpperCase() : name.slice(0, 2).toUpperCase();
+}
+
+// Deterministic hue from the name so the same company always gets the same color,
+// and different companies are visually distinct from each other.
+function hueOf(name: string): number {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
+  return h;
 }
 
 function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defaultExpanded?: boolean }) {
   const solved = module.problems.filter((p) => p.is_solved).length;
   const total = module.problems.length;
   const pct = total > 0 ? Math.round((solved / total) * 100) : 0;
+  const company = companyName(module.title);
+  const isEmpty = total === 0;
   return (
     <Accordion
-      defaultExpanded={defaultExpanded}
+      defaultExpanded={defaultExpanded && !isEmpty}
       disableGutters
       elevation={0}
       sx={{
@@ -65,6 +86,7 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
         borderColor: "outlineVariant",
         borderRadius: 2,
         overflow: "hidden",
+        opacity: isEmpty ? 0.6 : 1,
         "&:before": { display: "none" },
         "&.Mui-expanded": { margin: 0 },
       }}
@@ -73,21 +95,41 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
         expandIcon={<ExpandMoreIcon />}
         sx={{ px: 2, "& .MuiAccordionSummary-content": { alignItems: "center", gap: 1.5, my: 1.25, minWidth: 0 } }}
       >
-        <Box
-          aria-hidden
-          sx={{
-            width: 32,
-            height: 32,
-            borderRadius: 2,
-            display: "grid",
-            placeItems: "center",
-            flexShrink: 0,
-            color: "onPrimaryContainer",
-            background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 12%, var(--mui-palette-primaryContainer)))",
-          }}
-        >
-          {moduleIcon(module.title)}
-        </Box>
+        {company ? (
+          <Box
+            aria-hidden
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: "50%",
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
+              fontSize: 12,
+              fontWeight: 700,
+              color: `hsl(${hueOf(company)}, 70%, 92%)`,
+              bgcolor: `hsl(${hueOf(company)}, 45%, 32%)`,
+            }}
+          >
+            {initialsOf(company)}
+          </Box>
+        ) : (
+          <Box
+            aria-hidden
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: 2,
+              display: "grid",
+              placeItems: "center",
+              flexShrink: 0,
+              color: "onPrimaryContainer",
+              background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 12%, var(--mui-palette-primaryContainer)))",
+            }}
+          >
+            {moduleIcon(module.title)}
+          </Box>
+        )}
         <Typography variant="subtitle2" fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>
           {module.title}
         </Typography>
@@ -101,9 +143,15 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
             />
           </Box>
         )}
-        <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace", minWidth: 44, textAlign: "right", flexShrink: 0 }}>
-          {solved}/{total}
-        </Typography>
+        {isEmpty ? (
+          <Typography variant="caption" color="text.disabled" sx={{ minWidth: 90, textAlign: "right", flexShrink: 0 }}>
+            Coming soon
+          </Typography>
+        ) : (
+          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace", minWidth: 44, textAlign: "right", flexShrink: 0 }}>
+            {solved}/{total}
+          </Typography>
+        )}
       </AccordionSummary>
       <AccordionDetails sx={{ px: 1, pt: 0, pb: 1 }}>
         {total === 0 ? (
