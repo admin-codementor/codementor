@@ -14,11 +14,12 @@ import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
 import AccordionDetails from "@mui/material/AccordionDetails";
 import LinearProgress from "@mui/material/LinearProgress";
+import CircularProgress from "@mui/material/CircularProgress";
 import { visuallyHidden } from "@mui/utils";
 import {
   ArrowBackIcon, CheckCircleOutlineIcon, RadioButtonUncheckedIcon, ViewModuleOutlinedIcon, ExpandMoreIcon,
   TypeIcon, HashIcon, ArrowRightLeftIcon, ArrowDownUpIcon, GitForkIcon, WaypointsIcon, BoxesIcon, BinaryIcon,
-  PenToolIcon, LinkOutlinedIcon, LayersOutlinedIcon, AutoAwesomeOutlinedIcon, WorkOutlineOutlinedIcon,
+  PenToolIcon, LinkOutlinedIcon, LayersOutlinedIcon, AutoAwesomeOutlinedIcon,
 } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -242,14 +243,14 @@ export default function CourseDetailPage() {
   }, [load]);
 
   const totals = React.useMemo(() => {
-    if (!course) return { solved: 0, total: 0 };
+    if (!course) return { solved: 0, total: 0, pct: 0 };
     let solved = 0;
     let total = 0;
     for (const m of course.modules) {
       total += m.problems.length;
       solved += m.problems.filter((p) => p.is_solved).length;
     }
-    return { solved, total };
+    return { solved, total, pct: total > 0 ? Math.round((solved / total) * 100) : 0 };
   }, [course]);
 
   return (
@@ -283,9 +284,36 @@ export default function CourseDetailPage() {
             title={course.title}
             subtitle={course.description ?? undefined}
           />
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 3, fontFamily: "ui-monospace, monospace" }}>
-            {totals.solved}/{totals.total} problems solved across {course.modules.length} modules
-          </Typography>
+          <Card
+            variant="outlined"
+            sx={{ borderColor: "outlineVariant", p: 3, mb: 3, display: "flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}
+          >
+            <Box sx={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
+              <CircularProgress
+                variant="determinate"
+                value={100}
+                size={88}
+                thickness={4}
+                sx={{ color: "surfaceContainerHigh", position: "absolute" }}
+              />
+              <CircularProgress
+                variant="determinate"
+                value={totals.pct}
+                size={88}
+                thickness={4}
+                sx={{ color: totals.pct === 100 ? "success.main" : "primary.main" }}
+              />
+              <Box sx={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <Typography variant="h6" fontWeight={700}>{totals.pct}%</Typography>
+              </Box>
+            </Box>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={600}>Course progress</Typography>
+              <Typography variant="body2" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace" }}>
+                {totals.solved}/{totals.total} problems solved across {course.modules.length} modules
+              </Typography>
+            </Box>
+          </Card>
           {course.modules.length === 0 ? (
             <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
               <EmptyState icon={<ViewModuleOutlinedIcon />} title="No modules yet" />
