@@ -117,7 +117,7 @@ export default function CoursesPage() {
           <ErrorState title="Couldn't load courses" onRetry={load} />
         </Card>
       ) : loading ? (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(3, 1fr)" }, gap: 2 }}>
+        <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 2 }}>
           {Array.from({ length: 3 }).map((_, i) => (
             <Card key={i} variant="outlined" sx={{ p: 2.5, borderColor: "outlineVariant" }}>
               <Skeleton variant="rounded" width={44} height={44} />
@@ -143,7 +143,7 @@ export default function CoursesPage() {
         </Card>
       ) : (
         <Reveal>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(3, 1fr)" }, gap: 2 }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 2 }}>
             {courses.map((c) => (
               <CourseCard key={c.id} course={c} />
             ))}
