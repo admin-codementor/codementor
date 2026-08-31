@@ -1,5 +1,5 @@
 try {
-  require('dotenv').config();
+  require('dotenv').config({ quiet: true });
 } catch (e) {}
 const { initializeApp, getApps, getApp, cert } = require('firebase-admin/app');
 const { getAuth } = require('firebase-admin/auth');
