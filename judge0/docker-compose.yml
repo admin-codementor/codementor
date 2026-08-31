@@ -26,6 +26,7 @@ services:
     ports:
       - "127.0.0.1:2358:2358"
     privileged: true
+    cgroup: host
     restart: unless-stopped
     depends_on:
       db:
@@ -51,6 +52,7 @@ services:
     volumes:
       - ./judge0.conf:/judge0.conf:ro
     privileged: true
+    cgroup: host
     restart: unless-stopped
     depends_on:
       db:
