@@ -9,7 +9,6 @@ import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Skeleton from "@mui/material/Skeleton";
-import Chip from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
 import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
@@ -24,6 +23,7 @@ import {
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
+import { TagChip } from "@/components/ui/TagChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import type { CourseDetail, CourseModule } from "@/lib/types";
 
@@ -118,12 +118,9 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
                   {p.title}
                 </Link>
                 {p.tags?.[0] && (
-                  <Chip
-                    label={p.tags[0]}
-                    size="small"
-                    variant="outlined"
-                    sx={{ height: 22, fontSize: 11, borderColor: "outlineVariant", color: "text.secondary", display: { xs: "none", sm: "inline-flex" } }}
-                  />
+                  <Box sx={{ display: { xs: "none", sm: "inline-flex" } }}>
+                    <TagChip tag={p.tags[0]} />
+                  </Box>
                 )}
                 <DifficultyChip difficulty={p.difficulty} />
               </Stack>

@@ -16,7 +16,6 @@ import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
-import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -37,6 +36,7 @@ import { useProctor } from "@/hooks/useProctor";
 import { fireConfetti } from "@/components/feedback/confetti";
 import { clearSession, getUser } from "@/lib/auth";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
+import { TagChip } from "@/components/ui/TagChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
 import { ErrorState } from "@/components/ui/States";
 import { AITutorSidebar, type FailingTest } from "@/components/problem/AITutorSidebar";
@@ -1108,7 +1108,7 @@ export default function ProblemSolvingPage() {
                 <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap", gap: 1 }}>
                   <DifficultyChip difficulty={cap(problem.difficulty)} />
                   {problem.tags.map((tag) => (
-                    <Chip key={tag} label={tag} size="small" variant="outlined" sx={{ borderColor: "outlineVariant" }} />
+                    <TagChip key={tag} tag={tag} />
                   ))}
                 </Stack>
 
