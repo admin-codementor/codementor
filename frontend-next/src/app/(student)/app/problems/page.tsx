@@ -8,7 +8,6 @@ import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
 import Button from "@mui/material/Button";
 import Link from "@mui/material/Link";
-import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import Skeleton from "@mui/material/Skeleton";
@@ -26,6 +25,7 @@ import type { Problem } from "@/lib/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
+import { TagChip } from "@/components/ui/TagChip";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
@@ -277,13 +277,7 @@ function ProblemsInner() {
                         {problem.tags && problem.tags.length > 0 && (
                           <Stack direction="row" spacing={0.75} sx={{ mt: 0.75, flexWrap: "wrap", gap: 0.75 }}>
                             {problem.tags.slice(0, 3).map((tag) => (
-                              <Chip
-                                key={tag}
-                                label={tag}
-                                size="small"
-                                variant="outlined"
-                                sx={{ height: 22, fontSize: 11, borderColor: "outlineVariant", color: "text.secondary" }}
-                              />
+                              <TagChip key={tag} tag={tag} />
                             ))}
                           </Stack>
                         )}
