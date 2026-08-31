@@ -1,0 +1,20 @@
+rules_version = '2';
+
+// Deny-all default. All real data access goes through the backend, which
+// authenticates with the Firebase Admin SDK (service account) and bypasses
+// these rules entirely. Nothing here should ever need to grant client-side
+// reads or writes — if a future feature needs direct client access to
+// Firestore, add a narrowly-scoped rule for that specific collection rather
+// than loosening this default.
+//
+// This is the reviewable record of what's deployed. The live rules still
+// have to be pasted into Firebase Console -> Firestore Database -> Rules
+// (or deployed via the Firebase CLI) for this to actually take effect —
+// committing this file does not push it to Firebase by itself.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}
