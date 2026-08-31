@@ -9,7 +9,6 @@ import Link from "@mui/material/Link";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Skeleton from "@mui/material/Skeleton";
-import Chip from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
 import Accordion from "@mui/material/Accordion";
 import AccordionSummary from "@mui/material/AccordionSummary";
@@ -24,6 +23,7 @@ import {
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
+import { TagChip } from "@/components/ui/TagChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import type { CourseDetail, CourseModule } from "@/lib/types";
 
@@ -73,12 +73,26 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
         expandIcon={<ExpandMoreIcon />}
         sx={{ px: 2, "& .MuiAccordionSummary-content": { alignItems: "center", gap: 1.5, my: 1.25, minWidth: 0 } }}
       >
-        {moduleIcon(module.title)}
+        <Box
+          aria-hidden
+          sx={{
+            width: 32,
+            height: 32,
+            borderRadius: 2,
+            display: "grid",
+            placeItems: "center",
+            flexShrink: 0,
+            color: "onPrimaryContainer",
+            background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 12%, var(--mui-palette-primaryContainer)))",
+          }}
+        >
+          {moduleIcon(module.title)}
+        </Box>
         <Typography variant="subtitle2" fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>
           {module.title}
         </Typography>
         {total > 0 && (
-          <Box sx={{ width: 88, display: { xs: "none", sm: "block" }, flexShrink: 0 }}>
+          <Box sx={{ width: 100, display: { xs: "none", sm: "block" }, flexShrink: 0 }}>
             <LinearProgress
               variant="determinate"
               value={pct}
@@ -91,42 +105,61 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
           {solved}/{total}
         </Typography>
       </AccordionSummary>
-      <AccordionDetails sx={{ px: 2, pt: 0, pb: 1 }}>
+      <AccordionDetails sx={{ px: 1, pt: 0, pb: 1 }}>
         {total === 0 ? (
-          <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+          <Typography variant="body2" color="text.secondary" sx={{ py: 1, px: 1 }}>
             Problems coming soon.
           </Typography>
         ) : (
-          <Stack divider={<Box sx={{ borderTop: "1px solid", borderColor: "outlineVariant" }} />}>
-            {module.problems.map((p) => (
-              <Stack key={p.id} direction="row" alignItems="center" spacing={1.5} sx={{ py: 1.25 }}>
+          <Stack spacing={0.25}>
+            {module.problems.map((p, i) => (
+              <Link
+                key={p.id}
+                component={NextLink}
+                href={`/app/problems/${p.id}`}
+                underline="none"
+                color="inherit"
+                sx={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 1.5,
+                  px: 1.5,
+                  py: 1.1,
+                  borderRadius: 1.5,
+                  transition: "background-color 120ms ease",
+                  "&:hover": { bgcolor: "surfaceContainer" },
+                  "&:hover .problem-row-title": { color: "primary.main" },
+                }}
+              >
+                <Typography
+                  variant="caption"
+                  color="text.disabled"
+                  sx={{ fontFamily: "ui-monospace, monospace", minWidth: 20, textAlign: "right", flexShrink: 0 }}
+                >
+                  {i + 1}
+                </Typography>
                 {p.is_solved ? (
                   <Tooltip title="Solved">
-                    <CheckCircleOutlineIcon fontSize="small" sx={{ color: "success.main" }} />
+                    <CheckCircleOutlineIcon fontSize="small" sx={{ color: "success.main", flexShrink: 0 }} />
                   </Tooltip>
                 ) : (
-                  <RadioButtonUncheckedIcon fontSize="small" sx={{ color: "outline" }} />
+                  <RadioButtonUncheckedIcon fontSize="small" sx={{ color: "outline", flexShrink: 0 }} />
                 )}
                 <Box component="span" sx={visuallyHidden}>{p.is_solved ? "Solved" : "Not solved"}</Box>
-                <Link
-                  component={NextLink}
-                  href={`/app/problems/${p.id}`}
-                  color="text.primary"
-                  sx={{ flex: 1, fontWeight: 500, minWidth: 0, "&:hover": { color: "primary.main" } }}
+                <Typography
+                  className="problem-row-title"
+                  sx={{ flex: 1, fontWeight: 500, minWidth: 0, transition: "color 120ms ease" }}
                   noWrap
                 >
                   {p.title}
-                </Link>
+                </Typography>
                 {p.tags?.[0] && (
-                  <Chip
-                    label={p.tags[0]}
-                    size="small"
-                    variant="outlined"
-                    sx={{ height: 22, fontSize: 11, borderColor: "outlineVariant", color: "text.secondary", display: { xs: "none", sm: "inline-flex" } }}
-                  />
+                  <Box sx={{ display: { xs: "none", sm: "inline-flex" } }}>
+                    <TagChip tag={p.tags[0]} />
+                  </Box>
                 )}
                 <DifficultyChip difficulty={p.difficulty} />
-              </Stack>
+              </Link>
             ))}
           </Stack>
         )}
