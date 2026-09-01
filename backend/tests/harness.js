@@ -133,8 +133,12 @@ async function purge(collection, field, values) {
   for (const v of values) {
     const snap = await db().collection(collection).where(field, '==', v).get();
     for (const doc of snap.docs) {
-      // Remove known subcollections first so nothing is orphaned.
-      for (const sub of ['members', 'questions', 'attempts', 'testCases']) {
+      // Remove known subcollections first so nothing is orphaned. Note: this is
+      // one level deep only — exams/{id}/sections/{sid}/questions (two levels
+      // down) isn't covered here, so suites touching `exams` should prefer an
+      // explicit DELETE via the API (which cascades fully) over relying on this
+      // as their only cleanup.
+      for (const sub of ['members', 'questions', 'attempts', 'testCases', 'sections']) {
         const kids = await doc.ref.collection(sub).get();
         for (const k of kids.docs) await k.ref.delete();
       }

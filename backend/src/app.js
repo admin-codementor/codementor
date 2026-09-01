@@ -37,6 +37,7 @@ const twofaRoutes = require('./routes/twofa.routes');
 const classroomRoutes = require('./routes/classroom.routes');
 const proctorRoutes = require('./routes/proctor.routes');
 const mcqRoutes = require('./routes/mcq.routes');
+const examRoutes = require('./routes/exam.routes');
 const profilesRoutes = require('./routes/profiles.routes');
 const courseRoutes = require('./routes/courses.routes');
 
@@ -84,6 +85,7 @@ app.use('/api/2fa', twofaRoutes);
 app.use('/api/classrooms', classroomRoutes);
 app.use('/api/proctor', proctorRoutes);
 app.use('/api/mcq', mcqRoutes);
+app.use('/api/exams', examRoutes);
 app.use('/api/profiles', profilesRoutes);
 app.use('/api/courses', courseRoutes);
 

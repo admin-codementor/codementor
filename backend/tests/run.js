@@ -16,6 +16,7 @@ const SUITES = {
   authoring: require('./suites/authoring'),
   mcqImport: require('./suites/mcqAndImport'),
   examTargeting: require('./suites/examAndTargeting'),
+  examsCore: require('./suites/examsCore'),
   analyticsAi: require('./suites/analyticsAndAi'),
 };
 
