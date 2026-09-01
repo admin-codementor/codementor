@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, ReceiptLongOutlinedIcon, LayersOutlinedIcon, MenuBookOutlinedIcon } from "@/components/ui/icons";
+import { SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, AssignmentOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, ReceiptLongOutlinedIcon, LayersOutlinedIcon, MenuBookOutlinedIcon } from "@/components/ui/icons";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { getRole } from "@/lib/auth";
@@ -14,6 +14,7 @@ const BASE_NAV: NavItem[] = [
   { label: "Courses", href: "/faculty/courses", icon: <MenuBookOutlinedIcon /> },
   { label: "Classes", href: "/faculty/classes", icon: <SchoolOutlinedIcon /> },
   { label: "MCQ Tests", href: "/faculty/mcq", icon: <QuizOutlinedIcon /> },
+  { label: "Exams", href: "/faculty/exams", icon: <AssignmentOutlinedIcon /> },
   { label: "Plagiarism", href: "/faculty/plagiarism", icon: <PolicyOutlinedIcon /> },
   { label: "Judge Health", href: "/faculty/judge-health", icon: <MonitorHeartOutlinedIcon /> },
 ];
