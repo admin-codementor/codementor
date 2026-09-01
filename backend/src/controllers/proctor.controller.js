@@ -11,12 +11,12 @@ const ALLOWED_EVENTS = new Set([
 // ── Student client records a proctoring event ──────────────────────────────────
 exports.recordEvent = async (req, res) => {
   try {
-    const { assignment_id, problem_id, event_type, detail } = req.body;
+    const { assignment_id, exam_id, problem_id, event_type, detail } = req.body;
     if (!event_type || !ALLOWED_EVENTS.has(event_type)) {
       return res.status(400).json({ success: false, error: 'Invalid event_type' });
     }
     await proctorEventRepo.create({
-      userId: req.user.id, assignmentId: assignment_id || null, problemId: problem_id || null,
+      userId: req.user.id, assignmentId: assignment_id || null, examId: exam_id || null, problemId: problem_id || null,
       eventType: event_type, detail: typeof detail === 'string' ? detail.slice(0, 300) : null,
     });
     res.json({ success: true });

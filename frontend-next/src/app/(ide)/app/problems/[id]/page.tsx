@@ -649,18 +649,25 @@ type PanelTab  = "description" | "submissions";
 export default function ProblemSolvingPage() {
   const params  = useParams<{ id: string }>();
   const problemId = params.id;
+  const router = useRouter();
   const theme   = useTheme();
   const isDark  = theme.palette.mode === "dark";
   const isMobile = useMediaQuery(theme.breakpoints.down("lg"));
 
-  // ── Assignment / contest / proctor context (from the query string) ──
+  // ── Assignment / contest / exam / proctor context (from the query string) ──
   // Read once from window.location so we avoid a Suspense boundary for useSearchParams.
   const [searchParams] = React.useState(() =>
     typeof window !== "undefined" ? new URLSearchParams(window.location.search) : new URLSearchParams(),
   );
   const assignmentId = searchParams.get("assignment");
   const contestId = searchParams.get("contest");
-  const proctored = !!assignmentId && searchParams.get("proctor") === "1";
+  // A coding section's "Solve this problem" deep-link — ?exam=<id>&section=<id>,
+  // mirroring the assignment/contest pattern above. Proctoring covers the WHOLE
+  // exam (decision D3), so it's active here without needing a separate ?proctor=1
+  // flag the way exam-assignment proctoring requires.
+  const examId = searchParams.get("exam");
+  const examSectionId = searchParams.get("section");
+  const proctored = (!!assignmentId && searchParams.get("proctor") === "1") || !!examId;
 
   // ── Judging lifecycle refs (avoid stale closures / poll leaks) ──
   const cancelPollRef = React.useRef<(() => void) | null>(null);
@@ -820,9 +827,11 @@ export default function ProblemSolvingPage() {
           problem_id: problem.id,
         };
         if (!isSubmit) body.custom_input = customInput;
-        // Attach assignment / contest context so the submission is recorded against them.
+        // Attach assignment / contest / exam context so the submission is recorded against them.
         if (assignmentId) body.assignment_id = assignmentId;
         if (contestId) body.contest_id = contestId;
+        if (examId) body.exam_id = examId;
+        if (examSectionId) body.section_id = examSectionId;
 
         const res = await api.post<{ success: boolean; jobId?: string; error?: string }>("/api/submit", body);
         if (!res.data.success || !res.data.jobId) {
@@ -856,7 +865,7 @@ export default function ProblemSolvingPage() {
         settle();
       }
     },
-    [problem, code, langId, customInput, assignmentId, contestId, handleVerdict]
+    [problem, code, langId, customInput, assignmentId, contestId, examId, examSectionId, handleVerdict]
   );
 
   // ── Keyboard shortcuts ──
@@ -885,12 +894,30 @@ export default function ProblemSolvingPage() {
     [],
   );
 
-  // ── Proctored-exam monitor (only when ?proctor=1 on an assignment) ──
+  // Repeated fullscreen violations while sitting an Exam finish the WHOLE exam,
+  // not just this one coding submission — unlike the exam-assignment path,
+  // there's no attempt to also flush the in-progress code first (that would
+  // need execute() to resolve before this fires, which it can't cheaply do
+  // from a fire-and-forget poll callback); the student's last explicit Submit
+  // for this problem, if any, already reconciled via the exam_id on execute().
+  const examAutoSubmitRef = React.useRef<() => void>(() => {});
+  React.useEffect(() => {
+    examAutoSubmitRef.current = () => {
+      api.post(`/api/exams/${examId}/submit`, {}).catch(() => {
+        // Already submitted (a race with a manual Finish) or a transient
+        // error — either way, still navigate back to show the student where
+        // they stand.
+      }).finally(() => router.push(`/app/exams/${examId}`));
+    };
+  }, [examId, router]);
+
+  // ── Proctored-exam monitor (assignment ?proctor=1, or any exam coding section) ──
   const proctor = useProctor({
     active: proctored,
     assignmentId,
+    examId,
     problemId,
-    onAutoSubmit: () => autoSubmitRef.current(),
+    onAutoSubmit: () => (examId ? examAutoSubmitRef.current() : autoSubmitRef.current()),
   });
 
   // Reflect Judge0 compile/runtime errors as inline editor markers (cleared on
@@ -1011,18 +1038,30 @@ export default function ProblemSolvingPage() {
           <Typography variant="caption" sx={{ opacity: 0.9 }}>
             {proctor.violations} flag{proctor.violations === 1 ? "" : "s"} recorded · stay in fullscreen, don&apos;t switch tabs
           </Typography>
-          {!proctor.fullscreen && (
-            <Button
-              size="small"
-              variant="contained"
-              color="error"
-              startIcon={<FullscreenIcon />}
-              onClick={proctor.requestFullscreen}
-              sx={{ ml: "auto" }}
-            >
-              Enter fullscreen
-            </Button>
-          )}
+          <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1 }}>
+            {!proctor.fullscreen && (
+              <Button
+                size="small"
+                variant="contained"
+                color="error"
+                startIcon={<FullscreenIcon />}
+                onClick={proctor.requestFullscreen}
+              >
+                Enter fullscreen
+              </Button>
+            )}
+            {examId && (
+              <Button
+                size="small"
+                variant="outlined"
+                color="error"
+                startIcon={<ChevronLeftIcon />}
+                onClick={() => router.push(`/app/exams/${examId}`)}
+              >
+                Back to Exam
+              </Button>
+            )}
+          </Box>
         </Box>
       )}
       {proctored && proctor.warning && (

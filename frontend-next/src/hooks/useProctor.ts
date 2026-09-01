@@ -6,6 +6,8 @@ import api from "@/lib/api";
 interface ProctorOpts {
   active: boolean;
   assignmentId: string | null;
+  /** A multi-section Exam this session belongs to, if not an exam assignment. At most one of assignmentId/examId is expected to be set. */
+  examId?: string | null;
   problemId?: string;
   onAutoSubmit: () => void;
 }
@@ -17,7 +19,7 @@ const MAX_FS_EXITS = 3;
  * fullscreen exits, and paste/copy events to /api/proctor/event, and auto-submits
  * after too many fullscreen exits. Client-only (guards `document` for SSR).
  */
-export function useProctor({ active, assignmentId, problemId, onAutoSubmit }: ProctorOpts) {
+export function useProctor({ active, assignmentId, examId, problemId, onAutoSubmit }: ProctorOpts) {
   const [violations, setViolations] = React.useState(0);
   const [warning, setWarning] = React.useState<string | null>(null);
   const [fullscreen, setFullscreen] = React.useState<boolean>(
@@ -33,9 +35,9 @@ export function useProctor({ active, assignmentId, problemId, onAutoSubmit }: Pr
 
   const log = React.useCallback(
     (event_type: string, detail?: string) => {
-      api.post("/api/proctor/event", { assignment_id: assignmentId, problem_id: problemId, event_type, detail }).catch(() => {});
+      api.post("/api/proctor/event", { assignment_id: assignmentId, exam_id: examId ?? null, problem_id: problemId, event_type, detail }).catch(() => {});
     },
-    [assignmentId, problemId],
+    [assignmentId, examId, problemId],
   );
 
   const requestFullscreen = React.useCallback(() => {

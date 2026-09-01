@@ -33,7 +33,7 @@ const MAX_INPUT_BYTES = 8 * 1024; // 8 KB
 // POST /api/submit — enqueue submission
 router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP, async (req, res) => {
   try {
-    const { source_code, language_id, problem_id, custom_input, contest_id, assignment_id, job_id } = req.body;
+    const { source_code, language_id, problem_id, custom_input, contest_id, assignment_id, exam_id, section_id, job_id } = req.body;
 
     // custom_input is a signal, not just a payload — even an empty string ("no
     // stdin") means "this is a custom/sandbox run", so check presence with
@@ -54,6 +54,9 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
     }
     if (assignment_id && !UUID_RE.test(String(assignment_id))) {
       return res.status(400).json({ success: false, error: 'Invalid assignment_id format.' });
+    }
+    if (exam_id && !UUID_RE.test(String(exam_id))) {
+      return res.status(400).json({ success: false, error: 'Invalid exam_id format.' });
     }
     if (typeof source_code !== 'string' || Buffer.byteLength(source_code, 'utf8') > MAX_CODE_BYTES) {
       return res.status(400).json({ success: false, error: 'source_code exceeds 64 KB limit.' });
@@ -85,6 +88,8 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
         contest_id: isCustomRun ? null : (contest_id || null),
         // Only graded submits (not custom runs) are recorded against an assignment/exam.
         assignment_id: isCustomRun ? null : (assignment_id || null),
+        exam_id: isCustomRun ? null : (exam_id || null),
+        section_id: isCustomRun ? null : (section_id || null),
       });
     } catch (startErr) {
       console.error('Failed to start judging:', startErr.message);
