@@ -16,6 +16,16 @@ const toMillis = (value) => {
   return Number.isNaN(ms) ? null : ms;
 };
 
+// Firestore Timestamp | Date | ISO-string | null -> full ISO string (or null).
+// Timestamps serialize over JSON as {_seconds, _nanoseconds}, not a date
+// string, so every field handed back to the client needs this — same helper
+// as faculty.controller.js's toISO.
+const toISO = (value) => {
+  if (!value) return null;
+  const d = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return d.toISOString();
+};
+
 // ── Ownership guards (Decision D1 split, same as mcq.controller.js) ────────────
 async function writableExam(req, examId) {
   const exam = await examRepo.getById(examId);
@@ -160,8 +170,10 @@ exports.updateExam = async (req, res) => {
       }
       partial.title = title.trim();
     }
-    if (description !== undefined) partial.description = String(description).slice(0, 2000) || null;
-    if (general_instructions !== undefined) partial.generalInstructions = String(general_instructions).slice(0, 4000) || null;
+    // `String(null)` would silently save the literal text "null", so a
+    // client-sent null (clearing the field) must short-circuit before that call.
+    if (description !== undefined) partial.description = description == null ? null : String(description).slice(0, 2000) || null;
+    if (general_instructions !== undefined) partial.generalInstructions = general_instructions == null ? null : String(general_instructions).slice(0, 4000) || null;
 
     if (window_start !== undefined || window_end !== undefined) {
       const current = await examRepo.getById(id);
@@ -213,14 +225,15 @@ exports.updateExam = async (req, res) => {
 exports.listExams = async (req, res) => {
   try {
     const seesAll = req.user.role === 'admin' || req.user.role === 'hod';
-    const exams = seesAll ? await examRepo.listAll() : await examRepo.listByFaculty(req.user.id);
+    const exams = (seesAll ? await examRepo.listAll() : await examRepo.listByFaculty(req.user.id))
+      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
     const usersMap = seesAll ? await userRepo.getAllUsersMap() : new Map();
     const data = await Promise.all(exams.map(async (e) => {
       const owner = usersMap.get(e.facultyId);
       return {
         id: e.id, title: e.title, is_published: !!e.isPublished,
-        window_start: e.windowStart, window_end: e.windowEnd, duration_minutes: e.durationMinutes,
-        created_at: e.createdAt,
+        window_start: toISO(e.windowStart), window_end: toISO(e.windowEnd), duration_minutes: e.durationMinutes,
+        created_at: toISO(e.createdAt),
         section_count: await examRepo.getSectionCount(e.id),
         attempt_count: await examRepo.getAttemptCount(e.id),
         author: e.facultyId === req.user.id ? 'You' : (owner?.name || null),
@@ -229,7 +242,6 @@ exports.listExams = async (req, res) => {
           || canManageResource(req, e.facultyId, owner?.department ?? null),
       };
     }));
-    data.sort((a, b) => (b.created_at?.toMillis?.() ?? 0) - (a.created_at?.toMillis?.() ?? 0));
     res.json({ success: true, data });
   } catch (e) {
     console.error('Exam listExams error:', e.message);
@@ -273,10 +285,10 @@ exports.getExamFaculty = async (req, res) => {
       data: {
         exam: {
           id: exam.id, title: exam.title, description: exam.description || null,
-          window_start: exam.windowStart, window_end: exam.windowEnd, duration_minutes: exam.durationMinutes,
+          window_start: toISO(exam.windowStart), window_end: toISO(exam.windowEnd), duration_minutes: exam.durationMinutes,
           general_instructions: exam.generalInstructions || null, allowed_cidrs: exam.allowedCidrs || [],
           classroom_ids: exam.classroomIds || [], negative_marking_default: exam.negativeMarkingDefault || 0,
-          is_published: !!exam.isPublished, created_at: exam.createdAt,
+          is_published: !!exam.isPublished, created_at: toISO(exam.createdAt),
         },
         sections: sectionsOut,
       },
@@ -388,7 +400,7 @@ exports.updateSection = async (req, res) => {
       }
       partial.title = title.trim();
     }
-    if (instructions !== undefined) partial.instructions = String(instructions).slice(0, 2000) || null;
+    if (instructions !== undefined) partial.instructions = instructions == null ? null : String(instructions).slice(0, 2000) || null;
     if (marks_per_question !== undefined) partial.marksPerQuestion = Math.max(parseInt(marks_per_question, 10) || 1, 1);
     if (negative_marking !== undefined) partial.negativeMarking = negative_marking === null ? null : Math.max(parseFloat(negative_marking) || 0, 0);
     if (duration_minutes !== undefined) partial.durationMinutes = duration_minutes === null ? null : Math.max(parseInt(duration_minutes, 10) || 0, 0);
@@ -568,7 +580,7 @@ exports.getResults = async (req, res) => {
           return {
             userId: a.userId, name: profile.name || 'Unknown', email: profile.email || null,
             rollNo: profile.rollNo || null, department: profile.department || null, section: profile.section || null,
-            score: a.score, total: a.total, submittedAt: a.submittedAt,
+            score: a.score, total: a.total, submittedAt: toISO(a.submittedAt),
           };
         }),
         summary: { attempts: attempts.length, avgScore: avg, maxScore: scores.length ? Math.max(...scores) : 0 },
@@ -595,7 +607,7 @@ exports.listAvailable = async (req, res) => {
       ]);
       return {
         id: e.id, title: e.title, description: e.description,
-        window_start: e.windowStart, window_end: e.windowEnd, duration_minutes: e.durationMinutes,
+        window_start: toISO(e.windowStart), window_end: toISO(e.windowEnd), duration_minutes: e.durationMinutes,
         section_count: sectionCount,
         started: !!attempt, attempted: !!attempt?.submittedAt, score: attempt?.score ?? null, total: attempt?.total ?? null,
       };
@@ -632,7 +644,7 @@ exports.getInstructions = async (req, res) => {
         exam: {
           id: exam.id, title: exam.title, description: exam.description,
           general_instructions: exam.generalInstructions,
-          window_start: exam.windowStart, window_end: exam.windowEnd, duration_minutes: exam.durationMinutes,
+          window_start: toISO(exam.windowStart), window_end: toISO(exam.windowEnd), duration_minutes: exam.durationMinutes,
         },
         sections: sectionsOut,
       },
