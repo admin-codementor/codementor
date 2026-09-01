@@ -23,6 +23,7 @@ const { submitCheckerBatch, pollCheckerBatch } = require('../utils/checkerRunner
 const problemRepo = require('../repositories/problemRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const contestRepo = require('../repositories/contestRepository');
+const examRepo = require('../repositories/examRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const judgeJobRepo = require('../repositories/judgeJobRepository');
 
@@ -302,7 +303,7 @@ async function updateTopicMastery(userId, problemId, isAccepted, hintUsed) {
 // contest submission if applicable, mark the job doc done. Ported from the
 // tail of the old worker's runJob().
 async function finalize(jobId, job, acc, testCasesLength) {
-  const { problem_id, user_id, contest_id, assignment_id, source_code, language_id, meta } = job;
+  const { problem_id, user_id, contest_id, assignment_id, exam_id, section_id, source_code, language_id, meta } = job;
   const { isOI, maxScore, scoringMode } = meta;
 
   if (isOI) {
@@ -324,10 +325,41 @@ async function finalize(jobId, job, acc, testCasesLength) {
     score: finalScore,
     testResults: testResultsArr,
     assignmentId: assignment_id || null,
+    examId: exam_id || null,
   });
 
   if (user_id) {
     await updateTopicMastery(user_id, problem_id, acc.finalVerdict.description === 'Accepted', false);
+  }
+
+  // Reconcile a coding-section submission back into the exam attempt it was
+  // made under. Non-blocking and best-effort, same shape as the contest
+  // reconciliation just below — a reconciliation failure must never fail the
+  // student's actual judged verdict.
+  if (exam_id && user_id) {
+    try {
+      // The awarded marks must be scaled to the exam SECTION's marksPerQuestion,
+      // not the problem's own max_score — submitExam() later just sums these
+      // directly, so the scaling has to happen here, once, at the source.
+      const sections = await examRepo.getSections(exam_id);
+      const section = (section_id && sections.find((s) => s.id === section_id))
+        || sections.find((s) => (s.problemIds || []).includes(problem_id));
+      const maxMarks = section?.marksPerQuestion ?? 0;
+      const accepted = acc.finalVerdict.description === 'Accepted';
+      const awardedScore = isOI
+        ? (maxScore > 0 ? Math.round((acc.earnedScore / maxScore) * maxMarks * 100) / 100 : 0)
+        : (accepted ? maxMarks : 0);
+
+      await examRepo.recordCodingAnswer(exam_id, user_id, problem_id, {
+        status: 'answered',
+        sectionId: section?.id || section_id || null,
+        submissionId: submission.id,
+        verdict: acc.finalVerdict.description,
+        score: awardedScore,
+      });
+    } catch (e) {
+      console.error('Exam coding reconciliation failed:', e.message);
+    }
   }
 
   if (contest_id && user_id) {
@@ -389,7 +421,7 @@ async function handleStepError(jobId, doc, err) {
  * graded submission) and persists initial state — never blocks on a result.
  */
 async function startJudging(jobId, jobData) {
-  const { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id } = jobData;
+  const { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id, exam_id, section_id } = jobData;
 
   if (custom_input !== null && custom_input !== undefined) {
     const token = await submitSingleAsync(source_code, language_id, custom_input);
@@ -424,6 +456,7 @@ async function startJudging(jobId, jobData) {
   const job = {
     problem_id, source_code, language_id, user_id,
     contest_id: contest_id || null, assignment_id: assignment_id || null,
+    exam_id: exam_id || null, section_id: section_id || null,
     meta: { scoringMode, isOI, maxScore, usesChecker, checkerCode, checkerLanguageId, useEvenSplit, perTcScore, testCasesLength },
   };
 

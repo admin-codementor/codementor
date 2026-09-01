@@ -27,12 +27,12 @@ import TableCell from "@mui/material/TableCell";
 import Divider from "@mui/material/Divider";
 import Checkbox from "@mui/material/Checkbox";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import Tooltip from "@mui/material/Tooltip";
-import { AccessTimeIcon, ChevronLeftIcon, CheckCircleIcon, CancelIcon } from "@/components/ui/icons";
+import { AccessTimeIcon, ChevronLeftIcon, CheckCircleIcon, CancelIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useExamTimer } from "@/hooks/useExamTimer";
+import { useProctor } from "@/hooks/useProctor";
 import { QuestionNavigator, type NavigatorSection, type QuestionStatus } from "@/components/student/exam/QuestionNavigator";
 
 interface InstrSection {
@@ -55,7 +55,7 @@ interface AttemptSection {
   marks_per_question: number; questions?: AttemptQuestion[]; problems?: AttemptProblem[];
 }
 interface QState { status: QuestionStatus; selectedIndex: number | null; sectionId: string }
-interface CState { status: QuestionStatus; sectionId: string; score?: number }
+interface CState { status: QuestionStatus; sectionId: string; score?: number; verdict?: string }
 interface AttemptView {
   exam: { id: string; title: string; duration_minutes: number };
   sections: AttemptSection[];
@@ -169,10 +169,25 @@ export default function StudentExamPage() {
     onExpire: doSubmit,
   });
 
+  // Proctoring covers the whole exam (decision D3), not just the coding
+  // section — mounted here at the exam-shell level for the entire
+  // taking/summary lifecycle. The IDE page mounts its own instance, scoped to
+  // the same examId, while the student is over there; each logs to the same
+  // per-user event stream the backend reads from, so a violation on either
+  // screen is recorded against the same exam.
+  const proctor = useProctor({
+    active: view === "taking" && !!attempt && !attempt.submitted,
+    assignmentId: null,
+    examId: id,
+    onAutoSubmit: doSubmit,
+  });
+
   // Mark every not-yet-touched MCQ question in a section "visited" the moment
-  // its tab is opened — Judge0's finalize() only fires on a coding submit, so
-  // coding items have no equivalent ping wired up yet (PR-4), and stay
-  // "not visited" in the navigator until then.
+  // its tab is opened. Coding items get their own visit ping from
+  // solveProblem() below, fired right before the deep-link navigation —
+  // Judge0's finalize() only reconciles on an actual Submit, so without that
+  // eager ping a student who opens a problem and reads it without submitting
+  // would incorrectly still show as "not visited" here.
   const markSectionVisited = React.useCallback(async (sectionId: string) => {
     if (!attempt || visitedSectionsRef.current.has(sectionId)) return;
     visitedSectionsRef.current.add(sectionId);
@@ -226,6 +241,27 @@ export default function StudentExamPage() {
       toast(apiErrorMessage(e, "Couldn't update mark for review."), { severity: "error" });
     }
   }, [attempt, id, toast]);
+
+  // Coding sections deep-link into the existing IDE rather than embedding an
+  // editor inline (decision D2) — ping "visited" first (best-effort; a missed
+  // ping just means the navigator briefly under-reports, not a data loss),
+  // then hand off. The IDE page reads ?exam=&section= to record its own
+  // submissions against this attempt and to extend proctoring across the tab
+  // switch.
+  const solveProblem = React.useCallback(async (sectionId: string, problemId: string) => {
+    try {
+      await api.patch(`/api/exams/${id}/attempt/visit/${problemId}`, { section_id: sectionId });
+      setAttempt((prev) => {
+        if (!prev) return prev;
+        const current = prev.coding_state[problemId];
+        if (current?.status === "answered") return prev; // never downgrade
+        return { ...prev, coding_state: { ...prev.coding_state, [problemId]: { status: "visited", sectionId } } };
+      });
+    } catch {
+      // Non-blocking — still let the student through to solve the problem.
+    }
+    router.push(`/app/problems/${problemId}?exam=${id}&section=${sectionId}`);
+  }, [id, router]);
 
   const handleJump = (sectionId: string, itemId: string) => {
     setActiveSectionId(sectionId);
@@ -354,7 +390,25 @@ export default function StudentExamPage() {
           <Box key={s.id} sx={{ mb: 3 }}>
             <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>{s.title}</Typography>
             {s.type === "coding" ? (
-              <Alert severity="info">Coding-section results aren&apos;t available yet — coming in a future update.</Alert>
+              <Stack spacing={1.5}>
+                {(s.problems ?? []).map((p) => {
+                  const cState = attempt.coding_state[p.id];
+                  const solved = cState?.status === "answered";
+                  return (
+                    <Card key={p.id} variant="outlined" sx={{ borderColor: "outlineVariant" }}>
+                      <CardContent sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                        {solved
+                          ? <CheckCircleIcon sx={{ fontSize: 18, color: "success.main", flexShrink: 0 }} />
+                          : <CancelIcon sx={{ fontSize: 18, color: "error.main", flexShrink: 0 }} />}
+                        <Typography variant="body2" sx={{ flex: 1 }}>{p.title}</Typography>
+                        <Typography variant="caption" color="text.secondary">
+                          {solved ? `${cState?.verdict ?? "Answered"} · ${cState?.score ?? 0} mark${(cState?.score ?? 0) === 1 ? "" : "s"}` : "Not attempted"}
+                        </Typography>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
+              </Stack>
             ) : (
               <Stack spacing={1.5}>
                 {(s.questions ?? []).map((q, i) => {
@@ -434,6 +488,24 @@ export default function StudentExamPage() {
           </Tabs>
         </AppBar>
 
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1, bgcolor: "errorContainer", color: "onErrorContainer", borderBottom: "1px solid", borderColor: "outlineVariant" }}>
+          <ShieldOutlinedIcon fontSize="small" />
+          <Typography variant="body2" fontWeight={600}>Proctored Exam</Typography>
+          <Typography variant="caption" sx={{ opacity: 0.9 }}>
+            {proctor.violations} flag{proctor.violations === 1 ? "" : "s"} recorded · stay in fullscreen, don&apos;t switch tabs
+          </Typography>
+          {!proctor.fullscreen && (
+            <Button size="small" variant="contained" color="error" startIcon={<FullscreenIcon />} onClick={proctor.requestFullscreen} sx={{ ml: "auto" }}>
+              Enter fullscreen
+            </Button>
+          )}
+        </Box>
+        {proctor.warning && (
+          <Alert severity="warning" icon={<ShieldOutlinedIcon fontSize="small" />} onClose={proctor.dismissWarning} sx={{ borderRadius: 0 }}>
+            {proctor.warning}
+          </Alert>
+        )}
+
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 280px" }, gap: 3, p: { xs: 2, sm: 3 }, maxWidth: 1100, mx: "auto" }}>
           <Box>
             {activeSection?.type === "mcq" ? (
@@ -499,22 +571,33 @@ export default function StudentExamPage() {
               </Stack>
             ) : (
               <Stack spacing={2}>
-                <Alert severity="info">Coding sections open for solving in a future update — shown here for reference.</Alert>
-                {(activeSection?.problems ?? []).map((p) => (
-                  <Card
-                    key={p.id}
-                    ref={(el: HTMLDivElement | null) => { questionRefs.current[p.id] = el; }}
-                    variant="outlined" sx={{ borderColor: "outlineVariant" }}
-                  >
-                    <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                      <Typography variant="body2" sx={{ flex: 1 }}>{p.title}</Typography>
-                      {p.difficulty && <Chip label={p.difficulty} size="small" sx={{ textTransform: "capitalize" }} />}
-                      <Tooltip title="Coming in a future update">
-                        <span><Button size="small" variant="outlined" disabled>Solve</Button></span>
-                      </Tooltip>
-                    </CardContent>
-                  </Card>
-                ))}
+                <Alert severity="info">
+                  Solving opens the full code editor in a new screen. Your progress here is saved — use
+                  &quot;Back to Exam&quot; to return, or come back to this tab any time before you finish.
+                </Alert>
+                {(activeSection?.problems ?? []).map((p) => {
+                  const cState = attempt.coding_state[p.id];
+                  const solved = cState?.status === "answered";
+                  return (
+                    <Card
+                      key={p.id}
+                      ref={(el: HTMLDivElement | null) => { questionRefs.current[p.id] = el; }}
+                      variant="outlined" sx={{ borderColor: "outlineVariant" }}
+                    >
+                      <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                        <Typography variant="body2" sx={{ flex: 1 }}>{p.title}</Typography>
+                        {p.difficulty && <Chip label={p.difficulty} size="small" sx={{ textTransform: "capitalize" }} />}
+                        {solved && <Chip label="Solved" size="small" color="success" sx={{ height: 20, fontSize: 10 }} />}
+                        <Button
+                          size="small" variant={solved ? "outlined" : "contained"}
+                          onClick={() => solveProblem(activeSection.id, p.id)}
+                        >
+                          {solved ? "Revisit" : "Solve"}
+                        </Button>
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </Stack>
             )}
           </Box>

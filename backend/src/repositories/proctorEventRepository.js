@@ -4,9 +4,9 @@ const { FieldValue } = require('firebase-admin/firestore');
 
 const col = () => db.collection('proctorEvents');
 
-async function create({ userId, assignmentId, problemId, eventType, detail }) {
+async function create({ userId, assignmentId, examId, problemId, eventType, detail }) {
   await col().add({
-    userId, assignmentId: assignmentId || null, problemId: problemId || null,
+    userId, assignmentId: assignmentId || null, examId: examId || null, problemId: problemId || null,
     eventType, detail: detail || null, createdAt: FieldValue.serverTimestamp(),
   });
 }

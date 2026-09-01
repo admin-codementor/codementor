@@ -1,4 +1,5 @@
 const assignmentRepo = require('../repositories/assignmentRepository');
+const examRepo = require('../repositories/examRepository');
 
 // Convert IPv4 address string to a 32-bit integer.
 function ipToInt(ip) {
@@ -50,57 +51,71 @@ function validateCIDR(cidr) {
   return true;
 }
 
+// Shared window/CIDR check once a target doc (assignment or Exam) is loaded.
+// `deadline` is the moment submissions close for that doc — an assignment's
+// `deadline`, or an Exam's `windowEnd`.
+function checkWindowAndCidr(res, { deadline, allowedCidrs, closedMessage }, req) {
+  if (deadline && new Date() > new Date(deadline)) {
+    res.status(403).json({ success: false, error: closedMessage, exam_closed: true });
+    return false;
+  }
+  if (allowedCidrs && allowedCidrs.length > 0) {
+    const clientIP = req.ip || req.socket?.remoteAddress || '';
+    if (!isAllowed(clientIP, allowedCidrs)) {
+      res.status(403).json({
+        success: false,
+        error: 'Submissions for this exam are restricted to the designated network. Connect to the exam network and try again.',
+        ip_restricted: true,
+      });
+      return false;
+    }
+  }
+  return true;
+}
+
 // Express middleware — enforces exam integrity at submit time (server-side):
-//   1. Exam window: rejects submissions after the deadline for exam assignments.
+//   1. Exam window: rejects submissions after the deadline/window close.
 //   2. IP allowlist: rejects submissions from outside the designated CIDR blocks.
 // Attach to the submit route AFTER the user is authenticated.
 //
-// Expects req.body.assignment_id, which the client sends ONLY for assignment/exam
-// submissions. Plain practice submissions omit it and are skipped entirely.
+// Expects req.body.assignment_id (exam assignments) and/or req.body.exam_id
+// (multi-section Exams, from a coding section's deep-link submit) — the client
+// sends at most one, for whichever context this submission belongs to. Plain
+// practice submissions omit both and are skipped entirely.
 //
-// IMPORTANT: when an assignment_id IS supplied we are in an exam/assignment context,
-// so we FAIL CLOSED on a DB error — a database blip must not silently disable exam
-// restrictions. (Practice submissions without assignment_id are unaffected.)
+// IMPORTANT: once either id IS supplied we are in a graded context, so we FAIL
+// CLOSED on a DB error — a database blip must not silently disable exam
+// restrictions. (Practice submissions with neither id are unaffected.)
 async function enforceExamIP(req, res, next) {
-  const { assignment_id } = req.body;
-  if (!assignment_id) return next(); // not an assignment/exam submission — skip
+  const { assignment_id, exam_id } = req.body;
+  if (!assignment_id && !exam_id) return next(); // plain practice submission — skip
 
-  let assignment;
   try {
-    assignment = await assignmentRepo.getById(assignment_id);
+    if (assignment_id) {
+      const assignment = await assignmentRepo.getById(assignment_id);
+      if (assignment) {
+        // Deadline-closed only applies to exam assignments (isExam) — an
+        // ordinary assignment past its deadline is handled elsewhere (late
+        // submission policy), not here. The CIDR allowlist, if configured,
+        // still applies regardless of isExam — unchanged from before this
+        // function also learned about the exams collection.
+        const deadline = assignment.isExam ? (assignment.deadline?.toDate?.() ?? assignment.deadline) : null;
+        if (!checkWindowAndCidr(res, { deadline, allowedCidrs: assignment.allowedCidrs, closedMessage: 'This exam has ended. Submissions are closed.' }, req)) return;
+      } // unknown assignment — let the controller handle it
+    }
+
+    if (exam_id) {
+      const exam = await examRepo.getById(exam_id);
+      if (!exam) return next(); // unknown exam — let the controller handle it
+      const windowEnd = exam.windowEnd?.toDate?.() ?? exam.windowEnd;
+      if (!checkWindowAndCidr(res, { deadline: windowEnd, allowedCidrs: exam.allowedCidrs, closedMessage: 'This exam’s window has closed. Submissions are no longer accepted.' }, req)) return;
+    }
   } catch (e) {
     console.error('Exam access check DB error:', e.message);
     return res.status(503).json({
       success: false,
       error: 'Unable to verify exam access right now. Please try again in a moment.',
     });
-  }
-
-  if (!assignment) return next(); // unknown assignment — let the controller handle it
-
-  const allowed_cidrs = assignment.allowedCidrs;
-  const is_exam = assignment.isExam;
-  const deadline = assignment.deadline?.toDate?.() ?? assignment.deadline;
-
-  // 1. Exam window — closed after the deadline.
-  if (is_exam && deadline && new Date() > new Date(deadline)) {
-    return res.status(403).json({
-      success: false,
-      error: 'This exam has ended. Submissions are closed.',
-      exam_closed: true,
-    });
-  }
-
-  // 2. IP allowlist (applies whenever CIDRs are configured).
-  if (allowed_cidrs && allowed_cidrs.length > 0) {
-    const clientIP = req.ip || req.socket?.remoteAddress || '';
-    if (!isAllowed(clientIP, allowed_cidrs)) {
-      return res.status(403).json({
-        success: false,
-        error: 'Submissions for this exam are restricted to the designated network. Connect to the exam network and try again.',
-        ip_restricted: true,
-      });
-    }
   }
 
   next();
