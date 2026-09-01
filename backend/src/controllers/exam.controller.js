@@ -657,7 +657,12 @@ exports.getInstructions = async (req, res) => {
 
 // Builds the payload the taking screen needs: sections with question stems
 // (no answers) or coding-problem summaries, plus the student's own live state.
+// Once the attempt is submitted, each MCQ question also carries its
+// correct_index/explanation — safe to reveal only at that point, and this is
+// the one payload shape both the live-taking screen and the post-submit
+// review screen share, so the frontend doesn't need two different fetches.
 async function buildAttemptView(examId, exam, attempt) {
+  const submitted = !!attempt.submittedAt;
   const sections = await examRepo.getSections(examId);
   const sectionsOut = await Promise.all(sections.map(async (s) => {
     if (s.type === 'coding') {
@@ -673,6 +678,7 @@ async function buildAttemptView(examId, exam, attempt) {
     const questions = (await examRepo.getSectionQuestions(examId, s.id)).map((q) => ({
       id: q.id, question_text: q.questionText, options: q.options || [], marks: q.marks ?? 1,
       topic: q.topic || null, position: q.position ?? 0,
+      ...(submitted ? { correct_index: q.correctIndex, explanation: q.explanation || null } : {}),
     }));
     return {
       id: s.id, title: s.title, type: s.type, order: s.order, instructions: s.instructions,
@@ -689,7 +695,9 @@ async function buildAttemptView(examId, exam, attempt) {
     question_state: attempt.questionState || {},
     coding_state: attempt.codingState || {},
     seconds_remaining: secondsRemaining,
-    submitted: !!attempt.submittedAt,
+    submitted,
+    score: attempt.score ?? null,
+    total: attempt.total ?? null,
   };
 }
 
@@ -736,6 +744,12 @@ exports.getAttemptState = async (req, res) => {
     const { id } = req.params;
     const exam = await examRepo.getById(id);
     if (!exam) return res.status(404).json({ success: false, error: 'Exam not found' });
+    // Deliberately NOT re-checking visibleExamsFor here (unlike start/instructions):
+    // an attempt record existing is itself proof the student was authorized to
+    // start it — startAttempt already gated that. Requiring current published/
+    // classroom-visibility on every resume would lock a student out of viewing
+    // their own in-progress or already-submitted attempt the moment faculty
+    // unpublishes the exam, which is a real thing faculty do once a window closes.
     const attempt = await examRepo.getAttempt(id, req.user.id);
     if (!attempt) return res.status(404).json({ success: false, error: 'Start the exam first.' });
     res.json({ success: true, data: await buildAttemptView(id, exam, attempt) });

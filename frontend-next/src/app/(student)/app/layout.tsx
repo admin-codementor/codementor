@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, EmojiEventsOutlinedIcon, AssignmentOutlinedIcon, PsychologyOutlinedIcon, SchoolOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon } from "@/components/ui/icons";
+import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, EmojiEventsOutlinedIcon, AssignmentOutlinedIcon, TimerOutlinedIcon, PsychologyOutlinedIcon, SchoolOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon } from "@/components/ui/icons";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 
@@ -13,6 +13,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Contests", href: "/app/contests", icon: <EmojiEventsOutlinedIcon />, section: "Practice" },
   { label: "Assignments", href: "/app/assignments", icon: <AssignmentOutlinedIcon />, section: "Practice" },
   { label: "Aptitude", href: "/app/aptitude", icon: <PsychologyOutlinedIcon />, section: "Practice" },
+  { label: "Exams", href: "/app/exams", icon: <TimerOutlinedIcon />, section: "Practice" },
   { label: "Leaderboard", href: "/app/leaderboard", icon: <LeaderboardOutlinedIcon />, section: "Progress" },
   { label: "My Classes", href: "/app/classes", icon: <SchoolOutlinedIcon />, section: "Progress" },
   { label: "Placement", href: "/app/placement", icon: <WorkOutlineOutlinedIcon />, section: "Career" },
