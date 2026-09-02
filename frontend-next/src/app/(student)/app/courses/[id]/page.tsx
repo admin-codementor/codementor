@@ -244,12 +244,16 @@ export default function CourseDetailPage() {
 
   const totals = React.useMemo(() => {
     if (!course) return { solved: 0, total: 0, pct: 0 };
-    let solved = 0;
-    let total = 0;
+    // Dedupe by problem id — the same problem can be listed in more than one
+    // module, and summing module lengths raw double-counts it, which is why
+    // this used to show a different (larger) total than the Courses landing
+    // page's count for the same course.
+    const seen = new Map<string, boolean>();
     for (const m of course.modules) {
-      total += m.problems.length;
-      solved += m.problems.filter((p) => p.is_solved).length;
+      for (const p of m.problems) seen.set(p.id, seen.get(p.id) || p.is_solved);
     }
+    const total = seen.size;
+    const solved = [...seen.values()].filter(Boolean).length;
     return { solved, total, pct: total > 0 ? Math.round((solved / total) * 100) : 0 };
   }, [course]);
 

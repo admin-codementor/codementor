@@ -55,6 +55,16 @@ const calculateStreak = (heatmapRows) => {
 const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
 const subDate = (s) => s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
 
+// Firestore Timestamp | Date | ISO-string | null -> ISO string (or null). A raw
+// Timestamp serializes over JSON as {_seconds,_nanoseconds}, which `new Date()`
+// on the client can't parse — same bug/fix as exam.controller.js and
+// faculty.controller.js's own toISO().
+const toISO = (value) => {
+  if (!value) return null;
+  const d = typeof value.toDate === 'function' ? value.toDate() : new Date(value);
+  return d.toISOString();
+};
+
 exports.getDashboardData = async (req, res) => {
   try {
     const userId = req.user.id;
@@ -172,7 +182,7 @@ exports.getAssignments = async (req, res) => {
           return { id: pid, title: p?.title || 'Unknown', difficulty: p?.difficulty || null, is_solved: solvedSet.has(pid) };
         });
         return {
-          id: a.id, title: a.title, deadline: a.deadline, isExam: a.isExam === true,
+          id: a.id, title: a.title, deadline: toISO(a.deadline), isExam: a.isExam === true,
           problems, total: problems.length, solved: problems.filter(p => p.is_solved).length,
         };
       });
@@ -201,7 +211,7 @@ exports.getNotifications = async (req, res) => {
       id: a.id,
       type: 'deadline',
       message: `Assignment "${a.title}" is due soon`,
-      deadline: a.deadline
+      deadline: toISO(a.deadline)
     }));
 
     res.json({ success: true, data: notifications });

@@ -1927,7 +1927,10 @@ exports.getFacultyCourses = async (req, res) => {
         isPublished: !!c.isPublished,
         moduleCount: modules.length,
         problemCount,
-        author: owner?.name || 'Unknown',
+        // null (not 'Unknown') for platform-seeded courses that were never
+        // attributed to a real user — the frontend omits the "by ..." line
+        // rather than printing a placeholder that reads as a data bug.
+        author: owner?.name || null,
         canEdit: c.createdBy === req.user.id || req.user.role === 'admin'
           || canManageResource(req, c.createdBy, owner?.department ?? null),
       };
