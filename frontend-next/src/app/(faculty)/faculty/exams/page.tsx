@@ -26,7 +26,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import {
   AddIcon, DeleteOutlineIcon, ChevronLeftIcon, BarChartOutlinedIcon,
-  AssignmentOutlinedIcon, EditOutlinedIcon, TimerOutlinedIcon,
+  AssignmentOutlinedIcon, EditOutlinedIcon, TimerOutlinedIcon, CheckCircleIcon, CancelIcon,
 } from "@/components/ui/icons";
 import { ResponsiveBar } from "@nivo/bar";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
@@ -50,11 +50,29 @@ interface ExamRow {
   author?: string | null;
   can_edit?: boolean;
 }
-interface SectionResultStat { id: string; title: string; type: "mcq" | "coding"; question_stats?: { accuracy: number }[]; attempted?: number; passed?: number; problem_count?: number }
+interface McqQuestionStat { id: string; question_text: string; topic: string | null; answered: number; correct: number; accuracy: number }
+interface CodingProblemStat { id: string; title: string; attempted: number; accepted: number; accuracy: number; avgScore: number }
+interface SectionResultStat { id: string; title: string; type: "mcq" | "coding"; question_stats?: McqQuestionStat[]; problem_stats?: CodingProblemStat[] }
 interface ResultsData {
   summary: { attempts: number; avgScore: number; maxScore: number };
   sections: SectionResultStat[];
   attempts: { userId: string; name: string; email: string; rollNo: string | null; department: string | null; section: string | null; score: number; total: number }[];
+}
+
+interface AttemptQuestionDetail {
+  id: string; question_text: string; options: string[]; marks: number; correct_index?: number; explanation?: string | null;
+}
+interface AttemptProblemDetail { id: string; title: string; difficulty: string | null }
+interface AttemptSectionDetail {
+  id: string; title: string; type: "mcq" | "coding"; questions?: AttemptQuestionDetail[]; problems?: AttemptProblemDetail[];
+}
+interface AttemptDetail {
+  student: { userId: string; name: string; email: string | null; rollNo: string | null; department: string | null; section: string | null };
+  sections: AttemptSectionDetail[];
+  question_state: Record<string, { status: string; selectedIndex: number | null }>;
+  coding_state: Record<string, { status: string; verdict?: string; score?: number }>;
+  score: number | null;
+  total: number | null;
 }
 
 // datetime-local needs `YYYY-MM-DDTHH:mm` in local time.
@@ -120,6 +138,90 @@ function CreateExamDialog({ open, onClose, onCreated }: { open: boolean; onClose
   );
 }
 
+// ── One student's attempt, drilled down from the results table ─────────────
+function AttemptDetailDialog({
+  examId, userId, open, onClose,
+}: { examId: string | null; userId: string | null; open: boolean; onClose: () => void }) {
+  const [detail, setDetail] = React.useState<AttemptDetail | null>(null);
+  const [loadError, setLoadError] = React.useState("");
+
+  React.useEffect(() => {
+    if (!open || !userId || !examId) return;
+    setDetail(null);
+    setLoadError("");
+    api.get(`/api/exams/${examId}/results/${userId}`)
+      .then((r) => { if (r.data?.success) setDetail(r.data.data); })
+      .catch((e) => setLoadError(apiErrorMessage(e, "Couldn't load this attempt.")));
+  }, [open, userId, examId]);
+
+  return (
+    <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
+      <DialogTitle>
+        {detail ? `${detail.student.name} — ${detail.score ?? 0}/${detail.total ?? 0}` : "Attempt detail"}
+      </DialogTitle>
+      <DialogContent dividers>
+        {loadError ? (
+          <Alert severity="error">{loadError}</Alert>
+        ) : !detail ? (
+          <Stack spacing={1.5}>{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} variant="rounded" height={60} />)}</Stack>
+        ) : (
+          <Stack spacing={3}>
+            {detail.sections.map((s) => (
+              <Box key={s.id}>
+                <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>{s.title}</Typography>
+                {s.type === "mcq" ? (
+                  <Stack spacing={1}>
+                    {(s.questions ?? []).map((q, i) => {
+                      const entry = detail.question_state[q.id];
+                      const selected = entry && Number.isInteger(entry.selectedIndex) ? entry.selectedIndex : null;
+                      const correct = selected != null && selected === q.correct_index;
+                      return (
+                        <Box key={q.id} sx={{ p: 1, borderRadius: 1, border: "1px solid", borderColor: "outlineVariant" }}>
+                          <Stack direction="row" spacing={1} alignItems="flex-start">
+                            {correct
+                              ? <CheckCircleIcon sx={{ fontSize: 16, color: "success.main", mt: 0.25, flexShrink: 0 }} />
+                              : <CancelIcon sx={{ fontSize: 16, color: "error.main", mt: 0.25, flexShrink: 0 }} />}
+                            <Typography variant="body2">{i + 1}. {q.question_text}</Typography>
+                          </Stack>
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", ml: 3 }}>
+                            {selected != null ? `Selected: ${String.fromCharCode(65 + selected)}` : "Not answered"}
+                            {" · "}Correct: {q.correct_index != null ? String.fromCharCode(65 + q.correct_index) : "—"}
+                          </Typography>
+                        </Box>
+                      );
+                    })}
+                  </Stack>
+                ) : (
+                  <Stack spacing={1}>
+                    {(s.problems ?? []).map((p) => {
+                      const cs = detail.coding_state[p.id];
+                      const accepted = cs?.verdict === "Accepted";
+                      return (
+                        <Stack key={p.id} direction="row" spacing={1} alignItems="center" sx={{ p: 1, borderRadius: 1, border: "1px solid", borderColor: "outlineVariant" }}>
+                          {cs
+                            ? (accepted
+                              ? <CheckCircleIcon sx={{ fontSize: 16, color: "success.main", flexShrink: 0 }} />
+                              : <CancelIcon sx={{ fontSize: 16, color: "error.main", flexShrink: 0 }} />)
+                            : <Box sx={{ width: 16 }} />}
+                          <Typography variant="body2" sx={{ flex: 1 }}>{p.title}</Typography>
+                          <Typography variant="caption" color="text.secondary">
+                            {cs ? `${cs.verdict ?? "Answered"} · ${cs.score ?? 0} marks` : "Not attempted"}
+                          </Typography>
+                        </Stack>
+                      );
+                    })}
+                  </Stack>
+                )}
+              </Box>
+            ))}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
+    </Dialog>
+  );
+}
+
 export default function FacultyExamsPage() {
   const nivoTheme = useNivoTheme();
   const chartColors = useChartColors();
@@ -151,10 +253,14 @@ export default function FacultyExamsPage() {
 
   // ── Results ──────────────────────────────────────────────────────────────
   const [results, setResults] = React.useState<ResultsData | null>(null);
+  const [resExamId, setResExamId] = React.useState<string | null>(null);
   const [resTitle, setResTitle] = React.useState("");
+  const [detailUserId, setDetailUserId] = React.useState<string | null>(null);
+  const [detailOpen, setDetailOpen] = React.useState(false);
   const openResults = async (e: ExamRow) => {
     setMode("results");
     setResults(null);
+    setResExamId(e.id);
     setResTitle(e.title);
     try {
       const r = await api.get(`/api/exams/${e.id}/results`);
@@ -194,8 +300,15 @@ export default function FacultyExamsPage() {
 
   // ── RESULTS MODE ──
   if (mode === "results") {
-    const mcqStats = (results?.sections ?? []).filter((s): s is SectionResultStat & { question_stats: { accuracy: number }[] } => s.type === "mcq")
-      .flatMap((s) => s.question_stats.map((q, i) => ({ label: `${s.title} Q${i + 1}`, accuracy: q.accuracy })));
+    // One unified accuracy chart across every gradeable item in the exam —
+    // an MCQ question and a coding problem measure the same underlying thing
+    // here (% of students who attempted it and got it right), so faculty get
+    // one comparative view of what's hardest across the whole exam rather
+    // than two disconnected charts.
+    const itemStats: { label: string; accuracy: number }[] = (results?.sections ?? []).flatMap((s) => {
+      if (s.type === "mcq") return (s.question_stats ?? []).map((q, i) => ({ label: `${s.title} Q${i + 1}`, accuracy: q.accuracy }));
+      return (s.problem_stats ?? []).map((p) => ({ label: `${s.title}: ${p.title}`, accuracy: p.accuracy }));
+    });
     return (
       <Box>
         <Button startIcon={<ChevronLeftIcon />} onClick={() => setMode("list")} sx={{ mb: 2 }}>Back to exams</Button>
@@ -218,35 +331,44 @@ export default function FacultyExamsPage() {
 
             <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
               <CardContent>
-                <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Section breakdown</Typography>
-                <Stack spacing={0.5}>
+                <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>Section breakdown</Typography>
+                <Stack spacing={2}>
                   {results.sections.map((s) => (
-                    <Stack key={s.id} direction="row" spacing={1} alignItems="center">
-                      <Typography variant="body2" sx={{ minWidth: 160 }}>{s.title}</Typography>
-                      <Chip size="small" label={s.type} sx={{ height: 18, fontSize: 10, textTransform: "uppercase" }} />
-                      {s.type === "coding" && (
-                        <Typography variant="caption" color="text.secondary">
-                          {s.attempted ?? 0} attempted · {s.passed ?? 0} accepted (of {s.problem_count ?? 0} problem{(s.problem_count ?? 0) === 1 ? "" : "s"})
-                        </Typography>
+                    <Box key={s.id}>
+                      <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: s.type === "coding" ? 1 : 0 }}>
+                        <Typography variant="body2" fontWeight={500}>{s.title}</Typography>
+                        <Chip size="small" label={s.type} sx={{ height: 18, fontSize: 10, textTransform: "uppercase" }} />
+                      </Stack>
+                      {s.type === "coding" && (s.problem_stats ?? []).length > 0 && (
+                        <Stack spacing={0.5} sx={{ pl: 1 }}>
+                          {(s.problem_stats ?? []).map((p) => (
+                            <Stack key={p.id} direction="row" spacing={1} alignItems="center">
+                              <Typography variant="caption" sx={{ flex: 1, minWidth: 0 }} noWrap>{p.title}</Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace", flexShrink: 0 }}>
+                                {p.accepted}/{p.attempted} accepted · {p.accuracy}% · avg {p.avgScore} marks
+                              </Typography>
+                            </Stack>
+                          ))}
+                        </Stack>
                       )}
-                    </Stack>
+                    </Box>
                   ))}
                 </Stack>
               </CardContent>
             </Card>
 
-            {mcqStats.length > 0 && (
+            {itemStats.length > 0 && (
               <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
                 <CardContent>
-                  <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>Per-question accuracy (MCQ sections)</Typography>
-                  <Box sx={{ height: Math.max(220, mcqStats.length * 30) }}>
+                  <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 2 }}>Item accuracy — every MCQ question and coding problem</Typography>
+                  <Box sx={{ height: Math.max(220, itemStats.length * 30) }}>
                     <ResponsiveBar
-                      data={mcqStats.map((q) => ({ q: q.label, accuracy: q.accuracy }))}
+                      data={itemStats.map((q) => ({ q: q.label, accuracy: q.accuracy }))}
                       keys={["accuracy"]}
                       indexBy="q"
                       layout="horizontal"
                       valueScale={{ type: "linear", min: 0, max: 100 }}
-                      margin={{ top: 8, right: 16, bottom: 28, left: 120 }}
+                      margin={{ top: 8, right: 16, bottom: 28, left: 160 }}
                       padding={0.3}
                       borderRadius={5}
                       colors={[chartColors[0]]}
@@ -272,7 +394,11 @@ export default function FacultyExamsPage() {
                   </TableHead>
                   <TableBody>
                     {results.attempts.map((a) => (
-                      <TableRow key={a.userId} sx={{ "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } }}>
+                      <TableRow
+                        key={a.userId} hover
+                        onClick={() => { setDetailUserId(a.userId); setDetailOpen(true); }}
+                        sx={{ cursor: "pointer", "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } }}
+                      >
                         <TableCell>
                           <Typography variant="body2">{a.name}</Typography>
                           <Typography variant="caption" color="text.secondary">{a.rollNo || a.email}</Typography>
@@ -284,9 +410,14 @@ export default function FacultyExamsPage() {
                   </TableBody>
                 </Table>
               </TableContainer>
+              <Typography variant="caption" color="text.secondary" sx={{ display: "block", px: 2, py: 1 }}>
+                Click a row for that student&apos;s full answer breakdown.
+              </Typography>
             </Card>
           </Stack>
         )}
+
+        <AttemptDetailDialog examId={resExamId} userId={detailUserId} open={detailOpen} onClose={() => setDetailOpen(false)} />
       </Box>
     );
   }

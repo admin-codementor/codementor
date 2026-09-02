@@ -555,17 +555,29 @@ exports.getResults = async (req, res) => {
         });
       } else {
         const problemIds = s.problemIds || [];
-        let attempted = 0, passed = 0;
+        const problemsMeta = await problemRepo.getMapByIds(problemIds);
+        const perP = {};
+        for (const pid of problemIds) perP[pid] = { attempted: 0, accepted: 0, totalScore: 0 };
         for (const a of attempts) {
           const cs = a.codingState || {};
           for (const pid of problemIds) {
-            if (cs[pid]) {
-              attempted += 1;
-              if (cs[pid].verdict === 'Accepted') passed += 1;
+            const entry = cs[pid];
+            if (entry) {
+              perP[pid].attempted += 1;
+              if (entry.verdict === 'Accepted') perP[pid].accepted += 1;
+              perP[pid].totalScore += entry.score || 0;
             }
           }
         }
-        sectionStats.push({ id: s.id, title: s.title, type: 'coding', problem_count: problemIds.length, attempted, passed });
+        sectionStats.push({
+          id: s.id, title: s.title, type: 'coding',
+          problem_stats: problemIds.map((pid) => ({
+            id: pid, title: problemsMeta.get(pid)?.title || '(deleted problem)',
+            attempted: perP[pid].attempted, accepted: perP[pid].accepted,
+            accuracy: perP[pid].attempted ? Math.round((perP[pid].accepted / perP[pid].attempted) * 100) : 0,
+            avgScore: perP[pid].attempted ? Math.round((perP[pid].totalScore / perP[pid].attempted) * 10) / 10 : 0,
+          })),
+        });
       }
     }
 
@@ -589,6 +601,44 @@ exports.getResults = async (req, res) => {
     });
   } catch (e) {
     console.error('Exam getResults error:', e.message);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// One student's full attempt, from the faculty side — the aggregate results
+// above intentionally don't carry every attempt's full question/coding state
+// (that's O(attempts × questions) of payload for a class-wide view nobody
+// reads in full), so a drill-down needs its own fetch. Reuses
+// buildAttemptView() exactly as the student's own result screen does — an
+// already-submitted attempt reveals correct_index/explanation there, and
+// that's exactly what a faculty reviewer needs to see too.
+exports.getAttemptDetail = async (req, res) => {
+  try {
+    const { id, userId: attemptUserId } = req.params;
+    const exam = await readableExam(req, id);
+    if (!exam) return res.status(404).json({ success: false, error: 'Exam not found' });
+
+    const attempt = await examRepo.getAttempt(id, attemptUserId);
+    if (!attempt || !attempt.submittedAt) {
+      return res.status(404).json({ success: false, error: 'This student has not submitted the exam yet.' });
+    }
+
+    const usersMap = await userRepo.getAllUsersMap();
+    const profile = usersMap.get(attemptUserId) || {};
+    const view = await buildAttemptView(id, exam, attempt);
+
+    res.json({
+      success: true,
+      data: {
+        student: {
+          userId: attemptUserId, name: profile.name || 'Unknown', email: profile.email || null,
+          rollNo: profile.rollNo || null, department: profile.department || null, section: profile.section || null,
+        },
+        ...view,
+      },
+    });
+  } catch (e) {
+    console.error('Exam getAttemptDetail error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };

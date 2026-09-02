@@ -83,6 +83,26 @@ module.exports = async function examCodingAndProctorSuite() {
     const submitA = await post(`/api/exams/${examAId}/submit`, STUDENT, {});
     s.check('exam submit succeeds', submitA.status === 200, `status ${submitA.status} ${JSON.stringify(submitA.body)}`);
     s.check('final score includes the coding section marks', submitA.body?.data?.score === 10 && submitA.body?.data?.total === 10, JSON.stringify(submitA.body?.data));
+
+    // PR-5: faculty results — per-problem coding stats and the per-attempt drill-down.
+    const resultsA = await get(`/api/exams/${examAId}/results`, F);
+    const codingSection = resultsA.body?.data?.sections?.find((sec) => sec.id === secAId);
+    const pStat = codingSection?.problem_stats?.find((p) => p.id === probId);
+    s.check('results expose per-problem coding stats', resultsA.status === 200 && !!pStat, JSON.stringify(codingSection));
+    s.check('per-problem stat counts the one accepted attempt', pStat?.attempted === 1 && pStat?.accepted === 1 && pStat?.accuracy === 100, JSON.stringify(pStat));
+    s.check('per-problem avgScore reflects the awarded marks', pStat?.avgScore === 10, `avgScore ${pStat?.avgScore}`);
+
+    const outsiderDetail = await get(`/api/exams/${examAId}/results/${userId('examcp-student')}`, tokenFor('examcp-other', 'faculty'));
+    s.check("another faculty member can't drill into this exam's attempt", outsiderDetail.status === 404, `status ${outsiderDetail.status}`);
+
+    const detail = await get(`/api/exams/${examAId}/results/${userId('examcp-student')}`, F);
+    const detailCoding = detail.body?.data?.coding_state?.[probId];
+    s.check('attempt detail loads for the exam owner', detail.status === 200, `status ${detail.status}`);
+    s.check('attempt detail includes the student profile', detail.body?.data?.student?.userId === userId('examcp-student'), JSON.stringify(detail.body?.data?.student));
+    s.check('attempt detail exposes the coding verdict/score', detailCoding?.verdict === 'Accepted' && detailCoding?.score === 10, JSON.stringify(detailCoding));
+
+    const notSubmittedDetail = await get(`/api/exams/${examAId}/results/${userId('examcp-not-a-student')}`, F);
+    s.check('drilling into a student with no submitted attempt 404s', notSubmittedDetail.status === 404, `status ${notSubmittedDetail.status}`);
   }
 
   // ── AI-tutor lock: an Exam's proctor events, not just exam-assignments ───
