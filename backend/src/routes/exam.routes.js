@@ -35,5 +35,6 @@ router.put('/:id/sections/:sid/questions', facultyStaff, c.setSectionQuestions);
 router.put('/:id/sections/:sid/problems', facultyStaff, c.attachProblems);
 
 router.get('/:id/results', facultyStaff, c.getResults);
+router.get('/:id/results/:userId', facultyStaff, c.getAttemptDetail);
 
 module.exports = router;

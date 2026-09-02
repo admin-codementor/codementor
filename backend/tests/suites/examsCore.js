@@ -180,6 +180,14 @@ module.exports = async function examsCoreSuite() {
   const answerAfterSubmit = await patch(`/api/exams/${examId}/attempt/questions/${qA.id}`, MEMBER, { section_id: sec1Id, selected_index: 1 });
   s.check("can't edit an answer after submitting", answerAfterSubmit.status === 409, `status ${answerAfterSubmit.status}`);
 
+  // ── Post-submit reveal: the one thing that must flip from hidden to visible ──
+  const resumedAfterSubmit = await get(`/api/exams/${examId}/attempt`, MEMBER);
+  const revealedSec1 = resumedAfterSubmit.body?.data?.sections?.find((sec) => sec.id === sec1Id);
+  const revealedQA = revealedSec1?.questions?.find((q) => q.id === qA.id);
+  s.check('resuming after submit reports submitted:true', resumedAfterSubmit.body?.data?.submitted === true);
+  s.check('resuming after submit surfaces score/total', resumedAfterSubmit.body?.data?.score === 2.5 && resumedAfterSubmit.body?.data?.total === 15);
+  s.check('correct_index is now revealed post-submit (was hidden pre-submit)', revealedQA?.correct_index === 1, JSON.stringify(revealedQA));
+
   // ── Faculty results ───────────────────────────────────────────────────────
   const results = await get(`/api/exams/${examId}/results`, F);
   s.check('faculty results endpoint works', results.status === 200 && results.body?.data?.summary?.attempts === 1, `status ${results.status}`);
