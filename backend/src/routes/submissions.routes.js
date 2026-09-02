@@ -33,7 +33,7 @@ const MAX_INPUT_BYTES = 8 * 1024; // 8 KB
 // POST /api/submit — enqueue submission
 router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP, async (req, res) => {
   try {
-    const { source_code, language_id, problem_id, custom_input, contest_id, assignment_id, exam_id, section_id, job_id } = req.body;
+    const { source_code, language_id, problem_id, custom_input, contest_id, assignment_id, exam_id, section_id, job_id, run_mode } = req.body;
 
     // custom_input is a signal, not just a payload — even an empty string ("no
     // stdin") means "this is a custom/sandbox run", so check presence with
@@ -45,6 +45,11 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
     // execution with no test cases, scoring, or submission record. Any other
     // submission (graded or practice-on-a-problem) still requires problem_id.
     const isSandbox = isCustomRun && !problem_id;
+    // The "Run" button: grade against the problem's public/sample test cases
+    // only, for a quick accepted/wrong readout — free, unlimited-feeling
+    // practice, never an official attempt. "Submit" (run_mode absent) grades
+    // against every test case, hidden included, and is what actually counts.
+    const isSampleRun = run_mode === 'sample' && !isCustomRun && !!problem_id;
 
     if (!source_code || !language_id || (!problem_id && !isSandbox)) {
       return res.status(400).json({ success: false, error: 'source_code, language_id, and problem_id are required' });
@@ -85,11 +90,13 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
       await judgeService.startJudging(jobId, {
         source_code, language_id, problem_id: problem_id || null, user_id,
         custom_input: isCustomRun ? custom_input : null,
-        contest_id: isCustomRun ? null : (contest_id || null),
-        // Only graded submits (not custom runs) are recorded against an assignment/exam.
-        assignment_id: isCustomRun ? null : (assignment_id || null),
-        exam_id: isCustomRun ? null : (exam_id || null),
-        section_id: isCustomRun ? null : (section_id || null),
+        sample_only: isSampleRun,
+        // Neither a custom run nor a sample-only Run is an official attempt —
+        // both are kept out of assignment/exam/contest bookkeeping entirely.
+        contest_id: (isCustomRun || isSampleRun) ? null : (contest_id || null),
+        assignment_id: (isCustomRun || isSampleRun) ? null : (assignment_id || null),
+        exam_id: (isCustomRun || isSampleRun) ? null : (exam_id || null),
+        section_id: (isCustomRun || isSampleRun) ? null : (section_id || null),
       });
     } catch (startErr) {
       console.error('Failed to start judging:', startErr.message);
