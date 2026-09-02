@@ -1,6 +1,6 @@
 "use client";
 
-import { createTheme, type PaletteMode, type PaletteOptions } from "@mui/material/styles";
+import { alpha, createTheme, type PaletteMode, type PaletteOptions } from "@mui/material/styles";
 import {
   darkScheme,
   lightScheme,
@@ -203,13 +203,34 @@ export const theme = createTheme({
     MuiButton: {
       defaultProps: { disableElevation: true },
       styleOverrides: {
-        root: { borderRadius: shape.full, textTransform: "none", paddingInline: 24, minHeight: 40 },
+        root: {
+          borderRadius: shape.full,
+          textTransform: "none",
+          paddingInline: 24,
+          minHeight: 40,
+          // `disableElevation` drops MUI's own hover shadow, and MUI's default
+          // ~250ms complex-easing transition reads as sluggish next to the
+          // 150ms cards/rows use everywhere else — match that timing and give
+          // every variant real hover + press feedback instead of relying on
+          // whatever MUI's base styles happen to still apply.
+          transition: "filter 150ms ease, box-shadow 150ms ease, transform 100ms ease, background-color 150ms ease",
+          "&:active": { transform: "scale(0.97)" },
+        },
         sizeSmall: { minHeight: 32, paddingInline: 16 },
         sizeLarge: { minHeight: 48, paddingInline: 28 },
+        contained: {
+          "&:hover": { filter: "brightness(1.08)", boxShadow: "0 2px 8px rgba(0,0,0,0.28)" },
+        },
       },
     },
     MuiIconButton: {
-      styleOverrides: { root: { borderRadius: shape.full } },
+      styleOverrides: {
+        root: {
+          borderRadius: shape.full,
+          transition: "background-color 150ms ease, transform 100ms ease",
+          "&:active": { transform: "scale(0.92)" },
+        },
+      },
     },
     MuiCardActionArea: {
       styleOverrides: {
@@ -239,6 +260,14 @@ export const theme = createTheme({
     MuiChip: {
       styleOverrides: {
         root: { borderRadius: shape.small, fontWeight: 500 },
+        // Only chips built with `onClick`/`clickable` (filter chips) get this —
+        // status chips (VerdictChip, DifficultyChip, TagChip) stay static, so
+        // they never pick up a pointer cursor or hover state they can't act on.
+        clickable: {
+          transition: "filter 150ms ease, transform 100ms ease",
+          "&:hover": { filter: "brightness(0.94)" },
+          "&:active": { transform: "scale(0.96)" },
+        },
       },
     },
     MuiTextField: {
@@ -246,6 +275,30 @@ export const theme = createTheme({
     },
     MuiOutlinedInput: {
       styleOverrides: { root: { borderRadius: shape.extraSmall } },
+    },
+    MuiMenuItem: {
+      styleOverrides: {
+        // alpha() needs a real color value — theme.vars.palette.* under this
+        // cssVariables-mode theme is a `var(--mui-palette-...)` string, which
+        // alpha() (like the SparkLineChart color prop, fixed earlier) can't
+        // parse. Use the raw hex token for the active scheme instead.
+        root: ({ theme }) => ({
+          borderRadius: shape.extraSmall,
+          margin: "0 4px",
+          transition: "background-color 150ms ease",
+          "&:hover": {
+            backgroundColor: alpha(
+              theme.palette.mode === "dark" ? darkScheme.onSurface : lightScheme.onSurface,
+              stateLayerOpacity.hover,
+            ),
+          },
+          "&.Mui-selected": {
+            backgroundColor: theme.vars.palette.secondaryContainer,
+            color: theme.vars.palette.onSecondaryContainer,
+            "&:hover": { backgroundColor: theme.vars.palette.secondaryContainer },
+          },
+        }),
+      },
     },
     MuiToggleButtonGroup: {
       styleOverrides: {
