@@ -315,6 +315,13 @@ function SummaryCard({ label, children }: { label: string; children: React.React
 }
 
 function ResultsSummary({ result }: { result: VerdictResult }) {
+  // MUI X Charts resolves its `colors` prop through d3-color, which can't
+  // parse a `var(--mui-palette-...)` string the way this cssVariables-mode
+  // theme returns from theme.palette.* (it calls .brighter() on the null
+  // result and crashes the whole page) — so this needs the same raw-token
+  // lookup components/ui/nivo.tsx already uses for its own chart colors.
+  const theme = useTheme();
+  const sparkColor = theme.palette.mode === "dark" ? darkScheme.primary : lightScheme.primary;
   const cases = result.test_case_results;
   if (cases.length === 0) return null;
   const timesMs = cases.map((c) => Math.max(0, Math.round(c.time * 1000)));
@@ -350,6 +357,8 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
 
   return (
     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
+      {shown.length > 0 && countChip(shownPassed, shown.length, "shown")}
+      {hidden.length > 0 && countChip(hiddenPassed, hidden.length, "hidden")}
       <SummaryCard label="Average time">
         <Typography variant="subtitle2" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace" }}>
           {avg} ms
@@ -362,13 +371,11 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
           </Typography>
           {timesMs.length > 1 && (
             <Box sx={{ width: 56, height: 24 }} aria-hidden>
-              <SparkLineChart data={timesMs} height={24} width={56} area colors={["var(--mui-palette-primary-main)"]} />
+              <SparkLineChart data={timesMs} height={24} width={56} area colors={[sparkColor]} />
             </Box>
           )}
         </Stack>
       </SummaryCard>
-      {shown.length > 0 && countChip(shownPassed, shown.length, "shown")}
-      {hidden.length > 0 && countChip(hiddenPassed, hidden.length, "hidden")}
     </Stack>
   );
 }
@@ -785,23 +792,34 @@ export default function ProblemSolvingPage() {
     setSubmitting(false);
     setRunning(false);
     setOutputOpen(true);
-    setOutputTab("testcases");
-    // Refresh history if on submissions tab
-    if (panelTab === "submissions") loadHistory();
+    // A plain Run belongs on the Terminal tab (raw stdout/stderr against
+    // custom input, not graded) — only a real Submit result should land on
+    // Test cases. Previously this always forced "testcases", so a Run's
+    // single ungraded result rendered through the pass/fail test-case UI
+    // (undefined pass counts, a red "Accepted" row) whenever its callback
+    // resolved after the tab had been switched.
+    setOutputTab(payload.result?.custom_run ? "custom" : "testcases");
     const r = payload.result;
-    if (r && !r.custom_run && r.verdict?.description === "Accepted") {
+    // A sample-only Run never creates a submission record, so there's nothing
+    // for the Submissions tab to refresh, and — critically — it must never
+    // mark the problem solved or celebrate: passing the 1-2 visible examples
+    // is not proof the hidden test cases pass too.
+    if (panelTab === "submissions" && !r?.sample_only) loadHistory();
+    if (r && !r.custom_run && !r.sample_only && r.verdict?.description === "Accepted") {
       // Celebrate + stop the timer (Peak-End Rule).
       setSolved(true);
       fireConfetti();
     } else if (r && !r.custom_run && r.verdict?.description && r.verdict.description !== "Accepted") {
-      // Nudge the AI tutor toward debugging when a real submission fails.
-      setTutorContext(`${r.submission_id}:${r.verdict.id}`);
+      // Nudge the AI tutor toward debugging when a run or submission fails.
+      // A sample-only Run has no submission_id to key off, so fall back to a
+      // timestamp — this only needs to change on every failure, not be stable.
+      setTutorContext(`${r.submission_id ?? Date.now()}:${r.verdict.id}`);
     }
   }, [panelTab, loadHistory]);
 
-  // ── Execute (run or submit) ──
+  // ── Execute (Run against samples, Submit for real, or a custom-input Terminal run) ──
   const execute = React.useCallback(
-    async (isSubmit: boolean) => {
+    async (mode: "submit" | "run" | "custom") => {
       if (!problem) return;
       if (pendingRef.current) return; // guard against concurrent run/submit (avoids 429)
       const currentCode = code;
@@ -811,7 +829,7 @@ export default function ProblemSolvingPage() {
       if (cancelPollRef.current) { cancelPollRef.current(); cancelPollRef.current = null; }
       pendingRef.current = true;
 
-      if (isSubmit) setSubmitting(true);
+      if (mode === "submit") setSubmitting(true);
       else setRunning(true);
       setVerdict(null);
 
@@ -826,7 +844,8 @@ export default function ProblemSolvingPage() {
           language_id: langId,
           problem_id: problem.id,
         };
-        if (!isSubmit) body.custom_input = customInput;
+        if (mode === "custom") body.custom_input = customInput;
+        if (mode === "run") body.run_mode = "sample";
         // Attach assignment / contest / exam context so the submission is recorded against them.
         if (assignmentId) body.assignment_id = assignmentId;
         if (contestId) body.contest_id = contestId;
@@ -873,8 +892,8 @@ export default function ProblemSolvingPage() {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
         e.preventDefault();
-        if (e.shiftKey) execute(true);
-        else execute(false);
+        if (e.shiftKey) execute("submit");
+        else execute("run");
       }
     };
     window.addEventListener("keydown", handler);
@@ -883,7 +902,7 @@ export default function ProblemSolvingPage() {
 
   // Keep the auto-submit ref pointed at the latest submit for the proctor hook.
   React.useEffect(() => {
-    autoSubmitRef.current = () => execute(true);
+    autoSubmitRef.current = () => execute("submit");
   }, [execute]);
 
   // Stop polling for a verdict when leaving the page.
@@ -1083,8 +1102,8 @@ export default function ProblemSolvingPage() {
         submitting={submitting}
         running={running}
         solved={solved}
-        onRun={() => { setOutputTab("custom"); setOutputOpen(true); execute(false); }}
-        onSubmit={() => execute(true)}
+        onRun={() => { setOutputTab("testcases"); setOutputOpen(true); execute("run"); }}
+        onSubmit={() => execute("submit")}
         showAI={showAI}
         onToggleAI={() => setShowAI((v) => !v)}
       />
@@ -1152,24 +1171,27 @@ export default function ProblemSolvingPage() {
                 </Stack>
 
                 {/* Limits */}
-                <Stack direction="row" spacing={3} sx={{ mb: 2.5 }}>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">Time limit</Typography>
-                    <Typography variant="body2" fontWeight={500}>{problem.time_limit} ms</Typography>
+                <Stack direction="row" spacing={1} sx={{ mb: 2.5 }}>
+                  <Box sx={{ px: 1.25, py: 0.625, borderRadius: 1.5, bgcolor: "surfaceContainerHigh" }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Time limit</Typography>
+                    <Typography variant="caption" fontWeight={700}>{problem.time_limit} ms</Typography>
                   </Box>
-                  <Box>
-                    <Typography variant="caption" color="text.secondary">Memory limit</Typography>
-                    <Typography variant="body2" fontWeight={500}>{problem.memory_limit} MB</Typography>
+                  <Box sx={{ px: 1.25, py: 0.625, borderRadius: 1.5, bgcolor: "surfaceContainerHigh" }}>
+                    <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Memory limit</Typography>
+                    <Typography variant="caption" fontWeight={700}>{problem.memory_limit} MB</Typography>
                   </Box>
                 </Stack>
+
+                <Divider sx={{ mb: 2.5 }} />
 
                 {/* Problem description */}
                 <ProblemMarkdown content={problem.description} />
 
                 {/* Examples */}
                 {problem.examples.length > 0 && (
-                  <Box sx={{ mt: 3 }}>
-                    <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 600 }}>
+                  <Box sx={{ mt: 3.5 }}>
+                    <Divider sx={{ mb: 2.5 }} />
+                    <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", fontSize: "0.72rem", color: "text.secondary" }}>
                       Examples
                     </Typography>
                     <Stack spacing={2}>
@@ -1400,16 +1422,27 @@ export default function ProblemSolvingPage() {
                     alignItems: "center",
                     justifyContent: "space-between",
                     px: 2,
-                    py: 0.75,
+                    py: 0.875,
                     borderRadius: 2,
                     bgcolor: vBg,
                     color: vFg,
                   }}
                 >
-                  <Typography variant="subtitle2" fontWeight={700}>
-                    {verdictDesc}
-                    {verdictResult && ` — ${verdictResult.passed_count}/${verdictResult.total_count} passed`}
-                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    {verdictDesc === "Accepted" ? (
+                      <CheckCircleOutlineIcon fontSize="small" />
+                    ) : (
+                      <CancelOutlinedIcon fontSize="small" />
+                    )}
+                    <Typography variant="subtitle2" fontWeight={700}>
+                      {verdictResult?.custom_run
+                        ? verdictDesc === "Accepted" ? "Ran successfully" : verdictDesc
+                        : verdictResult?.sample_only
+                          ? `Sample check: ${verdictDesc}`
+                          : verdictDesc}
+                      {verdictResult && !verdictResult.custom_run && ` — ${verdictResult.passed_count}/${verdictResult.total_count} passed`}
+                    </Typography>
+                  </Stack>
                   {verdictResult && (
                     <Stack direction="row" spacing={2}>
                       <Typography variant="caption">{formatMs(verdictResult.time)}</Typography>
@@ -1438,19 +1471,33 @@ export default function ProblemSolvingPage() {
                         <Typography variant="caption" color="text.secondary">Judging…</Typography>
                       </Stack>
                     )}
-                    {!submitting && !running && verdictResult && (
+                    {!submitting && !running && verdictResult && !verdictResult.custom_run && (
                       <Box>
-                        {!verdictResult.custom_run && <ResultsSummary result={verdictResult} />}
+                        <ResultsSummary result={verdictResult} />
                         <Stack spacing={1}>
                           {verdictResult.test_case_results.map((r, i) => (
                             <TestCaseRow key={i} index={i} result={r} />
                           ))}
                         </Stack>
+                        {verdictResult.sample_only && (
+                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", pt: 2 }}>
+                            This only checked the sample test cases shown above. Submit to grade your solution
+                            against every test case, hidden ones included.
+                          </Typography>
+                        )}
                       </Box>
+                    )}
+                    {!submitting && !running && verdictResult?.custom_run && (
+                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", py: 3 }}>
+                        That was a Terminal run against custom input — it doesn&apos;t check the problem&apos;s test
+                        cases.
+                        <br />
+                        Use Run to check the sample test cases, or Submit to grade your solution.
+                      </Typography>
                     )}
                     {!submitting && !running && !verdictResult && !verdict && (
                       <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", py: 3 }}>
-                        Submit your code to see test results here.
+                        Run your code to check it against the sample test cases.
                         <br />
                         <Typography component="span" variant="caption" color="text.disabled">
                           Ctrl + Shift + Enter to submit · Ctrl + Enter to run
@@ -1520,7 +1567,7 @@ export default function ProblemSolvingPage() {
                       variant="outlined"
                       size="small"
                       startIcon={running ? <CircularProgress size={14} /> : <PlayArrowOutlinedIcon />}
-                      onClick={() => execute(false)}
+                      onClick={() => execute("custom")}
                       disabled={running || submitting}
                       sx={{ alignSelf: "flex-start" }}
                     >
@@ -1568,7 +1615,7 @@ export default function ProblemSolvingPage() {
               Reset
             </Button>
             <Button
-              onClick={() => execute(true)}
+              onClick={() => execute("submit")}
               disabled={submitting || running}
               size="small"
               variant="contained"

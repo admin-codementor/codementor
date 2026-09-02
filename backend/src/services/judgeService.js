@@ -304,7 +304,7 @@ async function updateTopicMastery(userId, problemId, isAccepted, hintUsed) {
 // tail of the old worker's runJob().
 async function finalize(jobId, job, acc, testCasesLength) {
   const { problem_id, user_id, contest_id, assignment_id, exam_id, section_id, source_code, language_id, meta } = job;
-  const { isOI, maxScore, scoringMode } = meta;
+  const { isOI, maxScore, scoringMode, sampleOnly } = meta;
 
   if (isOI) {
     if (acc.passedCount === testCasesLength) acc.finalVerdict = { id: 3, description: 'Accepted' };
@@ -314,7 +314,12 @@ async function finalize(jobId, job, acc, testCasesLength) {
   const finalScore = isOI ? acc.earnedScore : null;
   const testResultsArr = acc.results.map((r) => !!r.passed);
 
-  const submission = await submissionRepo.create({
+  // A "Run" (sample_only) is a free, unofficial check against the sample
+  // cases only — it must never create a submission record, touch topic
+  // mastery, or reconcile into an exam/contest, or a student could rack up
+  // unlimited "attempts" (and even a false "solved" signal) without ever
+  // actually Submitting against the hidden test cases.
+  const submission = sampleOnly ? null : await submissionRepo.create({
     userId: user_id || null,
     problemId: problem_id,
     code: capOutput(source_code),
@@ -328,7 +333,7 @@ async function finalize(jobId, job, acc, testCasesLength) {
     examId: exam_id || null,
   });
 
-  if (user_id) {
+  if (user_id && !sampleOnly) {
     await updateTopicMastery(user_id, problem_id, acc.finalVerdict.description === 'Accepted', false);
   }
 
@@ -336,7 +341,7 @@ async function finalize(jobId, job, acc, testCasesLength) {
   // made under. Non-blocking and best-effort, same shape as the contest
   // reconciliation just below — a reconciliation failure must never fail the
   // student's actual judged verdict.
-  if (exam_id && user_id) {
+  if (exam_id && user_id && !sampleOnly) {
     try {
       // The awarded marks must be scaled to the exam SECTION's marksPerQuestion,
       // not the problem's own max_score — submitExam() later just sums these
@@ -362,7 +367,7 @@ async function finalize(jobId, job, acc, testCasesLength) {
     }
   }
 
-  if (contest_id && user_id) {
+  if (contest_id && user_id && !sampleOnly) {
     try {
       const contest = await contestRepo.getById(contest_id);
       const withinWindow = contest && new Date() >= new Date(contest.startsAt) && new Date() <= new Date(contest.endsAt);
@@ -380,7 +385,7 @@ async function finalize(jobId, job, acc, testCasesLength) {
   }
 
   const result = {
-    submission_id: submission.id,
+    submission_id: submission?.id ?? null,
     verdict: acc.finalVerdict,
     time: acc.maxTime,
     memory: acc.maxMemory,
@@ -390,6 +395,7 @@ async function finalize(jobId, job, acc, testCasesLength) {
     passed_count: acc.passedCount,
     total_count: testCasesLength,
     test_case_results: acc.results,
+    sample_only: !!sampleOnly,
   };
 
   await judgeJobRepo.update(jobId, { phase: 'done', result: { success: true, state: 'completed', result } });
@@ -413,6 +419,16 @@ async function handleStepError(jobId, doc, err) {
   return { status: 'retrying', attempt: attempts, maxAttempts: MAX_ATTEMPTS };
 }
 
+// A "Run" (sample_only) grades against the public/example test cases only —
+// never the hidden ones — so every place that re-fetches test cases mid-job
+// (stepTests/stepChecker/advanceAfterChunk all re-query rather than trusting
+// stale state) has to keep making the same choice a second, third, fourth
+// time, or a multi-chunk problem would silently pull in hidden cases after
+// the first batch.
+function getGradingTestCases(problemId, sampleOnly) {
+  return sampleOnly ? problemRepo.getPublicTestCases(problemId) : problemRepo.getTestCases(problemId);
+}
+
 // ── Public API ───────────────────────────────────────────────────────────────
 
 /**
@@ -421,7 +437,7 @@ async function handleStepError(jobId, doc, err) {
  * graded submission) and persists initial state — never blocks on a result.
  */
 async function startJudging(jobId, jobData) {
-  const { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id, exam_id, section_id } = jobData;
+  const { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id, exam_id, section_id, sample_only } = jobData;
 
   if (custom_input !== null && custom_input !== undefined) {
     const token = await submitSingleAsync(source_code, language_id, custom_input);
@@ -434,9 +450,15 @@ async function startJudging(jobId, jobData) {
     return;
   }
 
-  const testCasesRaw = await problemRepo.getTestCases(problem_id);
+  const testCasesRaw = await getGradingTestCases(problem_id, sample_only);
   if (testCasesRaw.length === 0) {
-    await judgeJobRepo.create(jobId, { phase: 'done', result: { success: false, state: 'failed', error: friendlyJudgeError(new Error('No test cases found for problem')) } });
+    // A problem can have hidden test cases but no public/sample ones — that's
+    // a "Run" dead end, not the "problem has no test cases at all" case Submit
+    // would hit, so it needs its own message pointing at Submit instead.
+    const error = sample_only
+      ? 'This problem has no sample test cases to run against. Click Submit to check your solution against its test cases.'
+      : friendlyJudgeError(new Error('No test cases found for problem'));
+    await judgeJobRepo.create(jobId, { phase: 'done', result: { success: false, state: 'failed', error } });
     return;
   }
 
@@ -457,7 +479,7 @@ async function startJudging(jobId, jobData) {
     problem_id, source_code, language_id, user_id,
     contest_id: contest_id || null, assignment_id: assignment_id || null,
     exam_id: exam_id || null, section_id: section_id || null,
-    meta: { scoringMode, isOI, maxScore, usesChecker, checkerCode, checkerLanguageId, useEvenSplit, perTcScore, testCasesLength },
+    meta: { scoringMode, isOI, maxScore, usesChecker, checkerCode, checkerLanguageId, useEvenSplit, perTcScore, testCasesLength, sampleOnly: !!sample_only },
   };
 
   const chunk = testCasesRaw.slice(0, BATCH_SIZE).map((tc) => ({
@@ -520,7 +542,7 @@ async function stepTests(jobId, doc) {
 
   const { job, chunkIndex, acc } = doc;
   const { meta } = job;
-  const testCasesRaw = await problemRepo.getTestCases(job.problem_id);
+  const testCasesRaw = await getGradingTestCases(job.problem_id, meta.sampleOnly);
   const tcSlice = testCasesRaw
     .slice(chunkIndex * BATCH_SIZE, chunkIndex * BATCH_SIZE + BATCH_SIZE)
     .map((tc) => ({ input_data: tc.inputData, expected_output: tc.expectedOutput, score: tc.score || 0, is_public: !!tc.isPublic }));
@@ -576,7 +598,7 @@ async function stepChecker(jobId, doc) {
   const localIndices = relevantIndices.map((_, pos) => pos);
   scoreChunk(batchResults, tcSlice, localIndices, meta, acc, resolvedStatus);
 
-  const testCasesRaw = await problemRepo.getTestCases(job.problem_id);
+  const testCasesRaw = await getGradingTestCases(job.problem_id, meta.sampleOnly);
   return advanceAfterChunk(jobId, doc, acc, testCasesRaw.length);
 }
 
@@ -590,7 +612,7 @@ async function advanceAfterChunk(jobId, doc, acc, testCasesLength) {
     return finalize(jobId, job, acc, testCasesLength);
   }
 
-  const testCasesRaw = await problemRepo.getTestCases(job.problem_id);
+  const testCasesRaw = await getGradingTestCases(job.problem_id, job.meta.sampleOnly);
   const chunk = testCasesRaw.slice(nextStart, nextStart + BATCH_SIZE).map((tc) => ({
     input_data: tc.inputData, expected_output: tc.expectedOutput,
     score: tc.score || 0, is_public: !!tc.isPublic, source_code: job.source_code,

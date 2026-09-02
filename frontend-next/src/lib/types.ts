@@ -185,6 +185,7 @@ export interface VerdictResult {
   passed_count: number;
   total_count: number;
   custom_run?: boolean;
+  sample_only?: boolean;
   test_case_results: TestCaseResult[];
 }
 
