@@ -31,7 +31,7 @@ interface CourseRow {
   isPublished: boolean;
   moduleCount: number;
   problemCount: number;
-  author: string;
+  author: string | null;
   canEdit: boolean;
 }
 
@@ -112,7 +112,9 @@ function CourseCard({ course, onClick }: { course: CourseRow; onClick: () => voi
               <FormatListBulletedOutlinedIcon sx={{ fontSize: 16 }} />
               <Typography variant="caption">{course.problemCount} problems</Typography>
             </Stack>
-            <Typography variant="caption" color="text.disabled">by {course.author}</Typography>
+            {course.author && (
+              <Typography variant="caption" color="text.disabled">by {course.author}</Typography>
+            )}
           </Stack>
           {!course.canEdit && <Chip size="small" label="View only" sx={{ height: 18, fontSize: 10, alignSelf: "flex-start" }} />}
         </Stack>

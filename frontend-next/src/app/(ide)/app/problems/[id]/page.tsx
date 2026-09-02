@@ -465,16 +465,24 @@ function IDEHeader({
         borderColor: "outlineVariant",
         bgcolor: "surface",
         flexShrink: 0,
+        // Every element here was a fixed-size flex child with nothing allowed
+        // to shrink or hide, so on a real phone width the row simply overran
+        // its container and clipped Submit + the avatar off-screen instead of
+        // wrapping or truncating. overflowX is a safety net on top of the
+        // narrow-width hides below — nothing should ever be unreachable.
+        overflowX: "auto",
       }}
     >
       {/* Logo */}
-      <IconButton component={NextLink} href="/app/problems" aria-label="Back to problems" size="small">
+      <IconButton component={NextLink} href="/app/problems" aria-label="Back to problems" size="small" sx={{ flexShrink: 0 }}>
         <CodeIcon fontSize="small" />
       </IconButton>
 
-      <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+      <Divider orientation="vertical" flexItem sx={{ mx: 0.5, flexShrink: 0 }} />
 
-      {/* Prev / Next */}
+      {/* Prev / Next — the position counter is a nice-to-have that's the
+          first thing dropped on a real phone width; the chevrons stay since
+          they're the actual navigation. */}
       <Tooltip title="Previous problem">
         <span>
           <IconButton
@@ -483,6 +491,7 @@ function IDEHeader({
             aria-label="Previous problem"
             size="small"
             disabled={!adjacent?.prev}
+            sx={{ flexShrink: 0 }}
           >
             <ChevronLeftIcon fontSize="small" />
           </IconButton>
@@ -490,7 +499,7 @@ function IDEHeader({
       </Tooltip>
 
       {adjacent && (
-        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 52, textAlign: "center" }}>
+        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 52, textAlign: "center", flexShrink: 0, display: { xs: "none", sm: "block" } }}>
           {adjacent.position}/{adjacent.total}
         </Typography>
       )}
@@ -503,24 +512,28 @@ function IDEHeader({
             aria-label="Next problem"
             size="small"
             disabled={!adjacent?.next}
+            sx={{ flexShrink: 0 }}
           >
             <ChevronRightIcon fontSize="small" />
           </IconButton>
         </span>
       </Tooltip>
 
-      {/* Problem title */}
+      {/* Problem title — minWidth:0 is required for a flex item to actually
+          shrink/ellipsis instead of forcing the row wider than the viewport
+          (a flex item's default min-width is `auto`, not 0). */}
       <Typography
         variant="body2"
         fontWeight={600}
         noWrap
-        sx={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", mx: 1 }}
+        sx={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", mx: 1 }}
       >
         {problem?.title ?? "Loading…"}
       </Typography>
 
-      {/* Timer (session + Pomodoro) */}
-      <Box sx={{ mr: 0.5 }}>
+      {/* Timer (session + Pomodoro) — hidden on phone widths, same reasoning
+          as the position counter above. */}
+      <Box sx={{ mr: 0.5, flexShrink: 0, display: { xs: "none", sm: "block" } }}>
         <TimerWidget problemId={problemId} solved={solved} />
       </Box>
 
@@ -531,7 +544,7 @@ function IDEHeader({
         startIcon={running ? <CircularProgress size={14} /> : <PlayArrowOutlinedIcon />}
         onClick={onRun}
         disabled={submitting || running}
-        sx={{ minWidth: 70 }}
+        sx={{ minWidth: 70, flexShrink: 0 }}
       >
         Run
       </Button>
@@ -543,12 +556,12 @@ function IDEHeader({
         startIcon={submitting ? <CircularProgress size={14} sx={{ color: "inherit" }} /> : <UploadOutlinedIcon />}
         onClick={onSubmit}
         disabled={submitting || running}
-        sx={{ minWidth: 88 }}
+        sx={{ minWidth: 88, flexShrink: 0 }}
       >
         {submitting ? "Judging…" : "Submit"}
       </Button>
 
-      <Divider orientation="vertical" flexItem sx={{ mx: 0.5 }} />
+      <Divider orientation="vertical" flexItem sx={{ mx: 0.5, flexShrink: 0 }} />
 
       {/* AI Tutor toggle */}
       <Tooltip title={showAI ? "Hide AI Tutor" : "Ask the AI Tutor"}>
@@ -558,6 +571,7 @@ function IDEHeader({
           aria-label="Toggle AI Tutor"
           aria-pressed={showAI}
           sx={{
+            flexShrink: 0,
             color: showAI ? "var(--mui-palette-ai)" : "text.secondary",
             bgcolor: showAI ? "color-mix(in srgb, var(--mui-palette-ai) 14%, transparent)" : "transparent",
           }}
@@ -571,6 +585,7 @@ function IDEHeader({
         size="small"
         aria-label="Account menu"
         onClick={(e) => setAnchorEl(e.currentTarget)}
+        sx={{ flexShrink: 0 }}
       >
         <Avatar sx={{ width: 28, height: 28, bgcolor: "primary.main", color: "primary.contrastText", fontSize: 12 }}>
           {initials(user?.name)}
