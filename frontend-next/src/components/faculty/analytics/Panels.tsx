@@ -12,12 +12,15 @@ import { ResponsiveHeatMap } from "@nivo/heatmap";
 import { ResponsiveScatterPlot } from "@nivo/scatterplot";
 import { ResponsiveRadar } from "@nivo/radar";
 import { ResponsiveFunnel } from "@nivo/funnel";
+import { ResponsivePie } from "@nivo/pie";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { TrendingUpIcon, TrendingDownIcon } from "@/components/ui/icons";
 
-/** Compact KPI with a period-over-period delta and an inline sparkline. */
+/** Compact KPI with a period-over-period delta and an inline sparkline. Pass
+ * `hero` for the one lead tile a view wants to draw the eye to first (Von
+ * Restorff) — a tonal gradient fill instead of the plain bordered box. */
 export function KpiTile({
-  label, value, delta, series, suffix, help,
+  label, value, delta, series, suffix, help, hero = false,
 }: {
   label: string;
   value: number | string;
@@ -25,22 +28,40 @@ export function KpiTile({
   series?: number[];
   suffix?: string;
   help?: string;
+  hero?: boolean;
 }) {
   const colors = useChartColors();
   const up = (delta ?? 0) > 0;
   const flat = delta === 0 || delta == null;
+  const sparkColor = hero ? "#fff" : colors[0];
 
   return (
-    <Box sx={{ p: 2, border: "1px solid", borderColor: "outlineVariant", borderRadius: 3, minWidth: 0 }}>
+    <Box
+      sx={
+        hero
+          ? {
+              p: 2,
+              borderRadius: 3,
+              minWidth: 0,
+              color: "onPrimaryContainer",
+              background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 20%, var(--mui-palette-primaryContainer)))",
+              boxShadow: "0 6px 16px color-mix(in srgb, var(--mui-palette-primaryContainer) 55%, transparent)",
+            }
+          : { p: 2, border: "1px solid", borderColor: "outlineVariant", borderRadius: 3, minWidth: 0 }
+      }
+    >
       <Tooltip title={help ?? ""}>
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", textTransform: "uppercase", letterSpacing: 0.4 }}>
+        <Typography
+          variant="caption"
+          sx={{ display: "block", textTransform: "uppercase", letterSpacing: 0.4, color: hero ? "inherit" : "text.secondary", opacity: hero ? 0.85 : 1 }}
+        >
           {label}
         </Typography>
       </Tooltip>
       <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mt: 0.5 }}>
         <Typography variant="h5" fontWeight={600}>{value}{suffix}</Typography>
         {!flat && (
-          <Stack direction="row" alignItems="center" spacing={0.25} sx={{ color: up ? "success.main" : "error.main" }}>
+          <Stack direction="row" alignItems="center" spacing={0.25} sx={{ color: hero ? "inherit" : up ? "success.main" : "error.main", opacity: hero && !up ? 0.85 : 1 }}>
             {up ? <TrendingUpIcon sx={{ fontSize: 15 }} /> : <TrendingDownIcon sx={{ fontSize: 15 }} />}
             <Typography variant="caption" fontWeight={600}>{Math.abs(delta as number)}%</Typography>
           </Stack>
@@ -51,7 +72,7 @@ export function KpiTile({
           <ResponsiveLine
             data={[{ id: label, data: series.map((y, i) => ({ x: i, y })) }]}
             margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
-            colors={[colors[0]]}
+            colors={[sparkColor]}
             enablePoints={false}
             enableGridX={false}
             enableGridY={false}
@@ -200,12 +221,18 @@ export function StudentScatter({
   );
 }
 
-/** Distribution of a per-student measure — what an average conceals. */
+/** Distribution of a per-student measure — what an average conceals. Pass
+ * `onBarClick` to drill into which students fall in a given bucket.
+ * Nivo's bar click datum only ever carries `indexBy` + `keys` fields (bucket
+ * + count) — never other custom fields on the source row like `from` — so
+ * the callback only gets those two; look `from` up from `histogram` by
+ * `bucket` at the call site if you need it. */
 export function DistributionChart({
-  histogram, label,
+  histogram, label, onBarClick,
 }: {
-  histogram: { bucket: string; count: number }[];
+  histogram: { bucket: string; from: number; count: number }[];
   label: string;
+  onBarClick?: (bucket: { bucket: string; count: number }) => void;
 }) {
   const theme = useNivoTheme();
   const colors = useChartColors();
@@ -223,8 +250,53 @@ export function DistributionChart({
         enableLabel={false}
         axisBottom={{ tickSize: 0, tickPadding: 8, legend: label, legendPosition: "middle", legendOffset: 40 }}
         axisLeft={{ tickSize: 0, tickPadding: 8, legend: "Students", legendPosition: "middle", legendOffset: -38 }}
+        onClick={onBarClick ? (d) => onBarClick(d.data as { bucket: string; count: number }) : undefined}
+        tooltip={onBarClick ? ({ data }) => (
+          <Box sx={{ bgcolor: "surfaceContainerHigh", color: "onSurface", p: 1, borderRadius: 2, fontSize: 12, boxShadow: 3 }}>
+            {data.count} student{data.count === 1 ? "" : "s"} · click to list them
+          </Box>
+        ) : undefined}
       />
     </Box>
+  );
+}
+
+/** Verdict mix as a donut — replaces a ranked bar list so pass/fail share reads
+ * at a glance instead of needing to compare bar lengths. */
+export function VerdictDonut({ rows }: { rows: { verdict: string; count: number }[] }) {
+  const theme = useNivoTheme();
+  const colors = useChartColors();
+  if (rows.length === 0) return <Typography variant="body2" color="text.secondary">No data yet.</Typography>;
+  const total = rows.reduce((s, r) => s + r.count, 0);
+  return (
+    <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems="center">
+      <Box sx={{ height: 200, width: "100%", maxWidth: 220, flexShrink: 0 }}>
+        <ResponsivePie
+          data={rows.map((r) => ({ id: r.verdict, label: r.verdict, value: r.count }))}
+          margin={{ top: 8, right: 8, bottom: 8, left: 8 }}
+          innerRadius={0.6}
+          padAngle={1.2}
+          cornerRadius={4}
+          colors={colors}
+          theme={theme}
+          borderWidth={0}
+          enableArcLinkLabels={false}
+          arcLabelsSkipAngle={16}
+        />
+      </Box>
+      <Stack spacing={0.75} sx={{ minWidth: 0, flex: 1 }}>
+        {rows.map((r, i) => (
+          <Stack key={r.verdict} direction="row" alignItems="center" spacing={1}>
+            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: colors[i % colors.length], flexShrink: 0 }} />
+            <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>{r.verdict}</Typography>
+            <Typography variant="body2" fontWeight={600}>{r.count}</Typography>
+            <Typography variant="caption" color="text.secondary" sx={{ minWidth: 34, textAlign: "right" }}>
+              {total > 0 ? Math.round((r.count / total) * 100) : 0}%
+            </Typography>
+          </Stack>
+        ))}
+      </Stack>
+    </Stack>
   );
 }
 
