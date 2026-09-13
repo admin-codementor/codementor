@@ -196,7 +196,7 @@ export default function LeaderboardPage() {
                 if (!entry) return null;
                 const isMe = String(entry.id) === currentUserId;
                 return (
-                  <Stack key={entry.id} alignItems="center" spacing={1}>
+                  <Stack key={entry.id} alignItems="center" spacing={1} sx={{ width: "100%", minWidth: 0 }}>
                     <Avatar
                       sx={{
                         width: 40,
@@ -209,7 +209,11 @@ export default function LeaderboardPage() {
                     >
                       {avatarInitials(entry.name)}
                     </Avatar>
-                    <Typography variant="caption" fontWeight={600} noWrap sx={{ maxWidth: 90, textAlign: "center" }}>
+                    {/* The name only needs to truncate against the podium
+                        column's real width, not an arbitrary fixed cap — a
+                        90px max-width was clipping names ("Aarav Chatter…")
+                        that had plenty of visible room to spare. */}
+                    <Typography variant="caption" fontWeight={600} noWrap sx={{ maxWidth: "100%", textAlign: "center" }}>
                       {entry.name}
                     </Typography>
                     <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace" }}>

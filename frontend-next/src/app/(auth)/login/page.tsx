@@ -13,6 +13,7 @@ import Typography from "@mui/material/Typography";
 import TextField from "@mui/material/TextField";
 import InputAdornment from "@mui/material/InputAdornment";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import Alert from "@mui/material/Alert";
 import Link from "@mui/material/Link";
@@ -28,7 +29,12 @@ export default function LoginPage() {
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
-  const [loading, setLoading] = React.useState(false);
+  // Tracks which action is in flight (not just a boolean) so the spinner
+  // lands on the button the user actually clicked, per DESIGN.md's
+  // "button-level async -> inline spinner, keep the label" convention —
+  // previously this button only swapped its text, with no spinner at all,
+  // which read as the page being stuck rather than working.
+  const [loading, setLoading] = React.useState<false | "email" | "google" | "code">(false);
 
   const [twofaRequired, setTwofaRequired] = React.useState(false);
   const [twofaUserId, setTwofaUserId] = React.useState<string | number | null>(null);
@@ -73,7 +79,7 @@ export default function LoginPage() {
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setLoading("email");
     try {
       const cred = await signInWithEmailAndPassword(firebaseAuth, email, password);
       const idToken = await cred.user.getIdToken();
@@ -88,7 +94,7 @@ export default function LoginPage() {
   const handleVerify2FA = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
-    setLoading(true);
+    setLoading("code");
     try {
       const res = await axios.post("/api/2fa/verify", { user_id: twofaUserId, token: code.trim() });
       if (res.data.success) completeLogin(res.data);
@@ -101,7 +107,7 @@ export default function LoginPage() {
 
   const handleGoogle = async () => {
     setError(null);
-    setLoading(true);
+    setLoading("google");
     try {
       const cred = await signInWithPopup(firebaseAuth, googleProvider);
       const idToken = await cred.user.getIdToken();
@@ -207,10 +213,11 @@ export default function LoginPage() {
                       type="submit"
                       variant="contained"
                       size="large"
-                      disabled={loading}
+                      disabled={!!loading}
                       fullWidth
+                      startIcon={loading === "email" ? <CircularProgress size={16} sx={{ color: "inherit" }} /> : undefined}
                     >
-                      {loading ? "Signing in…" : "Sign In"}
+                      {loading === "email" ? "Signing in…" : "Sign In"}
                     </Button>
                   </Stack>
                 </form>
@@ -226,10 +233,11 @@ export default function LoginPage() {
                   variant="outlined"
                   size="large"
                   fullWidth
-                  startIcon={<GoogleIcon />}
+                  disabled={!!loading}
+                  startIcon={loading === "google" ? <CircularProgress size={16} sx={{ color: "inherit" }} /> : <GoogleIcon />}
                   onClick={handleGoogle}
                 >
-                  Continue with Google
+                  {loading === "google" ? "Signing in…" : "Continue with Google"}
                 </Button>
 
                 <Typography variant="body2" color="text.secondary" textAlign="center">
@@ -268,9 +276,10 @@ export default function LoginPage() {
                     variant="contained"
                     size="large"
                     fullWidth
-                    disabled={loading || code.length !== 6}
+                    disabled={!!loading || code.length !== 6}
+                    startIcon={loading === "code" ? <CircularProgress size={16} sx={{ color: "inherit" }} /> : undefined}
                   >
-                    {loading ? "Verifying…" : "Verify"}
+                    {loading === "code" ? "Verifying…" : "Verify"}
                   </Button>
                   <Button
                     type="button"
