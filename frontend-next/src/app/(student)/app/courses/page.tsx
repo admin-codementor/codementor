@@ -9,14 +9,21 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import LinearProgress from "@mui/material/LinearProgress";
+import Select from "@mui/material/Select";
+import MenuItem from "@mui/material/MenuItem";
 import Skeleton from "@mui/material/Skeleton";
-import { SchoolOutlinedIcon, ViewModuleOutlinedIcon, FormatListBulletedOutlinedIcon } from "@/components/ui/icons";
+import { SchoolOutlinedIcon, ViewModuleOutlinedIcon, FormatListBulletedOutlinedIcon, CheckCircleIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { StatCard } from "@/components/ui/StatCard";
+import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
 import type { CourseSummary } from "@/lib/types";
+
+const SORTS = ["Progress", "Title (A–Z)", "Most problems"] as const;
+type Sort = (typeof SORTS)[number];
 
 function CourseCard({ course }: { course: CourseSummary }) {
   const pct = course.problemCount > 0 ? Math.round((course.solvedCount / course.problemCount) * 100) : 0;
@@ -81,6 +88,8 @@ export default function CoursesPage() {
   const [courses, setCourses] = React.useState<CourseSummary[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
+  const [search, setSearch] = React.useState("");
+  const [sort, setSort] = React.useState<Sort>("Progress");
 
   const load = React.useCallback(async () => {
     setLoading(true);
@@ -99,6 +108,24 @@ export default function CoursesPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  const totals = courses.reduce(
+    (acc, c) => ({
+      problems: acc.problems + c.problemCount,
+      solved: acc.solved + c.solvedCount,
+    }),
+    { problems: 0, solved: 0 },
+  );
+  const overallPct = totals.problems > 0 ? Math.round((totals.solved / totals.problems) * 100) : 0;
+
+  const visibleCourses = courses
+    .filter((c) => c.title.toLowerCase().includes(search.trim().toLowerCase()))
+    .sort((a, b) => {
+      if (sort === "Title (A–Z)") return a.title.localeCompare(b.title);
+      if (sort === "Most problems") return b.problemCount - a.problemCount;
+      const pctOf = (c: CourseSummary) => (c.problemCount > 0 ? c.solvedCount / c.problemCount : 0);
+      return pctOf(b) - pctOf(a);
+    });
 
   return (
     <Box>
@@ -142,13 +169,65 @@ export default function CoursesPage() {
           />
         </Card>
       ) : (
-        <Reveal>
-          <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 2 }}>
-            {courses.map((c) => (
-              <CourseCard key={c.id} course={c} />
-            ))}
+        <>
+          {/* Overview — mirrors the stat-row hierarchy already on /app/problems */}
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr 1fr", sm: "repeat(3, 1fr)" },
+              gap: 2,
+              mb: 3,
+            }}
+          >
+            <StatCard icon={<SchoolOutlinedIcon />} label="Courses" value={courses.length} accent="primary" />
+            <StatCard icon={<ViewModuleOutlinedIcon />} label="Problems" value={totals.problems} accent="secondary" />
+            <StatCard
+              icon={<CheckCircleIcon />}
+              label="Solved"
+              value={totals.solved}
+              helper={`${overallPct}% complete`}
+              accent="success"
+            />
           </Box>
-        </Reveal>
+
+          {/* Filters */}
+          <Card variant="outlined" sx={{ p: 1.5, mb: 3, borderColor: "outlineVariant" }}>
+            <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5} alignItems={{ xs: "stretch", sm: "center" }}>
+              <SearchField
+                value={search}
+                onChange={setSearch}
+                placeholder="Search courses…"
+                label="Search courses"
+                sx={{ flex: 1, minWidth: 200, maxWidth: { sm: 360 } }}
+              />
+              <Select
+                value={sort}
+                onChange={(e) => setSort(e.target.value as Sort)}
+                size="small"
+                aria-label="Sort courses"
+                sx={{ minWidth: 180 }}
+              >
+                {SORTS.map((s) => (
+                  <MenuItem key={s} value={s}>Sort: {s}</MenuItem>
+                ))}
+              </Select>
+            </Stack>
+          </Card>
+
+          {visibleCourses.length === 0 ? (
+            <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
+              <EmptyState icon={<SchoolOutlinedIcon />} title="No courses match your search" description="Try a different search term." />
+            </Card>
+          ) : (
+            <Reveal>
+              <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 2 }}>
+                {visibleCourses.map((c) => (
+                  <CourseCard key={c.id} course={c} />
+                ))}
+              </Box>
+            </Reveal>
+          )}
+        </>
       )}
     </Box>
   );

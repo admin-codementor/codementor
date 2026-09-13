@@ -169,7 +169,18 @@ export default function AptitudePage() {
           </Card>
         ) : (
           <Reveal>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
+          <Box
+            sx={{
+              display: "grid",
+              gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+              gap: 2,
+              // An odd card count otherwise leaves a dangling empty cell next
+              // to the last card (a 2-column grid stays rigid even when the
+              // last row only has one item) — span the odd-one-out across
+              // both columns instead of leaving a visible gap.
+              "& > :last-child:nth-of-type(odd)": { gridColumn: { md: "1 / -1" } },
+            }}
+          >
             {tests.map((t) => {
               const tone = catTone(t.category);
               return (
