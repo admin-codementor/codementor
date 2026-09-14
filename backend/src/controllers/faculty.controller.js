@@ -570,6 +570,21 @@ exports.getAnalyticsAtRisk = async (req, res) => {
   }
 };
 
+// The one shared top-performers ranking (analytics.getTopPerformers), also
+// used by the PDF class report below. getClassAnalytics's own topStudents
+// field is left alone — it has no frontend caller (dead code).
+exports.getTopPerformers = async (req, res) => {
+  try {
+    const scope = await resolveAnalyticsScope(req);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 10, 1), 50);
+    const data = await analytics.getTopPerformers(scope, limit);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Top performers error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load top performers.' });
+  }
+};
+
 // Pass C: generate randomized hidden test cases via a generator + reference solution.
 // The generator prints a random input to stdout (seeded by an integer on stdin);
 // the reference solution produces the canonical expected output for that input.
@@ -1145,20 +1160,10 @@ exports.getClassAnalytics = async (req, res) => {
   }
 };
 
-// Resolves how much of the student population an analytics caller may see.
-// Admin: everything. HOD: their own department (every faculty's classes in
-// it) — unchanged from before. Faculty: ONLY students enrolled in classrooms
-// *they personally created* — a department can hold several faculty's
-// classes, and a faculty member shouldn't see a colleague's students.
-async function resolveAnalyticsScope(req) {
-  if (req.user?.role === 'faculty') {
-    const classrooms = await classroomRepo.listByFacultyId(req.user.id);
-    const memberLists = await Promise.all(classrooms.map((c) => classroomRepo.listMembers(c.id)));
-    const memberIds = new Set(memberLists.flat().map((m) => m.userId));
-    return { ownClasses: true, dept: req.user.department ?? null, memberIds, cacheKey: req.user.id, classroomCount: classrooms.length };
-  }
-  return { ownClasses: false, dept: scopeDept(req), memberIds: null };
-}
+// Moved to analyticsService.js (resolveAnalyticsScope) so pdfExport.controller.js
+// can share the exact same scoping instead of exportClassReport reading every
+// student in the system unconditionally.
+const { resolveAnalyticsScope } = analytics;
 
 // Per-student deep-dive: learning curve, topic mastery radar, verdict mix, totals.
 // ── Analytics overview: institution / department level ────────────────────────

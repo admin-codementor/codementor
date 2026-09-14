@@ -70,6 +70,16 @@ interface AtRiskRow {
   id: string; name: string; rollNo: string | null; solved: number; subs: number; acRate: number;
   avgAttemptsToSolve: number | null; riskReasons: string[];
 }
+interface TopPerformerRow {
+  id: string; name: string; rollNo: string | null; solved: number; acRate: number; rank: number;
+}
+// Podium coloring for the top 3 ranks, using the same container-token
+// convention as every other status chip in the app (no literal hex).
+const MEDAL_TOKENS: Record<number, { bg: string; fg: string }> = {
+  1: { bg: "tertiaryContainer", fg: "onTertiaryContainer" },
+  2: { bg: "secondaryContainer", fg: "onSecondaryContainer" },
+  3: { bg: "surfaceContainerHighest", fg: "onSurfaceVariant" },
+};
 
 export default function FacultyAnalyticsPage() {
   const me = React.useMemo(() => getUser(), []);
@@ -82,6 +92,7 @@ export default function FacultyAnalyticsPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [atRisk, setAtRisk] = React.useState<AtRiskRow[] | null>(null);
+  const [topPerformers, setTopPerformers] = React.useState<TopPerformerRow[] | null>(null);
 
   // Drill-down targets. Only one is ever set.
   const [cohort, setCohort] = React.useState<string | null>(null);
@@ -117,6 +128,9 @@ export default function FacultyAnalyticsPage() {
     // time range — so this loads once rather than on every filter change.
     api.get("/api/faculty/analytics/at-risk")
       .then((r) => { if (r.data?.success) setAtRisk(r.data.data); })
+      .catch(() => { /* supplementary panel; the section explains itself when empty */ });
+    api.get("/api/faculty/analytics/top-performers?limit=10")
+      .then((r) => { if (r.data?.success) setTopPerformers(r.data.data); })
       .catch(() => { /* supplementary panel; the section explains itself when empty */ });
   }, []);
   React.useEffect(() => {
@@ -242,6 +256,47 @@ export default function FacultyAnalyticsPage() {
                   help="Students who have ever submitted, out of everyone in scope."
                 />
               </Box>
+
+              {topPerformers && topPerformers.some((s) => s.solved > 0) && (
+                <SectionCard title="Top performers">
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                    Ranked by distinct problems solved, then acceptance rate. Click a row to open that student.
+                  </Typography>
+                  <TableContainer sx={{ maxHeight: 340, overflow: "auto" }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead>
+                        <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600 } }}>
+                          <TableCell width={48}>#</TableCell>
+                          <TableCell>Student</TableCell>
+                          <TableCell align="right">Solved</TableCell>
+                          <TableCell align="right">AC rate</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {topPerformers.map((s) => {
+                          const medal = MEDAL_TOKENS[s.rank];
+                          return (
+                            <TableRow key={s.id} hover sx={{ cursor: "pointer" }} onClick={() => router.push(`/faculty/students/${s.id}`)}>
+                              <TableCell>
+                                <Chip
+                                  label={s.rank} size="small"
+                                  sx={{ minWidth: 28, height: 22, fontWeight: 700, bgcolor: medal?.bg ?? "surfaceContainerHigh", color: medal?.fg ?? "text.secondary" }}
+                                />
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" fontWeight={500}>{s.name}</Typography>
+                                {s.rollNo && <Typography variant="caption" color="text.secondary">{s.rollNo}</Typography>}
+                              </TableCell>
+                              <TableCell align="right">{s.solved}</TableCell>
+                              <TableCell align="right">{s.acRate}%</TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </SectionCard>
+              )}
 
               {atRisk && atRisk.length > 0 && (
                 <SectionCard
