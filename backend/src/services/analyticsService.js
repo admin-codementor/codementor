@@ -14,6 +14,8 @@ const { cached } = require('../utils/cache');
 const submissionRepo = require('../repositories/submissionRepository');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
+const assignmentRepo = require('../repositories/assignmentRepository');
+const classroomRepo = require('../repositories/classroomRepository');
 
 const DAY_MS = 86400000;
 const SNAPSHOT_TTL = 120; // seconds
@@ -24,7 +26,7 @@ const SNAPSHOT_TTL = 120; // seconds
 // version in the key, a release that fixes an aggregation bug keeps serving the
 // old numbers until the TTL happens to lapse. (Caught exactly that way — a
 // language-name fix appeared not to work.)
-const SNAPSHOT_VERSION = 2;
+const SNAPSHOT_VERSION = 3;
 
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
 const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -76,6 +78,7 @@ async function buildSnapshot(scope) {
   const perStudent = new Map(students.map((s) => [s.id, {
     id: s.id,
     name: s.name || 'Unknown',
+    email: s.email || null,
     rollNo: s.rollNo || null,
     department: s.department || null,
     section: s.section || null,
@@ -166,7 +169,7 @@ async function buildSnapshot(scope) {
     const medianTimeToAcMs = timesToAc.length ? median(timesToAc) : null;
 
     return {
-      id: st.id, name: st.name, rollNo: st.rollNo,
+      id: st.id, name: st.name, email: st.email, rollNo: st.rollNo,
       department: st.department, section: st.section, year: st.year,
       subs: st.subs,
       ac: st.ac,
@@ -290,18 +293,139 @@ function cohortsFrom(snapshot, dimension) {
   }).sort((a, b) => String(a.cohort).localeCompare(String(b.cohort)));
 }
 
-/**
- * Cached snapshot accessor. `scope` is `{ dept }` (department/institution scope)
- * or `{ memberIds, cacheKey }` (a faculty member's own classroom rosters — the
- * member-id set isn't a stable cache key by itself, so the caller supplies one,
- * typically the faculty member's own id).
- */
+// A scope resolves to `{ dept }` (department/institution scope, dept === null
+// meaning everyone) or `{ memberIds, cacheKey }` (a faculty member's own
+// classroom rosters — the member-id set isn't a stable cache key by itself, so
+// the caller supplies one, typically the faculty member's own id). Shared by
+// every cache key that is scope-shaped, so the snapshot cache and the at-risk
+// cache (below) key off the same population consistently.
+function scopeKey(scope) {
+  return scope.memberIds ? `faculty:${scope.cacheKey}` : (scope.dept ?? 'all');
+}
+
+/** Cached snapshot accessor — see `scopeKey` for the scope shapes accepted. */
 async function getSnapshot(scope) {
-  const key = scope.memberIds ? `faculty:${scope.cacheKey}` : (scope.dept ?? 'all');
-  return cached(`analytics:snapshot:v${SNAPSHOT_VERSION}:${key}`, SNAPSHOT_TTL, () => buildSnapshot(scope));
+  return cached(`analytics:snapshot:v${SNAPSHOT_VERSION}:${scopeKey(scope)}`, SNAPSHOT_TTL, () => buildSnapshot(scope));
+}
+
+// ── Risk model ─────────────────────────────────────────────────────────────
+// One definition of "at risk", shared by the Dashboard card and the Analytics
+// Pulse tab. These used to disagree — the Dashboard card required 5+
+// submissions before flagging low accuracy (<30%) and only looked at
+// inactivity, while the Analytics cohort view flagged any accuracy under 25%
+// and also weighed attempts-per-solve. This is the single source of truth for
+// both, now also aware of assignment deadlines.
+const RISK_IDLE_DAYS = 14;
+const RISK_LOW_ACCURACY_PCT = 25;
+const RISK_HIGH_ATTEMPTS_PER_SOLVE = 5;
+
+/**
+ * `deadlineInfo` is this student's entry from `computeDeadlineRisk` (or
+ * undefined) — `{ missed: string[], unsolved: string[] }`, assignment titles
+ * the student never submitted to vs. submitted to but never got Accepted on,
+ * before the deadline. Collapsed to a count once there is more than one, so
+ * the reason list stays short regardless of how many assignments a class runs.
+ */
+function riskReasonsForStudent(s, deadlineInfo, now = Date.now()) {
+  const idleMs = now - RISK_IDLE_DAYS * DAY_MS;
+  const reasons = [
+    s.subs === 0 ? 'never submitted' : null,
+    s.subs > 0 && s.acRate < RISK_LOW_ACCURACY_PCT ? `low accuracy (${s.acRate}%)` : null,
+    s.lastActiveMs && s.lastActiveMs < idleMs ? `inactive ${RISK_IDLE_DAYS}+ days` : null,
+    s.avgAttemptsToSolve != null && s.avgAttemptsToSolve >= RISK_HIGH_ATTEMPTS_PER_SOLVE
+      ? `${s.avgAttemptsToSolve} attempts per solve` : null,
+  ].filter(Boolean);
+  if (deadlineInfo?.missed.length) {
+    reasons.push(deadlineInfo.missed.length === 1
+      ? `missed deadline: "${deadlineInfo.missed[0]}"`
+      : `missed ${deadlineInfo.missed.length} assignment deadlines`);
+  }
+  if (deadlineInfo?.unsolved.length) {
+    reasons.push(deadlineInfo.unsolved.length === 1
+      ? `attempted but unsolved: "${deadlineInfo.unsolved[0]}"`
+      : `attempted but unsolved on ${deadlineInfo.unsolved.length} assignments`);
+  }
+  return reasons;
+}
+
+/**
+ * Cross-references past-deadline, non-exam assignments against submissions to
+ * flag two distinct failure modes per student: total non-engagement (never
+ * submitted anything for the assignment's problems before the deadline) vs.
+ * trying and not getting there (submitted, nothing Accepted in time). Exams
+ * are excluded — they have their own lockout/window semantics (examLock.js)
+ * that don't map onto "at risk". An assignment with no classroomIds targets
+ * every student in scope, same as the assignment builder treats it.
+ */
+async function computeDeadlineRisk(scope, studentIds) {
+  const result = new Map();
+  const now = Date.now();
+  const assignments = (await assignmentRepo.getAll()).filter((a) => (
+    !a.isExam && a.deadline && Array.isArray(a.problemIds) && a.problemIds.length && toMillis(a.deadline) <= now
+  ));
+  if (!assignments.length) return result;
+
+  const neededClassrooms = new Set();
+  for (const a of assignments) for (const cid of (a.classroomIds || [])) neededClassrooms.add(cid);
+  const membersByClassroom = new Map(await Promise.all(
+    [...neededClassrooms].map(async (cid) => [cid, new Set((await classroomRepo.listMembers(cid)).map((m) => m.userId))])
+  ));
+
+  const submissions = await submissionRepo.listAllForAnalytics();
+  const byStudent = new Map(); // userId -> problemId -> [{ ms, accepted }]
+  for (const s of submissions) {
+    if (!studentIds.has(s.userId)) continue;
+    const ms = toMillis(s.submittedAt);
+    if (!ms) continue;
+    if (!byStudent.has(s.userId)) byStudent.set(s.userId, new Map());
+    const perProblem = byStudent.get(s.userId);
+    if (!perProblem.has(s.problemId)) perProblem.set(s.problemId, []);
+    perProblem.get(s.problemId).push({ ms, accepted: s.verdict === 'Accepted' });
+  }
+
+  for (const a of assignments) {
+    const deadlineMs = toMillis(a.deadline);
+    const targets = (a.classroomIds && a.classroomIds.length)
+      ? new Set(a.classroomIds.flatMap((cid) => [...(membersByClassroom.get(cid) || [])]).filter((id) => studentIds.has(id)))
+      : studentIds;
+
+    for (const studentId of targets) {
+      const perProblem = byStudent.get(studentId);
+      let allSolved = true;
+      let anyAttempted = false;
+      for (const pid of a.problemIds) {
+        const entries = (perProblem?.get(pid) || []).filter((e) => e.ms <= deadlineMs);
+        if (entries.length) anyAttempted = true;
+        if (!entries.some((e) => e.accepted)) allSolved = false;
+      }
+      if (allSolved) continue;
+      if (!result.has(studentId)) result.set(studentId, { missed: [], unsolved: [] });
+      result.get(studentId)[anyAttempted ? 'unsolved' : 'missed'].push(a.title || 'Untitled assignment');
+    }
+  }
+  return result;
+}
+
+async function computeAtRiskList(scope) {
+  const snap = await getSnapshot(scope);
+  const studentIds = new Set(snap.studentStats.map((s) => s.id));
+  const deadlineRisk = await computeDeadlineRisk(scope, studentIds);
+  return snap.studentStats
+    .map((s) => ({ ...s, riskReasons: riskReasonsForStudent(s, deadlineRisk.get(s.id)) }))
+    .filter((s) => s.riskReasons.length > 0)
+    .sort((a, b) => b.riskReasons.length - a.riskReasons.length || a.solved - b.solved);
+}
+
+// Cached like the snapshot itself, and under the same scope-derived key
+// convention — every caller (Dashboard card, Analytics Pulse tab, Cohort
+// detail's per-student chips) shares one cache entry instead of each
+// recomputing the assignment/classroom/submission cross-reference.
+async function getAtRiskList(scope) {
+  return cached(`analytics:at-risk:v1:${scopeKey(scope)}`, SNAPSHOT_TTL, () => computeAtRiskList(scope));
 }
 
 module.exports = {
   buildSnapshot, getSnapshot, cohortsFrom, boxStats, histogram, median,
   languageName, DAY_MS, dayKey, toMillis, COHORT_DIMS,
+  scopeKey, riskReasonsForStudent, getAtRiskList,
 };
