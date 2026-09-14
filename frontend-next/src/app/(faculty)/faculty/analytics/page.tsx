@@ -32,8 +32,9 @@ import { EmptyState } from "@/components/ui/States";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import {
   KpiTile, ActivityHeatmap, TrendChart, StudentScatter, DistributionChart,
-  TopicRadar, FunnelChart, TestCaseHeatmap, ItemAnalysisScatter, RankedBars, RiskChips,
+  TopicRadar, FunnelChart, TestCaseHeatmap, ItemAnalysisScatter, RankedBars, RiskChips, VerdictDonut,
 } from "@/components/faculty/analytics/Panels";
+import { SwapFade } from "@/components/ui/motion";
 
 type Dim = "department" | "year" | "section";
 type OverviewTab = "pulse" | "cohorts" | "problems";
@@ -59,7 +60,7 @@ interface Overview {
   verdicts: { verdict: string; count: number }[];
   languages: { name: string; subs: number; acRate: number }[];
   cohorts: { cohort: string; students: number; avgSolved: number; acRate: number; activeStudents: number; solvedDistribution: BoxStats | null; avgAttemptsToSolve: number | null }[];
-  solvedHistogram: { bucket: string; count: number }[];
+  solvedHistogram: { bucket: string; from: number; count: number }[];
   solvedDistribution: BoxStats | null;
   studentScatter: { id: string; name: string; x: number; y: number; solved: number }[];
   hardestProblems: { id: string; title: string; difficulty: string; solveRate: number; attempters: number; subs: number }[];
@@ -84,6 +85,11 @@ export default function FacultyAnalyticsPage() {
   const [problemData, setProblemData] = React.useState<Record<string, unknown> | null>(null);
   const [drillLoading, setDrillLoading] = React.useState(false);
 
+  // Solved-histogram drill-down — which students fall in a clicked bucket.
+  // Derived entirely from `overview.studentScatter` (already sent for the
+  // effort/success chart), so this needs no new endpoint.
+  const [solvedBucket, setSolvedBucket] = React.useState<{ bucket: string; from: number } | null>(null);
+
   // MCQ item analysis
   const [tests, setTests] = React.useState<{ id: string; title: string; attempt_count: number }[]>([]);
   const [testId, setTestId] = React.useState("");
@@ -92,6 +98,7 @@ export default function FacultyAnalyticsPage() {
   const load = React.useCallback(() => {
     setLoading(true);
     setError("");
+    setSolvedBucket(null); // stale bucket boundaries don't necessarily match the next fetch
     api
       .get(`/api/faculty/analytics/overview?dimension=${dimension}&days=${days}`)
       .then((r) => { if (r.data?.success) setOverview(r.data.data); })
@@ -183,7 +190,9 @@ export default function FacultyAnalyticsPage() {
           title="No classes yet"
           description="Analytics is scoped to your own classes — create one and have students join, and their activity will show up here."
         />
-      ) : cohort ? (
+      ) : (
+        <SwapFade swapKey={cohort ?? problemId ?? overviewTab}>
+        {cohort ? (
         <CohortView data={cohortData} loading={drillLoading} onStudent={(id) => router.push(`/faculty/students/${id}`)} />
       ) : problemId ? (
         <ProblemView data={problemData} loading={drillLoading} />
@@ -204,6 +213,7 @@ export default function FacultyAnalyticsPage() {
               {/* ── KPI row ── */}
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
                 <KpiTile
+                  hero
                   label="Submissions" value={overview.kpis.submissions.value} delta={overview.kpis.submissions.delta}
                   series={overview.daily.map((d) => d.subs)} help="In the selected period, versus the period before it."
                 />
@@ -228,9 +238,50 @@ export default function FacultyAnalyticsPage() {
                     <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
                       Median {overview.solvedDistribution.median} · mean {overview.solvedDistribution.mean} · range {overview.solvedDistribution.min}–{overview.solvedDistribution.max}.
                       {overview.solvedDistribution.median === 0 && " Half the cohort has solved nothing — the mean alone would hide that."}
+                      {" Click a bar to list the students in it."}
                     </Typography>
                   )}
-                  <DistributionChart histogram={overview.solvedHistogram} label="Problems solved" />
+                  <DistributionChart
+                    histogram={overview.solvedHistogram}
+                    label="Problems solved"
+                    onBarClick={(b) => {
+                      // Nivo's bar click datum only carries the `indexBy` field
+                      // and the plotted `keys` (bucket + count here) — any other
+                      // custom field on the original row, like `from`, is
+                      // dropped. Look `from` up from the histogram array we
+                      // already have rather than trusting the click payload.
+                      const row = overview.solvedHistogram.find((h) => h.bucket === b.bucket);
+                      if (!row) return;
+                      setSolvedBucket((cur) => (cur?.bucket === row.bucket ? null : { bucket: row.bucket, from: row.from }));
+                    }}
+                  />
+                  {solvedBucket && (() => {
+                    const to = solvedBucket.bucket.includes("-") ? Number(solvedBucket.bucket.split("-")[1]) : solvedBucket.from;
+                    const matches = overview.studentScatter.filter((s) => s.solved >= solvedBucket.from && s.solved <= to);
+                    return (
+                      <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, bgcolor: "surfaceContainerHigh" }}>
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                          <Typography variant="caption" fontWeight={600}>
+                            {matches.length} student{matches.length === 1 ? "" : "s"} solved {solvedBucket.bucket}
+                          </Typography>
+                          <Link component="button" type="button" variant="caption" onClick={() => setSolvedBucket(null)}>
+                            Close
+                          </Link>
+                        </Stack>
+                        <Stack spacing={0.5} sx={{ maxHeight: 160, overflow: "auto" }}>
+                          {matches.map((s) => (
+                            <Link
+                              key={s.id} component="button" type="button" underline="hover"
+                              onClick={() => router.push(`/faculty/students/${s.id}`)}
+                              sx={{ textAlign: "left", fontSize: 13, color: "text.primary" }}
+                            >
+                              {s.name} <Typography component="span" variant="caption" color="text.secondary">— {s.solved} solved</Typography>
+                            </Link>
+                          ))}
+                        </Stack>
+                      </Box>
+                    );
+                  })()}
                 </SectionCard>
 
                 <SectionCard title="Effort vs. success — one dot per student">
@@ -265,7 +316,7 @@ export default function FacultyAnalyticsPage() {
 
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
                 <SectionCard title="Verdicts">
-                  <RankedBars rows={overview.verdicts as unknown as Record<string, string | number>[]} valueKey="count" indexKey="verdict" colorIndex={0} />
+                  <VerdictDonut rows={overview.verdicts} />
                 </SectionCard>
                 <SectionCard title="Languages used">
                   <RankedBars rows={overview.languages as unknown as Record<string, string | number>[]} valueKey="subs" indexKey="name" colorIndex={1} />
@@ -399,6 +450,8 @@ export default function FacultyAnalyticsPage() {
             </Stack>
           )}
         </Stack>
+        )}
+        </SwapFade>
       )}
     </Box>
   );
@@ -411,7 +464,7 @@ function CohortView({ data, loading, onStudent }: { data: Record<string, unknown
   const d = data as unknown as {
     cohort: string; size: number; empty?: boolean;
     summary: { active: number; acRate: number; solvedDistribution: BoxStats | null };
-    solvedHistogram: { bucket: string; count: number }[];
+    solvedHistogram: { bucket: string; from: number; count: number }[];
     topicMastery: { topic: string; accuracy: number; attempts: number; students: number }[];
     students: { id: string; name: string; rollNo: string | null; solved: number; subs: number; acRate: number; avgAttemptsToSolve: number | null; riskReasons: string[] }[];
   };
@@ -487,7 +540,7 @@ function ProblemView({ data, loading }: { data: Record<string, unknown> | null; 
       neededMultipleAttempts: number; gaveUp: number;
       attemptsToSolve: BoxStats | null; timeToSolveMinutes: BoxStats | null;
     };
-    attemptsHistogram: { bucket: string; count: number }[];
+    attemptsHistogram: { bucket: string; from: number; count: number }[];
     verdicts: { verdict: string; count: number }[];
     testHeatmap: { testIndex: number; isPublic: boolean; attempts: number; failures: number; failRate: number }[];
     studentsAnalyzed: number;
