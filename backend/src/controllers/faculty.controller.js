@@ -539,67 +539,34 @@ exports.getStudents = async (req, res) => {
   }
 };
 
-// Firestore Timestamp | Date | ISO-string | null -> epoch millis (or 0).
-const toMillis = (value) => {
-  if (!value) return 0;
-  return (typeof value.toDate === 'function' ? value.toDate() : new Date(value)).getTime();
-};
-
+// Shared by the Dashboard card and the Analytics Pulse tab (getAnalyticsAtRisk
+// below) — same scope resolution, same cache entry, same risk definition.
+// Previously this scanned every student in the system with no department
+// filter at all, so an HOD or faculty saw other departments' at-risk students
+// too; resolveAnalyticsScope fixes that the same way every other analytics
+// endpoint is scoped.
 exports.getAtRiskStudents = async (req, res) => {
   try {
-    const studentsMap = await userRepo.getMapByRole('student');
-    const studentIds = [...studentsMap.keys()];
-    if (studentIds.length === 0) {
-      return res.json({ success: true, data: [] });
-    }
-
-    const allSubs = await submissionRepo.listAll();
-    const statsByStudent = new Map(studentIds.map(id => [id, { total: 0, accepted: 0, lastSub: 0 }]));
-    for (const s of allSubs) {
-      const stat = statsByStudent.get(s.userId);
-      if (!stat) continue;
-      stat.total += 1;
-      if (s.verdict === 'Accepted') stat.accepted += 1;
-      const t = s.submittedAt?.toMillis?.() ?? 0;
-      if (t > stat.lastSub) stat.lastSub = t;
-    }
-
-    const now = Date.now();
-    const DAY = 86400000;
-    const INACTIVE_DAYS = 14;
-
-    const flagged = [];
-    for (const id of studentIds) {
-      const profile = studentsMap.get(id) || {};
-      const stat = statsByStudent.get(id);
-      const lastLogin = toMillis(profile.lastLoginAt);
-      const lastActive = Math.max(lastLogin, stat.lastSub);
-      const inactiveDays = lastActive ? Math.floor((now - lastActive) / DAY) : null;
-      const totalSubs = stat.total;
-      const accepted  = stat.accepted;
-      const acRate = totalSubs > 0 ? Math.round((accepted / totalSubs) * 100) : 0;
-
-      const reasons = [];
-      if (inactiveDays === null) reasons.push('Never active');
-      else if (inactiveDays >= INACTIVE_DAYS) reasons.push(`Inactive ${inactiveDays}d`);
-      if (totalSubs >= 5 && acRate < 30) reasons.push(`Low success ${acRate}%`);
-
-      if (reasons.length) {
-        flagged.push({
-          id, name: profile.name || 'Unknown', email: profile.email || null,
-          department: profile.department || null, section: profile.section || null, rollNo: profile.rollNo || null,
-          inactiveDays, totalSubmissions: totalSubs, acRate,
-          reasons,
-          severity: (inactiveDays ?? 999),
-        });
-      }
-    }
-
-    flagged.sort((a, b) => b.severity - a.severity);
-    res.json({ success: true, data: flagged });
+    const scope = await resolveAnalyticsScope(req);
+    const data = await analytics.getAtRiskList(scope);
+    res.json({ success: true, data });
   } catch (error) {
     console.error('At-Risk Students Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch at-risk students' });
+  }
+};
+
+// Same data as getAtRiskStudents (shared cache, shared scope resolution) —
+// kept as its own route under /analytics so it lives alongside the rest of
+// the Analytics page's endpoints rather than the Dashboard's.
+exports.getAnalyticsAtRisk = async (req, res) => {
+  try {
+    const scope = await resolveAnalyticsScope(req);
+    const data = await analytics.getAtRiskList(scope);
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Analytics at-risk error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load at-risk analytics.' });
   }
 };
 
@@ -1323,7 +1290,12 @@ exports.getCohortDetail = async (req, res) => {
     }));
 
     const solved = members.map((m) => m.solved);
-    const idleMs = Date.now() - 14 * analytics.DAY_MS;
+
+    // Same at-risk definition as the Dashboard card and the Analytics Pulse
+    // tab (analytics.getAtRiskList) — this call hits the shared 120s cache
+    // rather than recomputing, so it costs nothing extra once any of those
+    // three have run recently.
+    const riskReasonsById = new Map((await analytics.getAtRiskList(scope)).map((s) => [s.id, s.riskReasons]));
 
     res.json({
       success: true,
@@ -1354,12 +1326,7 @@ exports.getCohortDetail = async (req, res) => {
           .map((m) => ({
             ...m,
             // Surfaced as chips so "at risk" is explainable, not a black box.
-            riskReasons: [
-              m.subs === 0 ? 'never submitted' : null,
-              m.subs > 0 && m.acRate < 25 ? `low accuracy (${m.acRate}%)` : null,
-              m.lastActiveMs && m.lastActiveMs < idleMs ? 'inactive 14+ days' : null,
-              m.avgAttemptsToSolve != null && m.avgAttemptsToSolve >= 5 ? `${m.avgAttemptsToSolve} attempts per solve` : null,
-            ].filter(Boolean),
+            riskReasons: riskReasonsById.get(m.id) || [],
           }))
           .sort((a, b) => b.riskReasons.length - a.riskReasons.length || a.solved - b.solved),
       },

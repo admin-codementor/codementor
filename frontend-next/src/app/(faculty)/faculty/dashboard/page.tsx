@@ -70,10 +70,10 @@ interface AssignmentItem {
 interface AtRiskStudent {
   id: string;
   name: string;
-  email: string;
+  email: string | null;
   department?: string | null;
   section?: string | null;
-  reasons: string[];
+  riskReasons: string[];
 }
 interface ProgressData {
   problems: { id: string; title: string; difficulty: string }[];
@@ -803,7 +803,7 @@ export default function FacultyDashboardPage() {
                         <Typography variant="caption" color="text.secondary" noWrap>{s.email}</Typography>
                       </Box>
                       <Stack direction="row" spacing={0.5} flexWrap="wrap" justifyContent="flex-end">
-                        {s.reasons.map((reason) => (
+                        {s.riskReasons.map((reason) => (
                           <Chip key={reason} label={reason} size="small" sx={{ height: 20, fontSize: 10, bgcolor: "warningContainer", color: "onWarningContainer" }} />
                         ))}
                       </Stack>

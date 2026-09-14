@@ -89,6 +89,23 @@ module.exports = async function analyticsAndAiSuite() {
   const crossDept = await get('/api/faculty/analytics/cohort?dimension=department&value=ECE', CSE);
   s.check('CSE faculty blocked from an ECE cohort', crossDept.status === 403, `status ${crossDept.status}`);
 
+  // ── At-risk (shared risk model: Dashboard card + Analytics Pulse tab) ──────
+  const atRiskDash = await get('/api/faculty/at-risk', ADMIN);
+  s.check('at-risk (dashboard route) returns 200', atRiskDash.status === 200, `status ${atRiskDash.status}`);
+  const atRiskRows = atRiskDash.body?.data ?? [];
+  s.check('every flagged row has at least one reason', atRiskRows.every((r) => Array.isArray(r.riskReasons) && r.riskReasons.length > 0));
+  s.check('at-risk sorted by reason count, most first',
+    atRiskRows.every((r, i, arr) => i === 0 || arr[i - 1].riskReasons.length >= r.riskReasons.length));
+
+  const atRiskAnalytics = await get('/api/faculty/analytics/at-risk', ADMIN);
+  s.check('at-risk (analytics route) returns 200', atRiskAnalytics.status === 200, `status ${atRiskAnalytics.status}`);
+  s.check('dashboard and analytics at-risk routes agree (shared cache/logic)',
+    JSON.stringify(atRiskAnalytics.body?.data) === JSON.stringify(atRiskDash.body?.data));
+
+  const atRiskScoped = await get('/api/faculty/at-risk', CSE);
+  s.check('at-risk scoped to the caller\'s department', (atRiskScoped.body?.data ?? []).every((r) => r.department === 'CSE'),
+    JSON.stringify([...new Set((atRiskScoped.body?.data ?? []).map((r) => r.department))]));
+
   // ── AI endpoints ───────────────────────────────────────────────────────────
   const caps = await capabilities();
   if (!caps.ai) {

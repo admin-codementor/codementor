@@ -66,6 +66,10 @@ interface Overview {
   hardestProblems: { id: string; title: string; difficulty: string; solveRate: number; attempters: number; subs: number }[];
   mostAttempted: { id: string; title: string; difficulty: string; subs: number; acRate: number }[];
 }
+interface AtRiskRow {
+  id: string; name: string; rollNo: string | null; solved: number; subs: number; acRate: number;
+  avgAttemptsToSolve: number | null; riskReasons: string[];
+}
 
 export default function FacultyAnalyticsPage() {
   const me = React.useMemo(() => getUser(), []);
@@ -77,6 +81,7 @@ export default function FacultyAnalyticsPage() {
   const [overview, setOverview] = React.useState<Overview | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
+  const [atRisk, setAtRisk] = React.useState<AtRiskRow[] | null>(null);
 
   // Drill-down targets. Only one is ever set.
   const [cohort, setCohort] = React.useState<string | null>(null);
@@ -107,6 +112,13 @@ export default function FacultyAnalyticsPage() {
   }, [dimension, days]);
 
   React.useEffect(() => { load(); }, [load]);
+  React.useEffect(() => {
+    // Not scoped by dimension/days like the overview — same population, whole
+    // time range — so this loads once rather than on every filter change.
+    api.get("/api/faculty/analytics/at-risk")
+      .then((r) => { if (r.data?.success) setAtRisk(r.data.data); })
+      .catch(() => { /* supplementary panel; the section explains itself when empty */ });
+  }, []);
   React.useEffect(() => {
     api.get("/api/mcq/tests")
       .then((r) => { if (r.data?.success) setTests(r.data.data.filter((t: { attempt_count: number }) => t.attempt_count > 0)); })
@@ -230,6 +242,43 @@ export default function FacultyAnalyticsPage() {
                   help="Students who have ever submitted, out of everyone in scope."
                 />
               </Box>
+
+              {atRisk && atRisk.length > 0 && (
+                <SectionCard
+                  title="Needs attention"
+                  action={<Chip label={atRisk.length} size="small" sx={{ bgcolor: "errorContainer", color: "onErrorContainer", fontWeight: 700 }} />}
+                >
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                    Across every cohort in scope — never submitted, low accuracy, gone quiet, grinding without solving,
+                    or missed an assignment deadline. Click a row to open that student.
+                  </Typography>
+                  <TableContainer sx={{ maxHeight: 340, overflow: "auto" }}>
+                    <Table size="small" stickyHeader>
+                      <TableHead>
+                        <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600 } }}>
+                          <TableCell>Student</TableCell>
+                          <TableCell align="right">Solved</TableCell>
+                          <TableCell align="right">AC rate</TableCell>
+                          <TableCell>Signals</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {atRisk.map((s) => (
+                          <TableRow key={s.id} hover sx={{ cursor: "pointer" }} onClick={() => router.push(`/faculty/students/${s.id}`)}>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight={500}>{s.name}</Typography>
+                              {s.rollNo && <Typography variant="caption" color="text.secondary">{s.rollNo}</Typography>}
+                            </TableCell>
+                            <TableCell align="right">{s.solved}</TableCell>
+                            <TableCell align="right">{s.acRate}%</TableCell>
+                            <TableCell><RiskChips reasons={s.riskReasons} /></TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </SectionCard>
+              )}
 
               {/* ── Distribution first: the headline number hides the shape ── */}
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
