@@ -8,6 +8,12 @@ module.exports = async function analyticsAndAiSuite() {
   const s = new Suite('Analytics & AI');
   const ADMIN = tokenFor('an-admin', 'admin');
   const CSE = tokenFor('an-cse', 'faculty', { department: 'CSE' });
+  // A `faculty`-role token is scoped by classroom membership (resolveAnalyticsScope's
+  // `ownClasses` branch), not by department — CSE above has no real classrooms, so
+  // its results are legitimately empty and a department-boundary assertion against it
+  // would pass vacuously. Only `hod`/`admin` are scoped by `dept`, so a real
+  // department-scoping check needs an HOD token.
+  const HOD_CSE = tokenFor('an-hod-cse', 'hod', { department: 'CSE' });
 
   // ── Overview ───────────────────────────────────────────────────────────────
   const o = await get('/api/faculty/analytics/overview?dimension=department&days=3650', ADMIN);
@@ -102,9 +108,30 @@ module.exports = async function analyticsAndAiSuite() {
   s.check('dashboard and analytics at-risk routes agree (shared cache/logic)',
     JSON.stringify(atRiskAnalytics.body?.data) === JSON.stringify(atRiskDash.body?.data));
 
-  const atRiskScoped = await get('/api/faculty/at-risk', CSE);
+  const atRiskScoped = await get('/api/faculty/at-risk', HOD_CSE);
   s.check('at-risk scoped to the caller\'s department', (atRiskScoped.body?.data ?? []).every((r) => r.department === 'CSE'),
     JSON.stringify([...new Set((atRiskScoped.body?.data ?? []).map((r) => r.department))]));
+
+  // ── Top performers (shared ranking: Analytics panel + PDF class report) ────
+  const top = await get('/api/faculty/analytics/top-performers?limit=10', ADMIN);
+  s.check('top-performers returns 200', top.status === 200, `status ${top.status}`);
+  const topRows = top.body?.data ?? [];
+  s.check('ranks are 1..n with no gaps', topRows.every((r, i) => r.rank === i + 1));
+  s.check('sorted by solved desc, then AC rate desc',
+    topRows.every((r, i, arr) => i === 0 || arr[i - 1].solved > r.solved
+      || (arr[i - 1].solved === r.solved && arr[i - 1].acRate >= r.acRate)));
+  s.check('capped to the requested limit', topRows.length <= 10, String(topRows.length));
+
+  const topScoped = await get('/api/faculty/analytics/top-performers?limit=50', HOD_CSE);
+  s.check('top-performers scoped to the caller\'s department',
+    (topScoped.body?.data ?? []).every((r) => r.department === 'CSE'),
+    JSON.stringify([...new Set((topScoped.body?.data ?? []).map((r) => r.department))]));
+
+  // ── Class report PDF (now scoped — used to read the whole institution) ────
+  const pdfAdmin = await get('/api/pdf/class-report', ADMIN);
+  s.check('class report PDF returns 200 (admin, unscoped)', pdfAdmin.status === 200, `status ${pdfAdmin.status}`);
+  const pdfScoped = await get('/api/pdf/class-report', CSE);
+  s.check('class report PDF returns 200 (department-scoped)', pdfScoped.status === 200, `status ${pdfScoped.status}`);
 
   // ── AI endpoints ───────────────────────────────────────────────────────────
   const caps = await capabilities();
