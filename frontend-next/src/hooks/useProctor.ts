@@ -12,12 +12,24 @@ interface ProctorOpts {
   onAutoSubmit: () => void;
 }
 
-const MAX_FS_EXITS = 3;
+const FULLSCREEN_GRACE_SECONDS = 45;
+
+function speak(text: string) {
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+  try {
+    window.speechSynthesis.cancel();
+    window.speechSynthesis.speak(new SpeechSynthesisUtterance(text));
+  } catch {
+    // Best-effort only — some browsers block speech without a prior user gesture.
+  }
+}
 
 /**
  * Proctored-exam integrity monitor. Enforces fullscreen, records tab switches,
- * fullscreen exits, and paste/copy events to /api/proctor/event, and auto-submits
- * after too many fullscreen exits. Client-only (guards `document` for SSR).
+ * fullscreen exits, and paste/copy events to /api/proctor/event. Every
+ * fullscreen exit starts a 45-second grace period (spoken + counted down) —
+ * returning to fullscreen in time cancels it, letting it run out auto-submits.
+ * Client-only (guards `document` for SSR).
  */
 export function useProctor({ active, assignmentId, examId, problemId, onAutoSubmit }: ProctorOpts) {
   const [violations, setViolations] = React.useState(0);
@@ -25,9 +37,10 @@ export function useProctor({ active, assignmentId, examId, problemId, onAutoSubm
   const [fullscreen, setFullscreen] = React.useState<boolean>(
     typeof document !== "undefined" && !!document.fullscreenElement,
   );
+  const [fsGraceSecondsLeft, setFsGraceSecondsLeft] = React.useState<number | null>(null);
 
-  const fsExits = React.useRef(0);
   const submitted = React.useRef(false);
+  const graceInterval = React.useRef<ReturnType<typeof setInterval> | null>(null);
   const cbRef = React.useRef(onAutoSubmit);
   React.useEffect(() => {
     cbRef.current = onAutoSubmit;
@@ -42,6 +55,14 @@ export function useProctor({ active, assignmentId, examId, problemId, onAutoSubm
 
   const requestFullscreen = React.useCallback(() => {
     document.documentElement.requestFullscreen?.().catch(() => {});
+  }, []);
+
+  const clearGrace = React.useCallback(() => {
+    if (graceInterval.current != null) {
+      clearInterval(graceInterval.current);
+      graceInterval.current = null;
+    }
+    setFsGraceSecondsLeft(null);
   }, []);
 
   React.useEffect(() => {
@@ -59,19 +80,34 @@ export function useProctor({ active, assignmentId, examId, problemId, onAutoSubm
     const onFsChange = () => {
       const fs = !!document.fullscreenElement;
       setFullscreen(fs);
-      if (!fs) {
-        fsExits.current += 1;
-        setViolations((v) => v + 1);
-        log("fullscreen_exit", `exit #${fsExits.current}`);
-        if (fsExits.current >= MAX_FS_EXITS && !submitted.current) {
-          submitted.current = true;
-          setWarning("Fullscreen exited 3 times — your exam is being submitted automatically.");
-          log("auto_submit");
-          cbRef.current();
-        } else {
-          setWarning(`Return to fullscreen to continue the exam (${fsExits.current}/${MAX_FS_EXITS}).`);
-        }
+      if (fs) {
+        clearGrace();
+        return;
       }
+      setViolations((v) => v + 1);
+      log("fullscreen_exit");
+      speak(`Warning. You have left fullscreen. Return within ${FULLSCREEN_GRACE_SECONDS} seconds or your exam will be submitted automatically.`);
+      setWarning(`Return to fullscreen within ${FULLSCREEN_GRACE_SECONDS}s or your exam will be auto-submitted.`);
+      if (graceInterval.current != null) clearInterval(graceInterval.current);
+      setFsGraceSecondsLeft(FULLSCREEN_GRACE_SECONDS);
+      graceInterval.current = setInterval(() => {
+        setFsGraceSecondsLeft((s) => {
+          if (s == null) return s;
+          if (s <= 1) {
+            if (graceInterval.current != null) {
+              clearInterval(graceInterval.current);
+              graceInterval.current = null;
+            }
+            if (!submitted.current) {
+              submitted.current = true;
+              log("auto_submit");
+              cbRef.current();
+            }
+            return null;
+          }
+          return s - 1;
+        });
+      }, 1000);
     };
     const onPaste = (e: ClipboardEvent) => {
       setViolations((v) => v + 1);
@@ -88,8 +124,9 @@ export function useProctor({ active, assignmentId, examId, problemId, onAutoSubm
       document.removeEventListener("fullscreenchange", onFsChange);
       document.removeEventListener("paste", onPaste, true);
       document.removeEventListener("copy", onCopy, true);
+      if (graceInterval.current != null) clearInterval(graceInterval.current);
     };
-  }, [active, log, requestFullscreen]);
+  }, [active, log, requestFullscreen, clearGrace]);
 
-  return { violations, warning, fullscreen, requestFullscreen, dismissWarning: () => setWarning(null) };
+  return { violations, warning, fullscreen, fsGraceSecondsLeft, requestFullscreen, dismissWarning: () => setWarning(null) };
 }

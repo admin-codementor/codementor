@@ -33,7 +33,7 @@ export function KpiTile({
   const colors = useChartColors();
   const up = (delta ?? 0) > 0;
   const flat = delta === 0 || delta == null;
-  const sparkColor = hero ? "#fff" : colors[0];
+  const sparkColor = hero ? "var(--mui-palette-onPrimaryContainer)" : colors[0];
 
   return (
     <Box
@@ -405,8 +405,10 @@ export function TestCaseHeatmap({
               alignItems: "center", justifyContent: "center", border: "1px solid", borderColor: "outlineVariant",
               // Red intensity tracks the fail rate; a wall of red on one index is
               // the edge case the class is missing.
-              bgcolor: r.failRate === 0 ? "successContainer" : `rgba(211, 47, 47, ${0.12 + (r.failRate / 100) * 0.66})`,
-              color: r.failRate > 55 ? "#fff" : "text.primary",
+              bgcolor: r.failRate === 0
+                ? "successContainer"
+                : `color-mix(in srgb, var(--mui-palette-error-main) ${Math.round(12 + (r.failRate / 100) * 66)}%, var(--mui-palette-surfaceContainer))`,
+              color: r.failRate > 55 ? "common.white" : "text.primary",
             }}
           >
             <Typography variant="caption" fontWeight={700} sx={{ lineHeight: 1 }}>{r.testIndex}</Typography>

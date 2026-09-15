@@ -21,7 +21,7 @@ export interface NavigatorSection {
 
 const STATUS_STYLE: Record<QuestionStatus, { bg: string; fg: string; border: string; label: string }> = {
   not_visited: { bg: "surfaceContainerHigh", fg: "onSurfaceVariant", border: "outlineVariant", label: "Not visited" },
-  visited: { bg: "errorContainer", fg: "onErrorContainer", border: "error.main", label: "Not answered" },
+  visited: { bg: "warningContainer", fg: "onWarningContainer", border: "warning.main", label: "Not answered" },
   answered: { bg: "successContainer", fg: "onSuccessContainer", border: "success.main", label: "Answered" },
   marked: { bg: "tertiaryContainer", fg: "onTertiaryContainer", border: "tertiary.main", label: "Marked for review" },
   answered_marked: { bg: "successContainer", fg: "onSuccessContainer", border: "tertiary.main", label: "Answered & marked for review" },
@@ -64,7 +64,7 @@ export function QuestionNavigator({
             <Typography variant="overline" color="text.secondary" sx={{ display: "block", mb: 0.75 }}>
               {s.title}
             </Typography>
-            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(34px, 1fr))", gap: 0.75 }}>
+            <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(40px, 1fr))", gap: 1 }}>
               {s.items.map((item, i) => {
                 const style = STATUS_STYLE[item.status];
                 const isActive = s.id === activeSectionId && item.id === activeItemId;
@@ -76,7 +76,7 @@ export function QuestionNavigator({
                       aria-label={`${s.title} question ${i + 1} — ${style.label}`}
                       sx={{
                         position: "relative",
-                        width: 34, height: 34,
+                        width: 40, height: 40,
                         borderRadius: 1.5,
                         border: "2px solid",
                         borderColor: isActive ? "primary.main" : style.border,

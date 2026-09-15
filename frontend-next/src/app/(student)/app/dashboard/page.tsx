@@ -617,10 +617,10 @@ export default function DashboardPage() {
                           borderRadius: 2,
                           border: "1px solid",
                           borderColor: urgent
-                            ? "errorContainer"
+                            ? "warningContainer"
                             : "outlineVariant",
-                          bgcolor: urgent ? "errorContainer" : "transparent",
-                          "&:hover": { bgcolor: urgent ? "errorContainer" : "surfaceContainerHigh" },
+                          bgcolor: urgent ? "warningContainer" : "transparent",
+                          "&:hover": { bgcolor: urgent ? "warningContainer" : "surfaceContainerHigh" },
                           transition: "background-color 150ms",
                         }}
                       >
@@ -633,7 +633,7 @@ export default function DashboardPage() {
                           <Typography
                             variant="body2"
                             fontWeight={500}
-                            color={urgent ? "onErrorContainer" : "text.primary"}
+                            color={urgent ? "onWarningContainer" : "text.primary"}
                             sx={{ flex: 1, lineHeight: 1.3 }}
                             noWrap
                           >
@@ -647,7 +647,7 @@ export default function DashboardPage() {
                             <WarningAmberOutlinedIcon
                               sx={{
                                 fontSize: 18,
-                                color: "onErrorContainer",
+                                color: "onWarningContainer",
                                 flexShrink: 0,
                               }}
                             />
@@ -669,7 +669,7 @@ export default function DashboardPage() {
                         >
                           <Typography
                             variant="caption"
-                            color={urgent ? "onErrorContainer" : "text.secondary"}
+                            color={urgent ? "onWarningContainer" : "text.secondary"}
                           >
                             {text} · {a.solved}/{a.total} solved
                           </Typography>
@@ -689,7 +689,7 @@ export default function DashboardPage() {
                         <LinearProgress
                           variant="determinate"
                           value={progress}
-                          color={done ? "success" : urgent ? "error" : "primary"}
+                          color={done ? "success" : urgent ? "warning" : "primary"}
                           sx={{ height: 4, borderRadius: 2, mt: 1 }}
                           aria-label={`${a.title}: ${a.solved} of ${a.total} problems solved`}
                         />
@@ -780,7 +780,7 @@ export default function DashboardPage() {
                     </Typography>
                     <Typography
                       variant="caption"
-                      color={urgent ? "error.main" : "text.secondary"}
+                      color={urgent ? "warning.main" : "text.secondary"}
                       sx={{ ml: 2, flexShrink: 0 }}
                     >
                       {text}

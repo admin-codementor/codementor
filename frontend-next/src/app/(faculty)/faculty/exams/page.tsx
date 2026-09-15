@@ -311,11 +311,10 @@ export default function FacultyExamsPage() {
     });
     return (
       <Box>
-        <Button startIcon={<ChevronLeftIcon />} onClick={() => setMode("list")} sx={{ mb: 2 }}>Back to exams</Button>
-        <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 3 }}>
-          <BarChartOutlinedIcon sx={{ color: "primary.main" }} />
-          <Typography variant="h5" fontWeight={600}>Results — {resTitle}</Typography>
-        </Stack>
+        <PageHeader
+          title={`Results — ${resTitle}`}
+          actions={<Button startIcon={<ChevronLeftIcon />} onClick={() => setMode("list")}>Back to exams</Button>}
+        />
 
         {!results ? (
           <Stack spacing={2}>{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} variant="rounded" height={80} />)}</Stack>
