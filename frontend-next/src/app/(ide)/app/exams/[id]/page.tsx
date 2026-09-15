@@ -27,13 +27,15 @@ import TableCell from "@mui/material/TableCell";
 import Divider from "@mui/material/Divider";
 import Checkbox from "@mui/material/Checkbox";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import { AccessTimeIcon, ChevronLeftIcon, CheckCircleIcon, CancelIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
+import { AccessTimeIcon, ChevronLeftIcon, ChevronRightIcon, CheckCircleIcon, CancelIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useExamTimer } from "@/hooks/useExamTimer";
 import { useProctor } from "@/hooks/useProctor";
+import { FullscreenGraceModal } from "@/components/proctor/FullscreenGraceModal";
 import { QuestionNavigator, type NavigatorSection, type QuestionStatus } from "@/components/student/exam/QuestionNavigator";
+import { PageHeader } from "@/components/ui/PageHeader";
 
 interface InstrSection {
   id: string; title: string; type: "mcq" | "coding"; order: number; instructions: string | null;
@@ -280,6 +282,21 @@ export default function StudentExamPage() {
     ));
   }, [attempt]);
 
+  // Flattened section+item order for sequential Previous/Next — same order
+  // as the navigator grid, just walked linearly instead of jumped-to.
+  const flatItems = React.useMemo(
+    () => navigatorSections.flatMap((s) => s.items.map((it) => ({ sectionId: s.id, itemId: it.id }))),
+    [navigatorSections],
+  );
+  const currentFlatIndex = activeItemId
+    ? flatItems.findIndex((f) => f.sectionId === activeSectionId && f.itemId === activeItemId)
+    : -1;
+  const goToOffset = (offset: number) => {
+    const base = currentFlatIndex < 0 ? 0 : currentFlatIndex;
+    const target = flatItems[Math.min(Math.max(base + offset, 0), flatItems.length - 1)];
+    if (target) handleJump(target.sectionId, target.itemId);
+  };
+
   const summaryStats = React.useMemo(() => {
     if (!attempt) return [];
     return attempt.sections.map((s) => {
@@ -311,12 +328,12 @@ export default function StudentExamPage() {
   // ── Instructions ──
   if (view === "instructions" && instructions) {
     return (
-      <Box sx={{ maxWidth: 720, mx: "auto" }}>
-        <Button startIcon={<ChevronLeftIcon />} onClick={() => router.push("/app/exams")} sx={{ mb: 2 }}>Back to exams</Button>
-        <Typography variant="h5" fontWeight={600}>{instructions.exam.title}</Typography>
-        {instructions.exam.description && (
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{instructions.exam.description}</Typography>
-        )}
+      <Box sx={{ maxWidth: 720, mx: "auto", p: { xs: 2, sm: 3, md: 4 } }}>
+        <PageHeader
+          title={instructions.exam.title}
+          subtitle={instructions.exam.description ?? undefined}
+          actions={<Button startIcon={<ChevronLeftIcon />} onClick={() => router.push("/app/exams")}>Back to exams</Button>}
+        />
         <Card variant="outlined" sx={{ borderColor: "outlineVariant", mt: 2 }}>
           <CardContent>
             <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>General instructions</Typography>
@@ -373,8 +390,12 @@ export default function StudentExamPage() {
     const pct = total ? Math.round((score / total) * 100) : 0;
     const scoreColor = pct >= 60 ? "success.main" : pct >= 35 ? "warning.main" : "error.main";
     return (
-      <Box>
-        <Button startIcon={<ChevronLeftIcon />} onClick={() => router.push("/app/exams")} sx={{ mb: 2 }}>Back to exams</Button>
+      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
+        <PageHeader
+          title={attempt.exam.title}
+          subtitle="Result"
+          actions={<Button startIcon={<ChevronLeftIcon />} onClick={() => router.push("/app/exams")}>Back to exams</Button>}
+        />
         <Card variant="outlined" sx={{ borderColor: "outlineVariant", mb: 3 }}>
           <CardContent sx={{ textAlign: "center", py: 4 }}>
             <Typography variant="h3" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace", color: scoreColor }}>
@@ -466,7 +487,7 @@ export default function StudentExamPage() {
   if (view === "taking" && attempt) {
     const activeSection = attempt.sections.find((s) => s.id === activeSectionId) ?? attempt.sections[0];
     return (
-      <Box sx={{ mx: { xs: -2, sm: -3, md: -4 }, mt: { xs: -2, sm: -3, md: -4 } }}>
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
         <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: "1px solid", borderColor: "outlineVariant", bgcolor: "surfaceContainer" }}>
           <Toolbar sx={{ flexWrap: "wrap", gap: 1, py: 1 }}>
             <Box sx={{ flex: 1, minWidth: 200 }}>
@@ -488,14 +509,14 @@ export default function StudentExamPage() {
           </Tabs>
         </AppBar>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1, bgcolor: "errorContainer", color: "onErrorContainer", borderBottom: "1px solid", borderColor: "outlineVariant" }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1, bgcolor: "secondaryContainer", color: "onSecondaryContainer", borderBottom: "1px solid", borderColor: "outlineVariant" }}>
           <ShieldOutlinedIcon fontSize="small" />
           <Typography variant="body2" fontWeight={600}>Proctored Exam</Typography>
           <Typography variant="caption" sx={{ opacity: 0.9 }}>
-            {proctor.violations} flag{proctor.violations === 1 ? "" : "s"} recorded · stay in fullscreen, don&apos;t switch tabs
+            Stay in fullscreen and don&apos;t switch tabs — this exam is proctored.
           </Typography>
           {!proctor.fullscreen && (
-            <Button size="small" variant="contained" color="error" startIcon={<FullscreenIcon />} onClick={proctor.requestFullscreen} sx={{ ml: "auto" }}>
+            <Button size="small" variant="contained" color="primary" startIcon={<FullscreenIcon />} onClick={proctor.requestFullscreen} sx={{ ml: "auto" }}>
               Enter fullscreen
             </Button>
           )}
@@ -505,113 +526,143 @@ export default function StudentExamPage() {
             {proctor.warning}
           </Alert>
         )}
+        <FullscreenGraceModal secondsLeft={proctor.fsGraceSecondsLeft} onReturn={proctor.requestFullscreen} />
 
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 280px" }, gap: 3, p: { xs: 2, sm: 3 }, maxWidth: 1100, mx: "auto" }}>
-          <Box>
-            {activeSection?.type === "mcq" ? (
-              <Stack spacing={2.5}>
-                {(activeSection.questions ?? []).map((q, qi) => {
-                  const entry = attempt.question_state[q.id];
-                  const marked = entry?.status === "marked" || entry?.status === "answered_marked";
-                  return (
-                    <Card
-                      key={q.id}
-                      ref={(el: HTMLDivElement | null) => { questionRefs.current[q.id] = el; }}
-                      variant="outlined"
-                      sx={{ borderColor: activeItemId === q.id ? "primary.main" : "outlineVariant" }}
-                    >
-                      <CardContent>
-                        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1} sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
-                          <Stack direction="row" spacing={1} sx={{ flex: 1, minWidth: 200 }}>
-                            <Typography variant="caption" fontWeight={700} color="primary.main">Q{qi + 1}</Typography>
-                            <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{q.question_text}</Typography>
+        <Box sx={{ flex: 1, overflow: "auto" }}>
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 280px" }, gap: 3, p: { xs: 2, sm: 3 }, maxWidth: 1100, mx: "auto" }}>
+            <Box>
+              {activeSection?.type === "mcq" ? (
+                <Stack spacing={2.5}>
+                  {(activeSection.questions ?? []).map((q, qi) => {
+                    const entry = attempt.question_state[q.id];
+                    const marked = entry?.status === "marked" || entry?.status === "answered_marked";
+                    return (
+                      <Card
+                        key={q.id}
+                        ref={(el: HTMLDivElement | null) => { questionRefs.current[q.id] = el; }}
+                        variant="outlined"
+                        sx={{ borderColor: activeItemId === q.id ? "primary.main" : "outlineVariant" }}
+                      >
+                        <CardContent>
+                          <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1} sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
+                            <Stack direction="row" spacing={1} sx={{ flex: 1, minWidth: 200 }}>
+                              <Typography variant="caption" fontWeight={700} color="primary.main">Q{qi + 1}</Typography>
+                              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{q.question_text}</Typography>
+                            </Stack>
+                            <Button
+                              size="small" variant={marked ? "contained" : "outlined"} color={marked ? "warning" : "inherit"}
+                              onClick={() => toggleMark(activeSection.id, q.id)} sx={{ flexShrink: 0 }}
+                            >
+                              {marked ? "Marked" : "Mark for review"}
+                            </Button>
                           </Stack>
-                          <Button
-                            size="small" variant={marked ? "contained" : "outlined"} color={marked ? "warning" : "inherit"}
-                            onClick={() => toggleMark(activeSection.id, q.id)} sx={{ flexShrink: 0 }}
-                          >
-                            {marked ? "Marked" : "Mark for review"}
-                          </Button>
-                        </Stack>
-                        <Stack spacing={1}>
-                          {q.options.map((opt, oi) => {
-                            const sel = entry?.selectedIndex === oi;
-                            return (
-                              <Box
-                                key={oi} component="button" onClick={() => answerQuestion(activeSection.id, q.id, oi)}
-                                sx={{
-                                  width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 1,
-                                  px: 1.5, py: 1.25, borderRadius: 2, border: "1px solid",
-                                  borderColor: sel ? "primary.main" : "outlineVariant",
-                                  bgcolor: sel ? "primaryContainer" : "transparent",
-                                  color: sel ? "onPrimaryContainer" : "text.secondary",
-                                  cursor: "pointer", font: "inherit",
-                                  "&:hover": { borderColor: sel ? "primary.main" : "outline" },
-                                }}
-                              >
+                          <Stack spacing={1}>
+                            {q.options.map((opt, oi) => {
+                              const sel = entry?.selectedIndex === oi;
+                              return (
                                 <Box
-                                  aria-hidden
+                                  key={oi} component="button" onClick={() => answerQuestion(activeSection.id, q.id, oi)}
                                   sx={{
-                                    width: 22, height: 22, borderRadius: "50%", border: "1px solid",
-                                    borderColor: sel ? "primary.main" : "outline", display: "grid", placeItems: "center",
-                                    fontSize: 11, fontWeight: 700, flexShrink: 0, color: sel ? "primary.main" : "text.secondary",
+                                    width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 1,
+                                    px: 1.5, py: 1.25, borderRadius: 2, border: "1px solid",
+                                    borderColor: sel ? "primary.main" : "outlineVariant",
+                                    bgcolor: sel ? "primaryContainer" : "transparent",
+                                    color: sel ? "onPrimaryContainer" : "text.secondary",
+                                    cursor: "pointer", font: "inherit",
+                                    "&:hover": { borderColor: sel ? "primary.main" : "outline" },
                                   }}
                                 >
-                                  {String.fromCharCode(65 + oi)}
+                                  <Box
+                                    aria-hidden
+                                    sx={{
+                                      width: 22, height: 22, borderRadius: "50%", border: "1px solid",
+                                      borderColor: sel ? "primary.main" : "outline", display: "grid", placeItems: "center",
+                                      fontSize: 11, fontWeight: 700, flexShrink: 0, color: sel ? "primary.main" : "text.secondary",
+                                    }}
+                                  >
+                                    {String.fromCharCode(65 + oi)}
+                                  </Box>
+                                  <Typography variant="body2">{opt}</Typography>
                                 </Box>
-                                <Typography variant="body2">{opt}</Typography>
-                              </Box>
-                            );
-                          })}
-                        </Stack>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </Stack>
-            ) : (
-              <Stack spacing={2}>
-                <Alert severity="info">
-                  Solving opens the full code editor in a new screen. Your progress here is saved — use
-                  &quot;Back to Exam&quot; to return, or come back to this tab any time before you finish.
-                </Alert>
-                {(activeSection?.problems ?? []).map((p) => {
-                  const cState = attempt.coding_state[p.id];
-                  const solved = cState?.status === "answered";
-                  return (
-                    <Card
-                      key={p.id}
-                      ref={(el: HTMLDivElement | null) => { questionRefs.current[p.id] = el; }}
-                      variant="outlined" sx={{ borderColor: "outlineVariant" }}
-                    >
-                      <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                        <Typography variant="body2" sx={{ flex: 1 }}>{p.title}</Typography>
-                        {p.difficulty && <Chip label={p.difficulty} size="small" sx={{ textTransform: "capitalize" }} />}
-                        {solved && <Chip label="Solved" size="small" color="success" sx={{ height: 20, fontSize: 10 }} />}
-                        <Button
-                          size="small" variant={solved ? "outlined" : "contained"}
-                          onClick={() => solveProblem(activeSection.id, p.id)}
-                        >
-                          {solved ? "Revisit" : "Solve"}
-                        </Button>
-                      </CardContent>
-                    </Card>
-                  );
-                })}
-              </Stack>
-            )}
-          </Box>
+                              );
+                            })}
+                          </Stack>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Stack>
+              ) : (
+                <Stack spacing={2}>
+                  <Alert severity="info">
+                    Solving opens the full code editor in a new screen. Your progress here is saved — use
+                    &quot;Back to Exam&quot; to return, or come back to this tab any time before you finish.
+                  </Alert>
+                  {(activeSection?.problems ?? []).map((p) => {
+                    const cState = attempt.coding_state[p.id];
+                    const solved = cState?.status === "answered";
+                    return (
+                      <Card
+                        key={p.id}
+                        ref={(el: HTMLDivElement | null) => { questionRefs.current[p.id] = el; }}
+                        variant="outlined" sx={{ borderColor: "outlineVariant" }}
+                      >
+                        <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
+                          <Typography variant="body2" sx={{ flex: 1 }}>{p.title}</Typography>
+                          {p.difficulty && <Chip label={p.difficulty} size="small" sx={{ textTransform: "capitalize" }} />}
+                          {solved && <Chip label="Solved" size="small" color="success" sx={{ height: 20, fontSize: 10 }} />}
+                          <Button
+                            size="small" variant={solved ? "outlined" : "contained"}
+                            onClick={() => solveProblem(activeSection.id, p.id)}
+                          >
+                            {solved ? "Revisit" : "Solve"}
+                          </Button>
+                        </CardContent>
+                      </Card>
+                    );
+                  })}
+                </Stack>
+              )}
+            </Box>
 
-          <Box sx={{ position: { md: "sticky" }, top: { md: 96 }, alignSelf: "start" }}>
-            <Card variant="outlined" sx={{ borderColor: "outlineVariant", p: 2 }}>
-              <QuestionNavigator
-                sections={navigatorSections}
-                activeSectionId={activeSection?.id ?? ""}
-                activeItemId={activeItemId}
-                onJump={handleJump}
-              />
-            </Card>
+            <Box sx={{ position: { md: "sticky" }, top: { md: 96 }, alignSelf: "start" }}>
+              <Card variant="outlined" sx={{ borderColor: "outlineVariant", p: 2 }}>
+                <QuestionNavigator
+                  sections={navigatorSections}
+                  activeSectionId={activeSection?.id ?? ""}
+                  activeItemId={activeItemId}
+                  onJump={handleJump}
+                />
+              </Card>
+            </Box>
           </Box>
+        </Box>
+
+        <Box
+          sx={{
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2,
+            px: 2, py: 1.25, borderTop: "1px solid", borderColor: "outlineVariant",
+            bgcolor: "surfaceContainer", flexShrink: 0,
+          }}
+        >
+          <Button
+            startIcon={<ChevronLeftIcon />}
+            onClick={() => goToOffset(-1)}
+            disabled={currentFlatIndex <= 0}
+          >
+            Previous
+          </Button>
+          <Typography variant="caption" color="text.secondary">
+            Question {currentFlatIndex < 0 ? 1 : currentFlatIndex + 1} of {flatItems.length}
+          </Typography>
+          <Button
+            endIcon={<ChevronRightIcon />}
+            variant="contained"
+            onClick={() => goToOffset(1)}
+            disabled={currentFlatIndex >= 0 && currentFlatIndex >= flatItems.length - 1}
+          >
+            Next
+          </Button>
         </Box>
 
         <Dialog open={summaryOpen} onClose={() => setSummaryOpen(false)} maxWidth="sm" fullWidth>

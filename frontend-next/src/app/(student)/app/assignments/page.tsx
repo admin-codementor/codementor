@@ -41,10 +41,10 @@ function isOverdue(a: Assignment): boolean {
 
 function DeadlineBadge({ deadline }: { deadline: string }) {
   const days = daysLeft(deadline);
-  let color: "error.main" | "warning.main" | "text.secondary" = "text.secondary";
+  let color: "warning.main" | "text.secondary" = "text.secondary";
   let text: string;
   if (days < 0) {
-    color = "error.main";
+    color = "warning.main";
     text = "Overdue";
   } else if (days === 0) {
     color = "warning.main";
@@ -115,7 +115,7 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
   const ringColor = complete
     ? "var(--mui-palette-success-main)"
     : overdue
-      ? "var(--mui-palette-error-main)"
+      ? "var(--mui-palette-warning-main)"
       : "var(--mui-palette-primary-main)";
 
   return (
@@ -125,7 +125,7 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
         borderColor: complete
           ? "success.main"
           : overdue
-            ? "error.main"
+            ? "warning.main"
             : "outlineVariant",
         overflow: "hidden",
       }}
@@ -161,7 +161,7 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
               <Chip
                 label="Proctored Exam"
                 size="small"
-                sx={{ height: 20, fontSize: 10, fontWeight: 700, bgcolor: "errorContainer", color: "onErrorContainer" }}
+                sx={{ height: 20, fontSize: 10, fontWeight: 700, bgcolor: "tertiaryContainer", color: "onTertiaryContainer" }}
               />
             )}
             {complete && (
@@ -184,7 +184,7 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
           <LinearProgress
             variant="determinate"
             value={pct}
-            color={complete ? "success" : overdue ? "error" : "primary"}
+            color={complete ? "success" : overdue ? "warning" : "primary"}
             sx={{ height: 6, borderRadius: 3 }}
           />
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "right", mt: 0.5 }}>
@@ -322,7 +322,7 @@ export default function AssignmentsPage() {
         >
           <StatCard icon={<AssignmentOutlinedIcon />} label="Total" value={assignments.length} accent="primary" />
           <StatCard icon={<CheckCircleIcon />} label="Completed" value={completedCount} accent="success" />
-          <StatCard icon={<WarningAmberIcon />} label="Overdue" value={overdueCount} accent="error" />
+          <StatCard icon={<WarningAmberIcon />} label="Overdue" value={overdueCount} accent="warning" />
         </Box>
       )}
 

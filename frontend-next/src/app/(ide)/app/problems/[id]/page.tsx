@@ -33,6 +33,7 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { pollUntilDone } from "@/lib/pollJudging";
 import { useProctor } from "@/hooks/useProctor";
+import { FullscreenGraceModal } from "@/components/proctor/FullscreenGraceModal";
 import { fireConfetti } from "@/components/feedback/confetti";
 import { clearSession, getUser } from "@/lib/auth";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
@@ -1060,8 +1061,8 @@ export default function ProblemSolvingPage() {
             gap: 1.5,
             px: 2,
             py: 1,
-            bgcolor: "errorContainer",
-            color: "onErrorContainer",
+            bgcolor: "secondaryContainer",
+            color: "onSecondaryContainer",
             borderBottom: "1px solid",
             borderColor: "outlineVariant",
             flexShrink: 0,
@@ -1070,14 +1071,14 @@ export default function ProblemSolvingPage() {
           <ShieldOutlinedIcon fontSize="small" />
           <Typography variant="body2" fontWeight={600}>Proctored Exam</Typography>
           <Typography variant="caption" sx={{ opacity: 0.9 }}>
-            {proctor.violations} flag{proctor.violations === 1 ? "" : "s"} recorded · stay in fullscreen, don&apos;t switch tabs
+            Stay in fullscreen and don&apos;t switch tabs — this session is proctored.
           </Typography>
           <Box sx={{ ml: "auto", display: "flex", alignItems: "center", gap: 1 }}>
             {!proctor.fullscreen && (
               <Button
                 size="small"
                 variant="contained"
-                color="error"
+                color="primary"
                 startIcon={<FullscreenIcon />}
                 onClick={proctor.requestFullscreen}
               >
@@ -1088,7 +1089,7 @@ export default function ProblemSolvingPage() {
               <Button
                 size="small"
                 variant="outlined"
-                color="error"
+                color="inherit"
                 startIcon={<ChevronLeftIcon />}
                 onClick={() => router.push(`/app/exams/${examId}`)}
               >
@@ -1108,6 +1109,7 @@ export default function ProblemSolvingPage() {
           {proctor.warning}
         </Alert>
       )}
+      {proctored && <FullscreenGraceModal secondsLeft={proctor.fsGraceSecondsLeft} onReturn={proctor.requestFullscreen} />}
 
       {/* ── Header ── */}
       <IDEHeader
