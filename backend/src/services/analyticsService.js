@@ -16,6 +16,7 @@ const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
 const classroomRepo = require('../repositories/classroomRepository');
+const { scopeDept } = require('../middleware/role.middleware');
 
 const DAY_MS = 86400000;
 const SNAPSHOT_TTL = 120; // seconds
@@ -293,6 +294,23 @@ function cohortsFrom(snapshot, dimension) {
   }).sort((a, b) => String(a.cohort).localeCompare(String(b.cohort)));
 }
 
+// Resolves how much of the student population an analytics caller may see.
+// Admin: everything. HOD: their own department (every faculty's classes in
+// it). Faculty: ONLY students enrolled in classrooms *they personally
+// created* — a department can hold several faculty's classes, and a faculty
+// member shouldn't see a colleague's students. Shared by every analytics
+// endpoint (faculty.controller.js) and by pdfExport.controller.js's class
+// report, which used to read every student in the system unconditionally.
+async function resolveAnalyticsScope(req) {
+  if (req.user?.role === 'faculty') {
+    const classrooms = await classroomRepo.listByFacultyId(req.user.id);
+    const memberLists = await Promise.all(classrooms.map((c) => classroomRepo.listMembers(c.id)));
+    const memberIds = new Set(memberLists.flat().map((m) => m.userId));
+    return { ownClasses: true, dept: req.user.department ?? null, memberIds, cacheKey: req.user.id, classroomCount: classrooms.length };
+  }
+  return { ownClasses: false, dept: scopeDept(req), memberIds: null };
+}
+
 // A scope resolves to `{ dept }` (department/institution scope, dept === null
 // meaning everyone) or `{ memberIds, cacheKey }` (a faculty member's own
 // classroom rosters — the member-id set isn't a stable cache key by itself, so
@@ -424,8 +442,29 @@ async function getAtRiskList(scope) {
   return cached(`analytics:at-risk:v1:${scopeKey(scope)}`, SNAPSHOT_TTL, () => computeAtRiskList(scope));
 }
 
+// ── Top performers ───────────────────────────────────────────────────────────
+// The one shared ranking, replacing three independent copies (student
+// leaderboard, getClassAnalytics's topStudents, the PDF export's top-10) that
+// each re-scanned every submission and disagreed on tie-breaking. Ranked by
+// distinct solved count, then acceptance rate, then name — a student with 0
+// solved still gets a rank rather than being silently dropped, so a
+// brand-new class shows *why* the list looks empty instead of showing nothing.
+function topPerformers(snapshot, limit = 10) {
+  return [...snapshot.studentStats]
+    .sort((a, b) => b.solved - a.solved || b.acRate - a.acRate || a.name.localeCompare(b.name))
+    .slice(0, limit)
+    .map((s, i) => ({ ...s, rank: i + 1 }));
+}
+
+/** Cheap derivation from the already-cached snapshot — no extra cache needed. */
+async function getTopPerformers(scope, limit = 10) {
+  const snap = await getSnapshot(scope);
+  return topPerformers(snap, limit);
+}
+
 module.exports = {
   buildSnapshot, getSnapshot, cohortsFrom, boxStats, histogram, median,
   languageName, DAY_MS, dayKey, toMillis, COHORT_DIMS,
-  scopeKey, riskReasonsForStudent, getAtRiskList,
+  resolveAnalyticsScope, scopeKey, riskReasonsForStudent, getAtRiskList,
+  topPerformers, getTopPerformers,
 };
