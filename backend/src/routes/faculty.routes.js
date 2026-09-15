@@ -37,6 +37,7 @@ router.get('/question-bank', facultyController.getQuestionBank);
 router.get('/analytics/overview',        facultyController.getAnalyticsOverview);
 router.get('/analytics/cohort',          facultyController.getCohortDetail);
 router.get('/analytics/at-risk',         facultyController.getAnalyticsAtRisk);
+router.get('/analytics/top-performers',  facultyController.getTopPerformers);
 router.get('/analytics/problem/:id',     facultyController.getProblemAnalytics);
 router.get('/analytics/mcq/:id',         facultyController.getMcqItemAnalysis);
 router.get('/problems',   facultyController.getProblems);
