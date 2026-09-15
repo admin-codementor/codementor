@@ -1,7 +1,7 @@
 const PDFDocument = require('pdfkit');
-const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const submissionRepo = require('../repositories/submissionRepository');
+const analytics = require('../services/analyticsService');
 
 // ── Colours / typography to match the dark-themed brand on a printable light page ──
 const COLORS = {
@@ -264,49 +264,35 @@ const simpleTable = (doc, cols, rows) => {
 exports.exportClassReport = async (req, res) => {
   try {
     // ── Gather data ──────────────────────────────────────────────────────────
-    // Roster + department/section from Firestore; submissions from Firestore too.
-    const studentsMap = await userRepo.getMapByRole('student');
-    const studentIds = [...studentsMap.keys()];
-    const idSet = new Set(studentIds);
-
-    const allSubs = await submissionRepo.listAll();
-    const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
+    // Scoped exactly like every other analytics view (analyticsService.js).
+    // This used to read every student and submission in the system
+    // unconditionally, so an HOD or faculty's "Class Report" button downloaded
+    // institution-wide data instead of just their own department/classes.
+    const scope = await analytics.resolveAnalyticsScope(req);
+    const snap = await analytics.getSnapshot(scope);
+    const studentIds = new Set(snap.studentStats.map((s) => s.id));
 
     const sevenDaysAgo = Date.now() - 7 * 86400000;
-    const active7d = new Set(allSubs.filter(s => subMillis(s) >= sevenDaysAgo).map(s => s.userId)).size;
-    const totalSubs = allSubs.length;
-    const totalAc = allSubs.filter(s => s.verdict === 'Accepted').length;
-    const problemsSolved = new Set(allSubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId)).size;
-    const stats = { total_students: studentIds.length, active_7d: active7d, problems_solved: problemsSolved };
+    const active7d = snap.studentStats.filter((s) => s.lastActiveMs && s.lastActiveMs >= sevenDaysAgo).length;
+    const totalSubs = snap.studentStats.reduce((a, s) => a + s.subs, 0);
+    const totalAc = snap.studentStats.reduce((a, s) => a + s.ac, 0);
+    // "Distinct problems solved" — a problemStats row only exists for problems
+    // scope's own students touched, so this is already scope-filtered.
+    const problemsSolved = snap.problemStats.filter((p) => p.solvers > 0).length;
+    const stats = { total_students: snap.totalStudents, active_7d: active7d, problems_solved: problemsSolved };
     const acRate = totalSubs ? Math.round((totalAc / totalSubs) * 100) : 0;
 
-    const perStudent = new Map(studentIds.map(id => [id, { solved: new Set(), total: 0, accepted: 0, lastSub: 0 }]));
-    for (const s of allSubs) {
-      const stat = perStudent.get(s.userId);
-      if (!stat) continue;
-      stat.total += 1;
-      if (s.verdict === 'Accepted') { stat.accepted += 1; stat.solved.add(s.problemId); }
-      const t = subMillis(s);
-      if (t > stat.lastSub) stat.lastSub = t;
-    }
+    // Same ranking used by the Analytics page's top-performers panel.
+    const topStudents = (await analytics.getTopPerformers(scope, 10))
+      .map((s) => ({ name: s.name, department: s.department || '—', section: s.section || '—', solved: s.solved }));
 
-    const topStudents = studentIds
-      .map(id => {
-        const profile = studentsMap.get(id) || {};
-        const stat = perStudent.get(id);
-        return {
-          name: profile.name || 'Unknown',
-          department: profile.department || '—', section: profile.section || '—',
-          solved: stat.solved.size,
-        };
-      })
-      .filter(s => s.solved > 0)
-      .sort((a, b) => b.solved - a.solved)
-      .slice(0, 10);
-
-    const pdfTopicsProblemsMap = await problemRepo.getMapByIds([...new Set(allSubs.map(s => s.problemId))]);
+    // Topic weakness needs per-submission tag data the snapshot doesn't retain
+    // (it only keeps per-problem aggregates) — fetched separately, filtered to
+    // this same scope's students.
+    const scopedSubs = (await submissionRepo.listAllForAnalytics()).filter((s) => studentIds.has(s.userId));
+    const pdfTopicsProblemsMap = await problemRepo.getMapByIds([...new Set(scopedSubs.map(s => s.problemId))]);
     const pdfTopicCounts = {};
-    for (const s of allSubs) {
+    for (const s of scopedSubs) {
       const tags = pdfTopicsProblemsMap.get(s.problemId)?.tags || [];
       for (const tag of tags) {
         if (!pdfTopicCounts[tag]) pdfTopicCounts[tag] = { topic: tag, solved_count: 0, failed_count: 0 };
@@ -320,21 +306,21 @@ exports.exportClassReport = async (req, res) => {
       .slice(0, 8);
 
     const cohortGroups = new Map();
-    for (const id of studentIds) {
-      const label = studentsMap.get(id)?.department || 'Unassigned';
+    for (const s of snap.studentStats) {
+      const label = s.department || 'Unassigned';
       if (!cohortGroups.has(label)) cohortGroups.set(label, { label, students: 0, solved: 0, total_subs: 0, accepted: 0 });
       const g = cohortGroups.get(label);
-      const stat = perStudent.get(id);
       g.students += 1;
-      g.solved += stat.solved.size;
-      g.total_subs += stat.total;
-      g.accepted += stat.accepted;
+      g.solved += s.solved;
+      g.total_subs += s.subs;
+      g.accepted += s.ac;
     }
     const cohorts = [...cohortGroups.values()].sort((a, b) => b.solved - a.solved);
 
-    const fourteenDaysAgo = Date.now() - 14 * 86400000;
-    const atRiskCount = studentIds.filter(id => perStudent.get(id).lastSub < fourteenDaysAgo).length;
-    const atRisk = { count: atRiskCount };
+    // Same richer, scoped definition of "at risk" as the Dashboard/Analytics
+    // panels (analytics.getAtRiskList) instead of the old bare 14-day-inactive
+    // count computed here independently.
+    const atRisk = { count: (await analytics.getAtRiskList(scope)).length };
 
     // ── Render ─────────────────────────────────────────────────────────────────
     const doc = new PDFDocument({ size: 'A4', margin: 56, bufferPages: true });
