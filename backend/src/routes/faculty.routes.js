@@ -222,7 +222,7 @@ router.get('/audit-logs',
       const data = rows.map(r => {
         const u = usersMap.get(r.userId);
         return {
-          id: r.id, action: r.action, detail: r.detail, ip: r.ip, created_at: r.createdAt,
+          id: r.id, action: r.action, detail: r.detail, ip: r.ip, created_at: r.createdAt?.toDate?.() ?? r.createdAt,
           user_name: u?.name || null, user_email: u?.email || null,
         };
       });
