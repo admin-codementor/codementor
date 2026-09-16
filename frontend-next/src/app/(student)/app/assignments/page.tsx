@@ -20,6 +20,7 @@ import { StatCard } from "@/components/ui/StatCard";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
+import { Reveal } from "@/components/ui/motion";
 import type { Assignment } from "@/lib/types";
 
 const FILTERS = ["all", "pending", "completed"] as const;
@@ -361,11 +362,13 @@ export default function AssignmentsPage() {
           />
         </Card>
       ) : (
-        <Stack spacing={2}>
-          {filtered.map((a) => (
-            <AssignmentCard key={a.id} assignment={a} />
-          ))}
-        </Stack>
+        <Reveal>
+          <Stack spacing={2}>
+            {filtered.map((a) => (
+              <AssignmentCard key={a.id} assignment={a} />
+            ))}
+          </Stack>
+        </Reveal>
       )}
     </Box>
   );

@@ -271,7 +271,7 @@ export default function PlacementPage() {
                         borderRadius: 2,
                         border: "1px solid",
                         borderColor: "outlineVariant",
-                        "&:hover": { borderColor: "primary.main", bgcolor: "action.hover" },
+                        "&:hover": { borderColor: "primary.main", bgcolor: "surfaceContainerHigh" },
                       }}
                     >
                       <Link component="span" color="text.primary" sx={{ flex: 1, minWidth: 0, fontWeight: 500 }} noWrap>

@@ -29,6 +29,7 @@ import { TagChip } from "@/components/ui/TagChip";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
+import { Reveal } from "@/components/ui/motion";
 
 const DIFFICULTY_FILTERS = ["All", "Easy", "Medium", "Hard"] as const;
 type DifficultyFilter = (typeof DIFFICULTY_FILTERS)[number];
@@ -200,6 +201,7 @@ function ProblemsInner() {
       </Card>
 
       {/* Table */}
+      <Reveal>
       <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
         <TableContainer sx={{ overflowX: "auto" }}>
           <Table aria-label="Problem list" sx={{ minWidth: 560 }}>
@@ -293,6 +295,7 @@ function ProblemsInner() {
           </Table>
         </TableContainer>
       </Card>
+      </Reveal>
 
       {/* Pagination */}
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 2 }}>

@@ -21,7 +21,6 @@ import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, Em
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
-import { PageHeader } from "@/components/ui/PageHeader";
 import { Reveal } from "@/components/ui/motion";
 import { StatCard } from "@/components/ui/StatCard";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
@@ -316,14 +315,28 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      <PageHeader
-        title={name ? `${greeting}, ${name}!` : greeting + "!"}
-        subtitle={
-          isNewUser
+      {/* ── Hero greeting — dashboard-only, not the shared PageHeader, so no
+          other page inherits this treatment. Same tonal-gradient + colored-
+          shadow technique as StatCard's icon tile, scaled up into a band. ── */}
+      <Box
+        sx={{
+          mb: 3,
+          p: { xs: 2.5, sm: 3.5 },
+          borderRadius: 4,
+          color: "onPrimaryContainer",
+          background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 12%, var(--mui-palette-primaryContainer)))",
+          boxShadow: "0 8px 24px color-mix(in srgb, var(--mui-palette-primaryContainer) 45%, transparent)",
+        }}
+      >
+        <Typography variant="h3" component="h1" fontWeight={700} sx={{ letterSpacing: "-0.01em" }}>
+          {name ? `${greeting}, ${name}!` : greeting + "!"}
+        </Typography>
+        <Typography variant="body1" sx={{ mt: 0.75, opacity: 0.85, maxWidth: 560 }}>
+          {isNewUser
             ? "Ready to start your coding journey? Pick a problem and dive in."
-            : `You've solved ${stats.problemsSolved} problem${stats.problemsSolved !== 1 ? "s" : ""} and you're on a ${stats.streak}-day streak. Keep going!`
-        }
-      />
+            : `You've solved ${stats.problemsSolved} problem${stats.problemsSolved !== 1 ? "s" : ""} and you're on a ${stats.streak}-day streak. Keep going!`}
+        </Typography>
+      </Box>
 
       {/* ── Stats row ── */}
       <Reveal>

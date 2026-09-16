@@ -14,6 +14,7 @@ import { LoginIcon, SchoolOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
+import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 
 interface JoinedClass {
@@ -140,6 +141,7 @@ export default function ClassesPage() {
           />
         </Card>
       ) : (
+        <Reveal>
         <Box
           sx={{
             display: "grid",
@@ -173,6 +175,7 @@ export default function ClassesPage() {
             </Card>
           ))}
         </Box>
+        </Reveal>
       )}
     </Box>
   );

@@ -34,9 +34,13 @@ export function EmptyState({
             borderRadius: "50%",
             display: "grid",
             placeItems: "center",
-            bgcolor: "surfaceContainerHigh",
-            color: "onSurfaceVariant",
+            color: "onPrimaryContainer",
             mb: 0.5,
+            // Tonal gradient + soft colored shadow — same dimensional-tile
+            // technique as StatCard's icon tile, so every empty state
+            // app-wide picks up the richer look for free.
+            background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 16%, var(--mui-palette-primaryContainer)))",
+            boxShadow: "0 4px 12px color-mix(in srgb, var(--mui-palette-primaryContainer) 55%, transparent)",
           }}
         >
           {icon}

@@ -35,6 +35,7 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
+import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
 
@@ -443,6 +444,7 @@ export default function FacultyExamsPage() {
           <EmptyState icon={<AssignmentOutlinedIcon />} title="No exams yet" description="Create your first multi-section exam." />
         </Card>
       ) : (
+        <Reveal>
         <Stack spacing={1.5}>
           {exams.map((e) => (
             <Card key={e.id} variant="outlined" sx={{ borderColor: "outlineVariant" }}>
@@ -491,6 +493,7 @@ export default function FacultyExamsPage() {
             </Card>
           ))}
         </Stack>
+        </Reveal>
       )}
 
       <CreateExamDialog open={showCreate} onClose={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); router.push(`/faculty/exams/${id}/edit`); }} />

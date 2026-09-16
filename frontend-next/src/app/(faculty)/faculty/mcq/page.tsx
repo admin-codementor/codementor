@@ -34,6 +34,7 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
+import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
 
@@ -410,6 +411,7 @@ export default function FacultyMcqPage() {
           <EmptyState icon={<PsychologyOutlinedIcon />} title="No tests yet" description="Create your first MCQ/aptitude test." />
         </Card>
       ) : (
+        <Reveal>
         <Stack spacing={1.5}>
           {tests.map((t) => (
             <Card key={t.id} variant="outlined" sx={{ borderColor: "outlineVariant" }}>
@@ -462,6 +464,7 @@ export default function FacultyMcqPage() {
             </Card>
           ))}
         </Stack>
+        </Reveal>
       )}
 
       <CreateTestDialog open={showCreate} onClose={() => setShowCreate(false)} onCreated={(id) => { setShowCreate(false); router.push(`/faculty/mcq/${id}/edit`); }} />

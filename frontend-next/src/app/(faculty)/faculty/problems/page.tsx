@@ -34,6 +34,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
+import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
 import { ImportWizard } from "@/components/faculty/ImportWizard";
@@ -554,6 +555,7 @@ export default function FacultyProblemsPage() {
       )}
 
       {/* Table */}
+      <Reveal>
       <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
         <TableContainer sx={{ overflowX: "auto" }}>
           <Table aria-label="Problems" sx={{ minWidth: 640 }}>
@@ -650,6 +652,7 @@ export default function FacultyProblemsPage() {
           </Table>
         </TableContainer>
       </Card>
+      </Reveal>
 
       <ProblemDialog open={dialogOpen} editing={editing} onClose={() => setDialogOpen(false)} onSaved={fetchProblems} toast={showToast} />
       <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} onPublished={fetchProblems} />

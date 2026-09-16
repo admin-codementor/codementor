@@ -18,6 +18,8 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
+import { interactiveSurfaceSx } from "@/components/ui/interactive";
+import { Reveal } from "@/components/ui/motion";
 
 interface OverviewRow {
   id: string;
@@ -73,6 +75,7 @@ export default function FacultyPlagiarismOverviewPage() {
           <EmptyState icon={<PolicyOutlinedIcon />} title="No assignments yet" description="Create one to run plagiarism checks." />
         </Card>
       ) : (
+        <Reveal>
         <Stack spacing={3}>
           {scanned > 0 && (
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 2fr" }, gap: 3 }}>
@@ -127,8 +130,7 @@ export default function FacultyPlagiarismOverviewPage() {
                   borderColor: "outlineVariant",
                   textDecoration: "none",
                   color: "inherit",
-                  transition: "border-color 150ms",
-                  "&:hover": { borderColor: "primary.main" },
+                  ...interactiveSurfaceSx,
                 }}
               >
                 <CardContent sx={{ display: "flex", alignItems: "center", gap: 2, "&:last-child": { pb: 2 } }}>
@@ -153,6 +155,7 @@ export default function FacultyPlagiarismOverviewPage() {
             ))}
           </Stack>
         </Stack>
+        </Reveal>
       )}
     </Box>
   );
