@@ -31,6 +31,7 @@ import { AuthoringShell, CheckLine, type SaveState, type AuthoringStep } from "@
 import {
   McqQuestionEditor, type McqQuestion, newQuestionKey, isMcqQuestionComplete,
 } from "@/components/faculty/McqQuestionEditor";
+import { QuickCreateProblemForm, type QuickCreatedProblem } from "@/components/faculty/QuickCreateProblemForm";
 
 interface PickableProblem { id: string; title: string; difficulty: string; tags: string[]; status?: string }
 interface ClassOption { id: string; name: string; department: string | null; section: string | null; member_count: number }
@@ -59,7 +60,7 @@ function toLocalInput(iso: string) {
 // pattern the MCQ and assignment builders already use — just scoped per
 // section instead of per whole test. ────────────────────────────────────────
 function SectionCard({
-  examId, section, index, total, allProblems, onDeleted, onMove, onSaveStateChange, onContentCountChange,
+  examId, section, index, total, allProblems, onDeleted, onMove, onSaveStateChange, onContentCountChange, onProblemCreated,
 }: {
   examId: string;
   section: RawSection;
@@ -70,6 +71,7 @@ function SectionCard({
   onMove: (delta: number) => void;
   onSaveStateChange: (s: SaveState) => void;
   onContentCountChange: (count: number) => void;
+  onProblemCreated: (problem: PickableProblem) => void;
 }) {
   const toast = useToast();
   const confirm = useConfirm();
@@ -88,6 +90,7 @@ function SectionCard({
   const [problemIds, setProblemIds] = React.useState<string[]>(() => (section.problems ?? []).map((p) => p.id));
   const [search, setSearch] = React.useState("");
   const [expanded, setExpanded] = React.useState(true);
+  const [creatingProblem, setCreatingProblem] = React.useState(false);
 
   const questionsRef = React.useRef(questions);
   const problemIdsRef = React.useRef(problemIds);
@@ -166,6 +169,12 @@ function SectionCard({
     setProblemIds(next);
     if (problemsTimer.current) clearTimeout(problemsTimer.current);
     problemsTimer.current = setTimeout(() => saveProblems(problemIdsRef.current), 500);
+  };
+
+  const handleProblemCreated = (problem: QuickCreatedProblem) => {
+    onProblemCreated(problem);
+    toggleProblem(problem.id);
+    setCreatingProblem(false);
   };
 
   React.useEffect(() => () => {
@@ -263,10 +272,20 @@ function SectionCard({
             ) : (
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3 }}>
                 <Box>
-                  <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
+                  <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1 }}>
                     <Typography variant="overline" color="text.secondary">Available problems</Typography>
-                    <SearchField value={search} onChange={setSearch} placeholder="Title or tag" />
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <SearchField value={search} onChange={setSearch} placeholder="Title or tag" />
+                      {!creatingProblem && (
+                        <Button size="small" startIcon={<AddIcon />} onClick={() => setCreatingProblem(true)}>
+                          New problem
+                        </Button>
+                      )}
+                    </Stack>
                   </Stack>
+                  {creatingProblem && (
+                    <QuickCreateProblemForm onCreated={handleProblemCreated} onCancel={() => setCreatingProblem(false)} />
+                  )}
                   <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 300, overflowY: "auto" }}>
                     {visibleProblems.length === 0 ? (
                       <EmptyState
@@ -551,6 +570,7 @@ export default function ExamBuilderPage() {
                 onMove={(delta) => moveSection(i, delta)}
                 onSaveStateChange={setSaveState}
                 onContentCountChange={(count) => setContentCounts((c) => ({ ...c, [s.id]: count }))}
+                onProblemCreated={(p) => setProblems((prev) => [...prev, p])}
               />
             ))}
           </Stack>
