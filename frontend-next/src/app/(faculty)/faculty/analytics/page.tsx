@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
@@ -32,9 +33,18 @@ import { EmptyState } from "@/components/ui/States";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import {
   KpiTile, ActivityHeatmap, TrendChart, StudentScatter, DistributionChart,
-  TopicRadar, FunnelChart, TestCaseHeatmap, ItemAnalysisScatter, RankedBars, RiskChips, VerdictDonut,
+  TestCaseHeatmap, ItemAnalysisScatter, RankedBars, RiskChips, VerdictDonut,
 } from "@/components/faculty/analytics/Panels";
 import { SwapFade } from "@/components/ui/motion";
+
+// Only needed once a cohort/problem is drilled into — dynamically imported so
+// @nivo/radar and @nivo/funnel aren't in the bundle for every analytics page load.
+const TopicRadar = dynamic(() => import("@/components/faculty/analytics/TopicRadar"), {
+  loading: () => <Skeleton variant="rounded" height={300} />,
+});
+const FunnelChart = dynamic(() => import("@/components/faculty/analytics/FunnelChart"), {
+  loading: () => <Skeleton variant="rounded" height={260} />,
+});
 
 type Dim = "department" | "year" | "section";
 type OverviewTab = "pulse" | "cohorts" | "problems";
@@ -93,6 +103,10 @@ export default function FacultyAnalyticsPage() {
   const [error, setError] = React.useState("");
   const [atRisk, setAtRisk] = React.useState<AtRiskRow[] | null>(null);
   const [topPerformers, setTopPerformers] = React.useState<TopPerformerRow[] | null>(null);
+  // Only true once (loads independently of dimension/days below), so it stops
+  // gating the page after the first successful load — later filter changes
+  // only wait on the overview reload, not on data that never changes.
+  const [supplementaryLoaded, setSupplementaryLoaded] = React.useState(false);
 
   // Drill-down targets. Only one is ever set.
   const [cohort, setCohort] = React.useState<string | null>(null);
@@ -126,12 +140,16 @@ export default function FacultyAnalyticsPage() {
   React.useEffect(() => {
     // Not scoped by dimension/days like the overview — same population, whole
     // time range — so this loads once rather than on every filter change.
-    api.get("/api/faculty/analytics/at-risk")
-      .then((r) => { if (r.data?.success) setAtRisk(r.data.data); })
-      .catch(() => { /* supplementary panel; the section explains itself when empty */ });
-    api.get("/api/faculty/analytics/top-performers?limit=10")
-      .then((r) => { if (r.data?.success) setTopPerformers(r.data.data); })
-      .catch(() => { /* supplementary panel; the section explains itself when empty */ });
+    // Settled together (not two independent .then chains) so the KPI/heatmap
+    // skeleton doesn't clear before these tables are ready to show, which was
+    // popping them in late and shifting the layout underneath.
+    Promise.allSettled([
+      api.get("/api/faculty/analytics/at-risk"),
+      api.get("/api/faculty/analytics/top-performers?limit=10"),
+    ]).then(([atRiskRes, topRes]) => {
+      if (atRiskRes.status === "fulfilled" && atRiskRes.value.data?.success) setAtRisk(atRiskRes.value.data.data);
+      if (topRes.status === "fulfilled" && topRes.value.data?.success) setTopPerformers(topRes.value.data.data);
+    }).finally(() => setSupplementaryLoaded(true));
   }, []);
   React.useEffect(() => {
     api.get("/api/mcq/tests")
@@ -203,7 +221,7 @@ export default function FacultyAnalyticsPage() {
 
       {error && <Alert severity="error" sx={{ mb: 2 }} action={<Button color="inherit" size="small" onClick={load}>Retry</Button>}>{error}</Alert>}
 
-      {loading ? (
+      {loading || !supplementaryLoaded ? (
         <Stack spacing={2}>
           <Skeleton variant="rounded" height={96} />
           <Skeleton variant="rounded" height={300} />

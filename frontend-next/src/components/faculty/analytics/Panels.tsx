@@ -10,8 +10,6 @@ import { ResponsiveBar } from "@nivo/bar";
 import { ResponsiveLine } from "@nivo/line";
 import { ResponsiveHeatMap } from "@nivo/heatmap";
 import { ResponsiveScatterPlot } from "@nivo/scatterplot";
-import { ResponsiveRadar } from "@nivo/radar";
-import { ResponsiveFunnel } from "@nivo/funnel";
 import { ResponsivePie } from "@nivo/pie";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { TrendingUpIcon, TrendingDownIcon } from "@/components/ui/icons";
@@ -342,51 +340,9 @@ export function BoxPlotRow({
 }
 
 /** Topic mastery across a cohort. */
-export function TopicRadar({ topics }: { topics: { topic: string; accuracy: number }[] }) {
-  const theme = useNivoTheme();
-  const colors = useChartColors();
-  if (topics.length < 3) {
-    return <Typography variant="body2" color="text.secondary">Needs at least three topics with activity.</Typography>;
-  }
-  return (
-    <Box sx={{ height: 300 }}>
-      <ResponsiveRadar
-        data={topics.map((t) => ({ topic: t.topic, accuracy: t.accuracy }))}
-        keys={["accuracy"]}
-        indexBy="topic"
-        maxValue={100}
-        margin={{ top: 40, right: 60, bottom: 30, left: 60 }}
-        theme={theme}
-        colors={[colors[2]]}
-        fillOpacity={0.2}
-        borderWidth={2}
-        gridLabelOffset={12}
-        dotSize={6}
-      />
-    </Box>
-  );
-}
-
-/** Nested stages: in scope → attempted → solved. */
-export function FunnelChart({ stages }: { stages: { stage: string; value: number }[] }) {
-  const theme = useNivoTheme();
-  const colors = useChartColors();
-  return (
-    <Box sx={{ height: 260 }}>
-      <ResponsiveFunnel
-        data={stages.map((s) => ({ id: s.stage, value: s.value, label: `${s.stage} (${s.value})` }))}
-        margin={{ top: 16, right: 24, bottom: 16, left: 24 }}
-        theme={theme}
-        colors={[colors[0], colors[1], colors[2]]}
-        borderWidth={0}
-        labelColor={{ from: "color", modifiers: [["darker", 3]] }}
-        beforeSeparatorLength={0}
-        afterSeparatorLength={0}
-        currentPartSizeExtension={8}
-      />
-    </Box>
-  );
-}
+// TopicRadar and FunnelChart moved to their own modules (dynamically imported
+// from the analytics page) so @nivo/radar and @nivo/funnel only load when a
+// cohort or problem is actually drilled into, not on every analytics page load.
 
 /** Per-test-case failure hotspots for one problem. */
 export function TestCaseHeatmap({
