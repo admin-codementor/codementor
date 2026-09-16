@@ -23,6 +23,7 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
+import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 
 interface Classroom {
@@ -231,6 +232,7 @@ export default function FacultyClassesPage() {
           <EmptyState icon={<SchoolOutlinedIcon />} title="No classes yet" description="Create one above to get started." />
         </Card>
       ) : (
+        <Reveal>
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 2 }}>
           {classes.map((c) => (
             <Card key={c.id} variant="outlined" sx={{ borderColor: "outlineVariant" }}>
@@ -272,6 +274,7 @@ export default function FacultyClassesPage() {
             </Card>
           ))}
         </Box>
+        </Reveal>
       )}
 
       <MembersDialog classroom={viewing} onClose={() => setViewing(null)} />

@@ -621,7 +621,7 @@ export default function ContestsPage() {
                               borderRadius: 2,
                               border: "1px solid",
                               borderColor: "outlineVariant",
-                              "&:hover": { borderColor: "primary.main", bgcolor: "action.hover" },
+                              "&:hover": { borderColor: "primary.main", bgcolor: "surfaceContainerHigh" },
                             }}
                           >
                             <Typography variant="caption" sx={{ fontFamily: "ui-monospace, monospace", color: "text.secondary", width: 20 }}>
