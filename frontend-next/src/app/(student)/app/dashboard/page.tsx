@@ -23,6 +23,7 @@ import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
 import { Reveal } from "@/components/ui/motion";
 import { StatCard } from "@/components/ui/StatCard";
+import { shape } from "@/theme/tokens";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
@@ -322,7 +323,7 @@ export default function DashboardPage() {
         sx={{
           mb: 3,
           p: { xs: 2.5, sm: 3.5 },
-          borderRadius: 4,
+          borderRadius: `${shape.extraLarge}px`,
           color: "onPrimaryContainer",
           background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 12%, var(--mui-palette-primaryContainer)))",
           boxShadow: "0 8px 24px color-mix(in srgb, var(--mui-palette-primaryContainer) 45%, transparent)",
