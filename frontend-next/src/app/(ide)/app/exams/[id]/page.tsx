@@ -509,14 +509,14 @@ export default function StudentExamPage() {
           </Tabs>
         </AppBar>
 
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1, bgcolor: "secondaryContainer", color: "onSecondaryContainer", borderBottom: "1px solid", borderColor: "outlineVariant" }}>
+        <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1.5, px: 2, py: 1, bgcolor: "secondaryContainer", color: "onSecondaryContainer", borderBottom: "1px solid", borderColor: "outlineVariant" }}>
           <ShieldOutlinedIcon fontSize="small" />
-          <Typography variant="body2" fontWeight={600}>Proctored Exam</Typography>
-          <Typography variant="caption" sx={{ opacity: 0.9 }}>
+          <Typography variant="body2" fontWeight={600} sx={{ flexShrink: 0 }}>Proctored Exam</Typography>
+          <Typography variant="caption" sx={{ opacity: 0.9, flex: "1 1 200px" }}>
             Stay in fullscreen and don&apos;t switch tabs — this exam is proctored.
           </Typography>
           {!proctor.fullscreen && (
-            <Button size="small" variant="contained" color="primary" startIcon={<FullscreenIcon />} onClick={proctor.requestFullscreen} sx={{ ml: "auto" }}>
+            <Button size="small" variant="contained" color="primary" startIcon={<FullscreenIcon />} onClick={proctor.requestFullscreen} sx={{ ml: "auto", whiteSpace: "nowrap", flexShrink: 0 }}>
               Enter fullscreen
             </Button>
           )}
@@ -640,26 +640,31 @@ export default function StudentExamPage() {
 
         <Box
           sx={{
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 2,
-            px: 2, py: 1.25, borderTop: "1px solid", borderColor: "outlineVariant",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: { xs: 1, sm: 2 },
+            px: { xs: 1, sm: 2 }, py: 1.25, borderTop: "1px solid", borderColor: "outlineVariant",
             bgcolor: "surfaceContainer", flexShrink: 0,
           }}
         >
           <Button
+            size="small"
             startIcon={<ChevronLeftIcon />}
             onClick={() => goToOffset(-1)}
             disabled={currentFlatIndex <= 0}
+            sx={{ flexShrink: 0 }}
           >
             Previous
           </Button>
-          <Typography variant="caption" color="text.secondary">
-            Question {currentFlatIndex < 0 ? 1 : currentFlatIndex + 1} of {flatItems.length}
+          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
+            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Question </Box>
+            {currentFlatIndex < 0 ? 1 : currentFlatIndex + 1} of {flatItems.length}
           </Typography>
           <Button
+            size="small"
             endIcon={<ChevronRightIcon />}
             variant="contained"
             onClick={() => goToOffset(1)}
             disabled={currentFlatIndex >= 0 && currentFlatIndex >= flatItems.length - 1}
+            sx={{ flexShrink: 0 }}
           >
             Next
           </Button>
