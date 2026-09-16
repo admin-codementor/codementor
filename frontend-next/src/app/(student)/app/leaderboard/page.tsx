@@ -16,6 +16,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
+import { useTheme } from "@mui/material/styles";
 import { EmojiEventsOutlinedIcon, MilitaryTechOutlinedIcon, LocalFireDepartmentOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
@@ -25,6 +26,7 @@ import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { RatingBadge } from "@/components/ui/RatingBadge";
 import { EmptyState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
+import { medalColors } from "@/theme/tokens";
 
 interface LeaderboardEntry {
   id: string;
@@ -49,22 +51,20 @@ interface RatingEntry {
 type Board = "solved" | "rating";
 
 // Metallic medal accents for the top-3 podium. Gold maps to the theme's warning
-// role; silver/bronze have no theme equivalent, so they live here as documented
-// constants rather than magic hex inline (same convention as RatingBadge's tiers).
-const MEDAL = {
-  gold: "var(--mui-palette-warning-main)",
-  silver: "#9CA3AF",
-  bronze: "#B45309",
-} as const;
+// role; silver/bronze are scheme-aware tokens from theme/tokens.ts (see
+// ratingTierColors' doc comment for why they're not reused from another role).
+const GOLD = "var(--mui-palette-warning-main)";
 
 function avatarInitials(name: string) {
   return name.slice(0, 2).toUpperCase();
 }
 
 function RankCell({ rank }: { rank: number }) {
-  if (rank === 1) return <EmojiEventsOutlinedIcon sx={{ color: MEDAL.gold }} />;
-  if (rank === 2) return <MilitaryTechOutlinedIcon sx={{ color: MEDAL.silver }} />;
-  if (rank === 3) return <MilitaryTechOutlinedIcon sx={{ color: MEDAL.bronze }} />;
+  const mode = useTheme().palette.mode;
+  const medal = medalColors[mode];
+  if (rank === 1) return <EmojiEventsOutlinedIcon sx={{ color: GOLD }} />;
+  if (rank === 2) return <MilitaryTechOutlinedIcon sx={{ color: medal.silver }} />;
+  if (rank === 3) return <MilitaryTechOutlinedIcon sx={{ color: medal.bronze }} />;
   return (
     <Typography
       component="span"
@@ -96,6 +96,7 @@ function YouChip() {
 }
 
 export default function LeaderboardPage() {
+  const medal = medalColors[useTheme().palette.mode];
   const [board, setBoard] = React.useState<Board>("solved");
   const [search, setSearch] = React.useState("");
   const [dept, setDept] = React.useState("all");
@@ -189,9 +190,9 @@ export default function LeaderboardPage() {
               }}
             >
               {[
-                { entry: data[1], place: 2, height: 88, color: MEDAL.silver },
-                { entry: data[0], place: 1, height: 120, color: MEDAL.gold },
-                { entry: data[2], place: 3, height: 72, color: MEDAL.bronze },
+                { entry: data[1], place: 2, height: 88, color: medal.silver },
+                { entry: data[0], place: 1, height: 120, color: GOLD },
+                { entry: data[2], place: 3, height: 72, color: medal.bronze },
               ].map(({ entry, place, height, color }) => {
                 if (!entry) return null;
                 const isMe = String(entry.id) === currentUserId;

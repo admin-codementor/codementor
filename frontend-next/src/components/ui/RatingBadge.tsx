@@ -3,6 +3,8 @@
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
+import { useTheme } from "@mui/material/styles";
+import { ratingTierColors, type RatingTierColors } from "@/theme/tokens";
 
 // Codeforces-style rating tiers. Higher rating == cooler tier.
 //   < 1200          Newbie     gray
@@ -16,13 +18,13 @@ interface Tier {
   color: string;
 }
 
-function tierFor(rating: number): Tier {
-  if (rating < 1200) return { label: "Newbie", color: "#8B949E" };
-  if (rating < 1400) return { label: "Pupil", color: "#3FB950" };
-  if (rating < 1600) return { label: "Specialist", color: "#22D3EE" };
-  if (rating < 1900) return { label: "Expert", color: "#58A6FF" };
-  if (rating < 2200) return { label: "Candidate", color: "#A371F7" };
-  return { label: "Master", color: "#F97316" };
+function tierFor(rating: number, colors: RatingTierColors): Tier {
+  if (rating < 1200) return { label: "Newbie", color: colors.newbie };
+  if (rating < 1400) return { label: "Pupil", color: colors.pupil };
+  if (rating < 1600) return { label: "Specialist", color: colors.specialist };
+  if (rating < 1900) return { label: "Expert", color: colors.expert };
+  if (rating < 2200) return { label: "Candidate", color: colors.candidate };
+  return { label: "Master", color: colors.master };
 }
 
 /**
@@ -31,8 +33,9 @@ function tierFor(rating: number): Tier {
  * name is exposed via tooltip + aria-label.
  */
 export function RatingBadge({ rating }: { rating: number }) {
+  const mode = useTheme().palette.mode;
   const safe = Number.isFinite(rating) ? Math.round(rating) : 1200;
-  const tier = tierFor(safe);
+  const tier = tierFor(safe, ratingTierColors[mode]);
 
   return (
     <Tooltip title={`${tier.label} · ${safe}`} arrow>
