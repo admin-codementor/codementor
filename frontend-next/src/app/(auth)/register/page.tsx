@@ -18,6 +18,7 @@ import InputAdornment from "@mui/material/InputAdornment";
 import Alert from "@mui/material/Alert";
 import Link from "@mui/material/Link";
 import LinearProgress from "@mui/material/LinearProgress";
+import { shape } from "@/theme/tokens";
 import { CodeIcon, SchoolOutlinedIcon, VisibilityIcon as Visibility, VisibilityOffIcon as VisibilityOff } from "@/components/ui/icons";
 import { setSession, homeForRole } from "@/lib/auth";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -115,7 +116,7 @@ export default function RegisterPage() {
               sx={{
                 width: 40,
                 height: 40,
-                borderRadius: 2.5,
+                borderRadius: `${shape.large}px`,
                 display: "grid",
                 placeItems: "center",
                 bgcolor: "primary.main",
@@ -136,7 +137,7 @@ export default function RegisterPage() {
           </Typography>
         </Stack>
 
-        <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, borderRadius: 4, borderColor: "outlineVariant" }}>
+        <Paper variant="outlined" sx={{ p: { xs: 3, sm: 4 }, borderRadius: `${shape.extraLarge}px`, borderColor: "outlineVariant" }}>
           {error && (
             <Alert severity="error" sx={{ mb: 3 }} role="alert">
               {error}

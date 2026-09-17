@@ -18,6 +18,7 @@ import Divider from "@mui/material/Divider";
 import Alert from "@mui/material/Alert";
 import Link from "@mui/material/Link";
 import { MailOutlineIcon, LockOutlinedIcon, ArrowBackIcon } from "@/components/ui/icons";
+import { shape } from "@/theme/tokens";
 import { setSession, homeForRole } from "@/lib/auth";
 import type { AuthSuccess } from "@/lib/types";
 import { ThemeToggle } from "@/components/ThemeToggle";
@@ -147,7 +148,7 @@ export default function LoginPage() {
               width: "100%",
               maxWidth: 420,
               p: { xs: 3, sm: 4 },
-              borderRadius: 4,
+              borderRadius: `${shape.extraLarge}px`,
               borderColor: "outlineVariant",
             }}
           >
