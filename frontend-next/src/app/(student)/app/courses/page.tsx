@@ -20,6 +20,7 @@ import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
+import { shape } from "@/theme/tokens";
 import type { CourseSummary } from "@/lib/types";
 
 const SORTS = ["Progress", "Title (A–Z)", "Most problems"] as const;
@@ -36,7 +37,7 @@ function CourseCard({ course }: { course: CourseSummary }) {
             sx={{
               width: 44,
               height: 44,
-              borderRadius: 2.5,
+              borderRadius: `${shape.large}px`,
               display: "grid",
               placeItems: "center",
               color: "onPrimaryContainer",

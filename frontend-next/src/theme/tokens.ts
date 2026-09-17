@@ -180,6 +180,53 @@ export const darkScheme: M3ColorScheme = {
   scrim: "#000000",
 };
 
+export interface RatingTierColors {
+  newbie: string;
+  pupil: string;
+  specialist: string;
+  expert: string;
+  candidate: string;
+  master: string;
+}
+
+/**
+ * Codeforces-style rating-tier accents, extended from the M3 seed rather than
+ * reused from an existing role — reusing e.g. `ai` or `tertiary` here would
+ * make an unrelated surface change color as a side effect of a rating tier.
+ * Resolve per scheme the same way `nivo.tsx` resolves chart colors (concrete
+ * hex, not CSS vars, since these are picked in JS via a numeric rating).
+ */
+export const ratingTierColors: { light: RatingTierColors; dark: RatingTierColors } = {
+  light: {
+    newbie: "#6B7280",
+    pupil: "#1E8E3E",
+    specialist: "#0E7490",
+    expert: "#1D4ED8",
+    candidate: "#7C3AED",
+    master: "#C2410C",
+  },
+  dark: {
+    newbie: "#9CA3AF",
+    pupil: "#4ADE80",
+    specialist: "#22D3EE",
+    expert: "#60A5FA",
+    candidate: "#C4B5FD",
+    master: "#FB923C",
+  },
+};
+
+export interface MedalColors {
+  silver: string;
+  bronze: string;
+}
+
+/** Silver/bronze podium accents — gold maps to the `warning` role instead,
+ * since it already exists and fits. See {@link ratingTierColors}. */
+export const medalColors: { light: MedalColors; dark: MedalColors } = {
+  light: { silver: "#6B7280", bronze: "#B45309" },
+  dark: { silver: "#D1D5DB", bronze: "#F0A868" },
+};
+
 /** M3 type scale (px sizes / line-heights / weights). */
 export const typeScale = {
   fontFamily:

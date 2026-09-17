@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import Box from "@mui/material/Box";
+import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
@@ -13,78 +14,103 @@ import { ResponsiveScatterPlot } from "@nivo/scatterplot";
 import { ResponsiveRadar } from "@nivo/radar";
 import { ResponsiveFunnel } from "@nivo/funnel";
 import { ResponsivePie } from "@nivo/pie";
+import { useTheme } from "@mui/material/styles";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { TrendingUpIcon, TrendingDownIcon } from "@/components/ui/icons";
+import { shape, lightScheme, darkScheme } from "@/theme/tokens";
 
-/** Compact KPI with a period-over-period delta and an inline sparkline. Pass
- * `hero` for the one lead tile a view wants to draw the eye to first (Von
- * Restorff) — a tonal gradient fill instead of the plain bordered box. */
+type Accent = "primary" | "secondary" | "tertiary" | "success" | "warning" | "error";
+
+/** KPI tile matching StatCard's icon-tile visual language (same tonal-gradient
+ * icon container, same Card shell), extended with the period-over-period delta
+ * and inline sparkline analytics needs — which is why this isn't StatCard
+ * itself: adding a chart to StatCard would pull nivo into every page that uses
+ * it, not just this one. */
 export function KpiTile({
-  label, value, delta, series, suffix, help, hero = false,
+  icon, label, value, delta, series, suffix, help, accent = "primary",
 }: {
+  icon: React.ReactNode;
   label: string;
   value: number | string;
   delta?: number | null;
   series?: number[];
   suffix?: string;
   help?: string;
-  hero?: boolean;
+  accent?: Accent;
 }) {
   const colors = useChartColors();
   const up = (delta ?? 0) > 0;
   const flat = delta === 0 || delta == null;
-  const sparkColor = hero ? "var(--mui-palette-onPrimaryContainer)" : colors[0];
+
+  const containerKey =
+    accent === "tertiary"
+      ? { bg: "tertiaryContainer", fg: "onTertiaryContainer" }
+      : accent === "success"
+        ? { bg: "successContainer", fg: "onSuccessContainer" }
+        : accent === "warning"
+          ? { bg: "warningContainer", fg: "onWarningContainer" }
+          : accent === "error"
+            ? { bg: "errorContainer", fg: "onErrorContainer" }
+            : accent === "secondary"
+              ? { bg: "secondaryContainer", fg: "onSecondaryContainer" }
+              : { bg: "primaryContainer", fg: "onPrimaryContainer" };
 
   return (
-    <Box
-      sx={
-        hero
-          ? {
-              p: 2,
-              borderRadius: 3,
-              minWidth: 0,
-              color: "onPrimaryContainer",
-              background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 20%, var(--mui-palette-primaryContainer)))",
-              boxShadow: "0 6px 16px color-mix(in srgb, var(--mui-palette-primaryContainer) 55%, transparent)",
-            }
-          : { p: 2, border: "1px solid", borderColor: "outlineVariant", borderRadius: 3, minWidth: 0 }
-      }
-    >
-      <Tooltip title={help ?? ""}>
-        <Typography
-          variant="caption"
-          sx={{ display: "block", textTransform: "uppercase", letterSpacing: 0.4, color: hero ? "inherit" : "text.secondary", opacity: hero ? 0.85 : 1 }}
-        >
-          {label}
-        </Typography>
-      </Tooltip>
-      <Stack direction="row" alignItems="baseline" spacing={1} sx={{ mt: 0.5 }}>
-        <Typography variant="h5" fontWeight={600}>{value}{suffix}</Typography>
-        {!flat && (
-          <Stack direction="row" alignItems="center" spacing={0.25} sx={{ color: hero ? "inherit" : up ? "success.main" : "error.main", opacity: hero && !up ? 0.85 : 1 }}>
-            {up ? <TrendingUpIcon sx={{ fontSize: 15 }} /> : <TrendingDownIcon sx={{ fontSize: 15 }} />}
-            <Typography variant="caption" fontWeight={600}>{Math.abs(delta as number)}%</Typography>
-          </Stack>
+    <Card variant="outlined" sx={{ borderColor: "outlineVariant", height: "100%" }}>
+      <Box sx={{ p: 2.5, height: "100%" }}>
+        <Stack direction="row" spacing={2} alignItems="center">
+          <Box
+            aria-hidden
+            sx={{
+              width: 48,
+              height: 48,
+              borderRadius: `${shape.large}px`,
+              flexShrink: 0,
+              display: "grid",
+              placeItems: "center",
+              color: containerKey.fg,
+              background: `linear-gradient(135deg, var(--mui-palette-${containerKey.bg}), color-mix(in srgb, var(--mui-palette-${containerKey.fg}) 16%, var(--mui-palette-${containerKey.bg})))`,
+              boxShadow: `0 4px 12px color-mix(in srgb, var(--mui-palette-${containerKey.bg}) 55%, transparent)`,
+            }}
+          >
+            {icon}
+          </Box>
+          <Box sx={{ minWidth: 0, flex: 1 }}>
+            <Tooltip title={help ?? ""}>
+              <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.4 }}>
+                {label}
+              </Typography>
+            </Tooltip>
+            <Stack direction="row" alignItems="baseline" spacing={1}>
+              <Typography variant="h5" fontWeight={600} sx={{ lineHeight: 1.2 }}>{value}{suffix}</Typography>
+              {!flat && (
+                <Stack direction="row" alignItems="center" spacing={0.25} sx={{ color: up ? "success.main" : "error.main" }}>
+                  {up ? <TrendingUpIcon sx={{ fontSize: 15 }} /> : <TrendingDownIcon sx={{ fontSize: 15 }} />}
+                  <Typography variant="caption" fontWeight={600}>{Math.abs(delta as number)}%</Typography>
+                </Stack>
+              )}
+            </Stack>
+          </Box>
+        </Stack>
+        {series && series.length > 1 && (
+          <Box sx={{ height: 28, mt: 1, mx: -0.5 }}>
+            <ResponsiveLine
+              data={[{ id: label, data: series.map((y, i) => ({ x: i, y })) }]}
+              margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
+              colors={[colors[0]]}
+              enablePoints={false}
+              enableGridX={false}
+              enableGridY={false}
+              axisLeft={null}
+              axisBottom={null}
+              isInteractive={false}
+              curve="monotoneX"
+              lineWidth={2}
+            />
+          </Box>
         )}
-      </Stack>
-      {series && series.length > 1 && (
-        <Box sx={{ height: 34, mt: 0.5, mx: -0.5 }}>
-          <ResponsiveLine
-            data={[{ id: label, data: series.map((y, i) => ({ x: i, y })) }]}
-            margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
-            colors={[sparkColor]}
-            enablePoints={false}
-            enableGridX={false}
-            enableGridY={false}
-            axisLeft={null}
-            axisBottom={null}
-            isInteractive={false}
-            curve="monotoneX"
-            lineWidth={2}
-          />
-        </Box>
-      )}
-    </Box>
+      </Box>
+    </Card>
   );
 }
 
@@ -93,6 +119,7 @@ const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 /** When work actually happens — the rhythm a totals chart can't show. */
 export function ActivityHeatmap({ grid }: { grid: number[][] }) {
   const theme = useNivoTheme();
+  const s = useTheme().palette.mode === "dark" ? darkScheme : lightScheme;
   const data = React.useMemo(() => {
     // Most cohorts are only ever active in a handful of hours (a lab slot, an
     // evening study window). Showing all 24 turns the grid into mostly-empty
@@ -116,14 +143,18 @@ export function ActivityHeatmap({ grid }: { grid: number[][] }) {
         margin={{ top: 24, right: 16, bottom: 28, left: 44 }}
         valueFormat=">-.0f"
         theme={theme}
-        colors={{ type: "sequential", scheme: "blues", minValue: 0, maxValue: max }}
+        // Same primary-hue ramp as the dashboard's ActivityHeatmap, not nivo's
+        // built-in "blues" scheme — that was a fixed light-mode-only palette.
+        colors={{ type: "sequential", colors: [s.surfaceContainerHighest, s.primary], minValue: 0, maxValue: max }}
         emptyColor="transparent"
         borderRadius={2}
         borderWidth={1}
-        borderColor="rgba(0,0,0,0.04)"
+        borderColor={`color-mix(in srgb, ${s.outline} 15%, transparent)`}
         axisTop={{ tickSize: 0, tickPadding: 6, tickRotation: 0, legend: "", truncateTickAt: 0 }}
         axisLeft={{ tickSize: 0, tickPadding: 6 }}
-        labelTextColor="rgba(0,0,0,0.75)"
+        // Cells above the midpoint sit on the solid `primary` end of the ramp
+        // and need light text; paler cells below it need the normal dark text.
+        labelTextColor={(cell) => ((cell.value ?? 0) > max / 2 ? s.onPrimary : s.onSurfaceVariant)}
         hoverTarget="cell"
         animate={false}
       />

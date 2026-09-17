@@ -21,7 +21,7 @@ import TableCell from "@mui/material/TableCell";
 import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
-import { ChevronRightIcon } from "@/components/ui/icons";
+import { ChevronRightIcon, AssignmentOutlinedIcon, CheckCircleOutlinedIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, BoltOutlinedIcon, WarningAmberOutlinedIcon, CancelOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { getUser } from "@/lib/auth";
@@ -239,19 +239,22 @@ export default function FacultyAnalyticsPage() {
               {/* ── KPI row ── */}
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
                 <KpiTile
-                  hero
+                  icon={<AssignmentOutlinedIcon />}
                   label="Submissions" value={overview.kpis.submissions.value} delta={overview.kpis.submissions.delta}
                   series={overview.daily.map((d) => d.subs)} help="In the selected period, versus the period before it."
                 />
                 <KpiTile
+                  icon={<CheckCircleOutlinedIcon />} accent="success"
                   label="Acceptance rate" value={overview.kpis.acRate.value} suffix="%" delta={overview.kpis.acRate.delta}
                   series={overview.daily.map((d) => (d.subs ? Math.round((d.ac / d.subs) * 100) : 0))}
                 />
                 <KpiTile
+                  icon={<GroupsOutlinedIcon />} accent="tertiary"
                   label="Active students" value={overview.kpis.activeStudents.value}
                   help="Submitted at least once in the period. No trend arrow — comparing to the previous period needs per-day membership the cache doesn't hold."
                 />
                 <KpiTile
+                  icon={<InsightsOutlinedIcon />} accent="secondary"
                   label="Engaged overall" value={`${overview.kpis.engagedStudents.value}/${overview.kpis.totalStudents.value}`}
                   help="Students who have ever submitted, out of everyone in scope."
                 />
@@ -579,10 +582,10 @@ function CohortView({ data, loading, onStudent }: { data: Record<string, unknown
   return (
     <Stack spacing={2.5}>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
-        <KpiTile label="Students" value={d.size} />
-        <KpiTile label="Active" value={d.summary.active} help="Have submitted at least once." />
-        <KpiTile label="Acceptance rate" value={d.summary.acRate} suffix="%" />
-        <KpiTile label="Needing attention" value={atRisk.length} help="Students with at least one risk signal." />
+        <KpiTile icon={<GroupsOutlinedIcon />} label="Students" value={d.size} />
+        <KpiTile icon={<BoltOutlinedIcon />} accent="tertiary" label="Active" value={d.summary.active} help="Have submitted at least once." />
+        <KpiTile icon={<CheckCircleOutlinedIcon />} accent="success" label="Acceptance rate" value={d.summary.acRate} suffix="%" />
+        <KpiTile icon={<WarningAmberOutlinedIcon />} accent="warning" label="Needing attention" value={atRisk.length} help="Students with at least one risk signal." />
       </Box>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
@@ -653,10 +656,10 @@ function ProblemView({ data, loading }: { data: Record<string, unknown> | null; 
   return (
     <Stack spacing={2.5}>
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
-        <KpiTile label="Attempted by" value={d.summary.attempters} />
-        <KpiTile label="Solved by" value={d.summary.solvers} />
-        <KpiTile label="Solve rate" value={d.summary.solveRate} suffix="%" help="Of the students who attempted it." />
-        <KpiTile label="Gave up" value={d.summary.gaveUp} help="Attempted but never got an accepted submission." />
+        <KpiTile icon={<AssignmentOutlinedIcon />} label="Attempted by" value={d.summary.attempters} />
+        <KpiTile icon={<CheckCircleOutlinedIcon />} accent="success" label="Solved by" value={d.summary.solvers} />
+        <KpiTile icon={<InsightsOutlinedIcon />} accent="tertiary" label="Solve rate" value={d.summary.solveRate} suffix="%" help="Of the students who attempted it." />
+        <KpiTile icon={<CancelOutlinedIcon />} accent="error" label="Gave up" value={d.summary.gaveUp} help="Attempted but never got an accepted submission." />
       </Box>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
