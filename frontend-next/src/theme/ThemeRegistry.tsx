@@ -10,6 +10,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import { theme } from "./theme";
 import { ToastProvider } from "@/components/feedback/ToastProvider";
 import { ConfirmProvider } from "@/components/feedback/ConfirmProvider";
+import { QueryProvider } from "@/lib/queryClient";
 
 /**
  * SSR-safe Emotion cache for the App Router (the standard
@@ -58,9 +59,11 @@ export default function ThemeRegistry({ children }: { children: React.ReactNode 
     <CacheProvider value={cache}>
       <ThemeProvider theme={theme} defaultMode="system">
         <CssBaseline enableColorScheme />
-        <ToastProvider>
-          <ConfirmProvider>{children}</ConfirmProvider>
-        </ToastProvider>
+        <QueryProvider>
+          <ToastProvider>
+            <ConfirmProvider>{children}</ConfirmProvider>
+          </ToastProvider>
+        </QueryProvider>
       </ThemeProvider>
     </CacheProvider>
   );

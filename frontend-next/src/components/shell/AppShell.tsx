@@ -26,8 +26,52 @@ import { useTheme } from "@mui/material/styles";
 import { MenuIcon, CodeIcon, LogoutIcon, PersonOutlineIcon } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { clearSession, getUser } from "@/lib/auth";
-import { SwapFade } from "@/components/ui/motion";
+import { NavigationProgress } from "@/components/ui/motion";
 import type { User } from "@/lib/types";
+
+/**
+ * Tracks in-flight client-side navigations for the top progress bar, without
+ * ever touching the page tree (see `NavigationProgress` in `motion.tsx` for why
+ * that matters). Listens for clicks on internal links and clears when the URL
+ * actually changes.
+ */
+function useNavigationProgress(pathname: string) {
+  const [active, setActive] = React.useState(false);
+
+  React.useEffect(() => {
+    setActive(false);
+  }, [pathname]);
+
+  React.useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+      const anchor = (e.target as HTMLElement)?.closest("a");
+      if (!anchor) return;
+      const href = anchor.getAttribute("href");
+      if (!href || href.startsWith("#") || anchor.target === "_blank") return;
+      let url: URL;
+      try {
+        url = new URL(href, window.location.href);
+      } catch {
+        return;
+      }
+      if (url.origin !== window.location.origin) return;
+      if (url.pathname + url.search === window.location.pathname + window.location.search) return;
+      setActive(true);
+    }
+    document.addEventListener("click", handleClick);
+    return () => document.removeEventListener("click", handleClick);
+  }, []);
+
+  // Safety net: never leave the bar stuck on if a navigation stalls/errors.
+  React.useEffect(() => {
+    if (!active) return;
+    const timeout = setTimeout(() => setActive(false), 4000);
+    return () => clearTimeout(timeout);
+  }, [active]);
+
+  return active;
+}
 
 export interface NavItem {
   label: string;
@@ -65,6 +109,7 @@ export function AppShell({
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const [user, setUser] = React.useState<User | null>(null);
+  const navProgressActive = useNavigationProgress(pathname);
 
   React.useEffect(() => setUser(getUser()), []);
   // Close the mobile drawer whenever the route changes.
@@ -271,9 +316,10 @@ export function AppShell({
       >
         <Toolbar aria-hidden />
         <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
-          <SwapFade swapKey={pathname}>{children}</SwapFade>
+          {children}
         </Box>
       </Box>
+      <NavigationProgress active={navProgressActive} />
     </Box>
   );
 }

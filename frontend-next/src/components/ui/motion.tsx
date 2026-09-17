@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Box from "@mui/material/Box";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
 
 const fadeUp: Variants = {
@@ -45,7 +46,16 @@ export function RevealItem({ children, style }: { children: React.ReactNode; sty
   );
 }
 
-/** Cross-fade between drill-down levels, keyed by a changing value. */
+/**
+ * Cross-fade between drill-down levels, keyed by a changing value.
+ *
+ * Deliberately NOT used for route navigation: `key`-ing on a value unmounts and
+ * remounts `children`, which is correct for swapping between drill-down levels
+ * (cohort → student, tab → tab) but wrong for page navigation — that would tear
+ * down and rebuild the whole page (state, effects, in-flight fetches) on every
+ * click. For "something is happening" feedback on navigation, use
+ * `NavigationProgress` instead, which never touches the page tree.
+ */
 export function SwapFade({ swapKey, children }: { swapKey: string | number; children: React.ReactNode }) {
   const reduce = useReducedMotion();
   if (reduce) return <>{children}</>;
@@ -58,5 +68,49 @@ export function SwapFade({ swapKey, children }: { swapKey: string | number; chil
     >
       {children}
     </motion.div>
+  );
+}
+
+/**
+ * Slim top-of-page progress bar for route navigation. Driven by `active`
+ * (owned by the caller, which watches link clicks + pathname changes) rather
+ * than by mounting/unmounting the page — this is a fixed-position overlay that
+ * never wraps or remounts `children`.
+ */
+export function NavigationProgress({ active }: { active: boolean }) {
+  const reduce = useReducedMotion();
+  return (
+    <Box
+      aria-hidden
+      sx={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        right: 0,
+        height: 3,
+        zIndex: (t) => t.zIndex.tooltip + 1,
+        overflow: "hidden",
+        pointerEvents: "none",
+        opacity: active ? 1 : 0,
+        transition: "opacity 200ms ease",
+      }}
+    >
+      {active && reduce && (
+        <Box sx={{ height: "100%", width: "100%", bgcolor: "primary.main" }} />
+      )}
+      {active && !reduce && (
+        <motion.div
+          style={{
+            height: "100%",
+            width: "30%",
+            borderRadius: 999,
+            background: "var(--mui-palette-primary-main)",
+          }}
+          initial={{ x: "-100%" }}
+          animate={{ x: "350%" }}
+          transition={{ duration: 1.1, ease: "easeInOut", repeat: Infinity }}
+        />
+      )}
+    </Box>
   );
 }
