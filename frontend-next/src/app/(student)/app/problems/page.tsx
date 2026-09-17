@@ -20,7 +20,6 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import { visuallyHidden } from "@mui/utils";
 import { CasinoOutlinedIcon, CheckCircleIcon, RadioButtonUncheckedIcon, ChevronLeftIcon, ChevronRightIcon, CodeOffOutlinedIcon, SignalLowIcon, SignalMediumIcon, SignalHighIcon } from "@/components/ui/icons";
-import api from "@/lib/api";
 import type { Problem } from "@/lib/types";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
@@ -30,6 +29,8 @@ import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
+import { useProblemsQuery, useSolvedProblemsQuery } from "@/lib/queries/problems";
+import { useDebouncedValue } from "@/lib/useDebouncedValue";
 
 const DIFFICULTY_FILTERS = ["All", "Easy", "Medium", "Hard"] as const;
 type DifficultyFilter = (typeof DIFFICULTY_FILTERS)[number];
@@ -38,13 +39,60 @@ const PER_PAGE = 50;
 const pidOf = (p: Problem) =>
   String((p as { _id?: string })._id || p.id || "");
 
+/** Memoized so clicking a difficulty filter (which re-renders the whole page
+ * while the fetch is still pending) doesn't force all ~50 rows to re-render —
+ * only rows whose own props actually changed do. */
+const ProblemRow = React.memo(function ProblemRow({
+  problem,
+  isSolved,
+}: {
+  problem: Problem;
+  isSolved: boolean;
+}) {
+  const pid = pidOf(problem);
+  return (
+    <TableRow hover sx={{ "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } }}>
+      <TableCell>
+        {isSolved ? (
+          <Tooltip title="Solved">
+            <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
+          </Tooltip>
+        ) : (
+          <RadioButtonUncheckedIcon fontSize="small" sx={{ color: "outline" }} />
+        )}
+        <Box component="span" sx={visuallyHidden}>
+          {isSolved ? "Solved" : "Not solved"}
+        </Box>
+      </TableCell>
+      <TableCell>
+        <Link
+          component={NextLink}
+          href={`/app/problems/${pid}`}
+          color="text.primary"
+          sx={{ fontWeight: 500, "&:hover": { color: "primary.main" } }}
+        >
+          {problem.title}
+        </Link>
+        {problem.tags && problem.tags.length > 0 && (
+          <Stack direction="row" spacing={0.75} sx={{ mt: 0.75, flexWrap: "wrap", gap: 0.75 }}>
+            {problem.tags.slice(0, 3).map((tag) => (
+              <TagChip key={tag} tag={tag} />
+            ))}
+          </Stack>
+        )}
+      </TableCell>
+      <TableCell>
+        <DifficultyChip difficulty={problem.difficulty} />
+      </TableCell>
+    </TableRow>
+  );
+});
+
 function ProblemsInner() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const [problems, setProblems] = React.useState<Problem[]>([]);
-  const [solved, setSolved] = React.useState<string[]>([]);
-  const [searchTerm, setSearchTerm] = React.useState(
+  const [searchInput, setSearchInput] = React.useState(
     () => searchParams.get("search") || searchParams.get("tag") || "",
   );
   const [difficulty, setDifficulty] = React.useState<DifficultyFilter>(() => {
@@ -53,50 +101,30 @@ function ProblemsInner() {
       DIFFICULTY_FILTERS.find((f) => f.toLowerCase() === d?.toLowerCase()) || "All"
     );
   });
-  const [loading, setLoading] = React.useState(true);
   const [page, setPage] = React.useState(1);
-  const [total, setTotal] = React.useState(0);
+  // Debounce only what goes into the query key — typing updates the field
+  // instantly, the request follows 300ms after typing stops.
+  const debouncedSearch = useDebouncedValue(searchInput, 300);
+
+  const problemsQuery = useProblemsQuery({ page, difficulty, search: debouncedSearch });
+  const solvedQuery = useSolvedProblemsQuery();
 
   React.useEffect(() => {
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const params: Record<string, string | number> = { page, limit: PER_PAGE };
-        if (searchTerm) params.search = searchTerm;
-        if (difficulty !== "All") params.difficulty = difficulty;
+    if (problemsQuery.error) console.error("Failed to load problems", problemsQuery.error);
+  }, [problemsQuery.error]);
 
-        const [probRes, solvedRes] = await Promise.allSettled([
-          api.get("/api/problems", { params }),
-          api.get("/api/student/solved-problems"),
-        ]);
-
-        if (probRes.status === "fulfilled") {
-          const resData = probRes.value.data.data || probRes.value.data;
-          if (Array.isArray(resData)) {
-            setProblems(resData);
-            setTotal(resData.length);
-          } else if (resData.problems?.length >= 0) {
-            setProblems(resData.problems);
-            setTotal(resData.total ?? resData.problems.length);
-          }
-        }
-        if (solvedRes.status === "fulfilled" && solvedRes.value.data?.success) {
-          setSolved(solvedRes.value.data.data ?? []);
-        }
-      } catch (err) {
-        console.error("Failed to load problems", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    const timeout = setTimeout(fetchData, 300);
-    return () => clearTimeout(timeout);
-  }, [searchTerm, difficulty, page]);
+  const problems = problemsQuery.data?.problems ?? [];
+  const total = problemsQuery.data?.total ?? 0;
+  const solved = solvedQuery.data ?? [];
+  // True skeleton only on the very first load for this query key (no cached/
+  // placeholder data yet) — filter changes keep showing the previous rows via
+  // `placeholderData: keepPreviousData` instead of flashing back to a skeleton.
+  const loading = problemsQuery.isLoading;
 
   const countBy = (d: string) =>
     problems.filter((p) => p.difficulty?.toLowerCase() === d).length;
   const solvedPct = total > 0 ? Math.round((solved.length / total) * 100) : 0;
-  const hasActiveFilters = difficulty !== "All" || searchTerm !== "";
+  const hasActiveFilters = difficulty !== "All" || searchInput !== "";
 
   const pickRandom = () => {
     if (problems.length === 0) return;
@@ -167,9 +195,9 @@ function ProblemsInner() {
           flexWrap="wrap"
         >
           <SearchField
-            value={searchTerm}
+            value={searchInput}
             onChange={(v) => {
-              setSearchTerm(v);
+              setSearchInput(v);
               setPage(1);
             }}
             placeholder="Search problems…"
@@ -190,7 +218,7 @@ function ProblemsInner() {
               variant="text"
               onClick={() => {
                 setDifficulty("All");
-                setSearchTerm("");
+                setSearchInput("");
                 setPage(1);
               }}
             >
@@ -234,7 +262,7 @@ function ProblemsInner() {
                             variant="outlined"
                             onClick={() => {
                               setDifficulty("All");
-                              setSearchTerm("");
+                              setSearchInput("");
                               setPage(1);
                             }}
                           >
@@ -248,47 +276,7 @@ function ProblemsInner() {
               ) : (
                 problems.map((problem) => {
                   const pid = pidOf(problem);
-                  const isSolved = solved.includes(pid);
-                  return (
-                    <TableRow
-                      key={pid}
-                      hover
-                      sx={{ "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } }}
-                    >
-                      <TableCell>
-                        {isSolved ? (
-                          <Tooltip title="Solved">
-                            <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
-                          </Tooltip>
-                        ) : (
-                          <RadioButtonUncheckedIcon fontSize="small" sx={{ color: "outline" }} />
-                        )}
-                        <Box component="span" sx={visuallyHidden}>
-                          {isSolved ? "Solved" : "Not solved"}
-                        </Box>
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          component={NextLink}
-                          href={`/app/problems/${pid}`}
-                          color="text.primary"
-                          sx={{ fontWeight: 500, "&:hover": { color: "primary.main" } }}
-                        >
-                          {problem.title}
-                        </Link>
-                        {problem.tags && problem.tags.length > 0 && (
-                          <Stack direction="row" spacing={0.75} sx={{ mt: 0.75, flexWrap: "wrap", gap: 0.75 }}>
-                            {problem.tags.slice(0, 3).map((tag) => (
-                              <TagChip key={tag} tag={tag} />
-                            ))}
-                          </Stack>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <DifficultyChip difficulty={problem.difficulty} />
-                      </TableCell>
-                    </TableRow>
-                  );
+                  return <ProblemRow key={pid} problem={problem} isSolved={solved.includes(pid)} />;
                 })
               )}
             </TableBody>

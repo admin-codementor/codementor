@@ -18,7 +18,6 @@ import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon, MenuBookOutlinedIcon } from "@/components/ui/icons";
-import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
 import { Reveal } from "@/components/ui/motion";
@@ -28,12 +27,7 @@ import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
-import type {
-  DashboardData,
-  Assignment,
-  RecommendedProblem,
-  CourseSummary,
-} from "@/lib/types";
+import { useDashboardQuery } from "@/lib/queries/student";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -206,76 +200,22 @@ function DashboardSkeleton() {
 
 // ── Main page ─────────────────────────────────────────────────────────────────
 
-interface PageData {
-  dashboard: DashboardData;
-  assignments: Assignment[];
-  recommendations: RecommendedProblem[];
-  courses: CourseSummary[];
-}
-
 export default function DashboardPage() {
   const [name, setName] = React.useState("");
-  const [data, setData] = React.useState<PageData | null>(null);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(false);
 
   React.useEffect(() => {
     setName(getUser()?.name?.split(" ")[0] ?? "");
   }, []);
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const [dashRes, assignRes, recRes, coursesRes] = await Promise.allSettled([
-        api.get<{ success: boolean; data: DashboardData }>(
-          "/api/student/dashboard"
-        ),
-        api.get<{ success: boolean; data: Assignment[] }>(
-          "/api/student/assignments"
-        ),
-        api.get<{ success: boolean; data: RecommendedProblem[] }>(
-          "/api/student/recommendations"
-        ),
-        api.get<{ success: boolean; data: CourseSummary[] }>(
-          "/api/courses"
-        ),
-      ]);
+  const { data, isLoading, isError, refetch } = useDashboardQuery();
 
-      if (dashRes.status === "rejected") {
-        setError(true);
-        return;
-      }
-
-      setData({
-        dashboard: dashRes.value.data.data,
-        assignments:
-          assignRes.status === "fulfilled"
-            ? assignRes.value.data.data ?? []
-            : [],
-        recommendations:
-          recRes.status === "fulfilled" ? recRes.value.data.data ?? [] : [],
-        courses:
-          coursesRes.status === "fulfilled" ? coursesRes.value.data.data ?? [] : [],
-      });
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
-
-  if (loading) return <DashboardSkeleton />;
-  if (error || !data)
+  if (isLoading) return <DashboardSkeleton />;
+  if (isError || !data)
     return (
       <ErrorState
         title="Couldn't load your dashboard"
         description="Check your connection and try again."
-        onRetry={load}
+        onRetry={() => refetch()}
       />
     );
 
@@ -490,7 +430,9 @@ export default function DashboardPage() {
                         sx={{
                           display: "block", textDecoration: "none", p: 1.5, borderRadius: 2,
                           border: "1px solid", borderColor: "outlineVariant",
-                          "&:hover": { bgcolor: "surfaceContainerHigh" }, transition: "background-color 150ms",
+                          transition: "background-color 150ms ease, transform 150ms ease",
+                          "&:hover": { bgcolor: "surfaceContainerHigh", transform: "translateY(-2px)" },
+                          "&:active": { transform: "translateY(0)" },
                         }}
                       >
                         <Stack direction="row" alignItems="center" spacing={1.5}>
@@ -634,8 +576,12 @@ export default function DashboardPage() {
                             ? "warningContainer"
                             : "outlineVariant",
                           bgcolor: urgent ? "warningContainer" : "transparent",
-                          "&:hover": { bgcolor: urgent ? "warningContainer" : "surfaceContainerHigh" },
-                          transition: "background-color 150ms",
+                          transition: "background-color 150ms ease, transform 150ms ease",
+                          "&:hover": {
+                            bgcolor: urgent ? "warningContainer" : "surfaceContainerHigh",
+                            transform: "translateY(-2px)",
+                          },
+                          "&:active": { transform: "translateY(0)" },
                         }}
                       >
                         <Stack

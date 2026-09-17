@@ -213,7 +213,12 @@ export const theme = createTheme({
           // 150ms cards/rows use everywhere else — match that timing and give
           // every variant real hover + press feedback instead of relying on
           // whatever MUI's base styles happen to still apply.
-          transition: "filter 150ms ease, box-shadow 150ms ease, transform 100ms ease, background-color 150ms ease",
+          //
+          // `filter`/`box-shadow` are NOT in this list on purpose: they still
+          // change on hover below, but animating them forces a repaint on every
+          // frame of the transition (uncompositable properties). Leaving them
+          // out of `transition-property` makes them snap instantly in one paint.
+          transition: "transform 100ms ease, background-color 150ms ease",
           "&:active": { transform: "scale(0.97)" },
         },
         sizeSmall: { minHeight: 32, paddingInline: 16 },

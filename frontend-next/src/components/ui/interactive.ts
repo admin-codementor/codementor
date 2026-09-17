@@ -11,7 +11,12 @@ import type { SxProps, Theme } from "@mui/material/styles";
  */
 export const interactiveSurfaceSx: SxProps<Theme> = {
   cursor: "pointer",
-  transition: "border-color 150ms ease, background-color 150ms ease, transform 150ms ease, box-shadow 150ms ease",
+  willChange: "transform",
+  // Only `transform`/`border-color`/`background-color` are animated — all cheap,
+  // compositor-friendly changes. `box-shadow` still changes on hover/active below,
+  // but deliberately isn't listed in `transition`, so it snaps in one paint instead
+  // of being interpolated (repainted) across every frame of a 150ms transition.
+  transition: "border-color 150ms ease, background-color 150ms ease, transform 150ms ease",
   "&:hover": {
     borderColor: "outline",
     backgroundColor: "surfaceContainer",

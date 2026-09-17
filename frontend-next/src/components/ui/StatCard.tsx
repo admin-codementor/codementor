@@ -13,8 +13,10 @@ import { shape } from "@/theme/tokens";
 
 type Accent = "primary" | "secondary" | "tertiary" | "success" | "warning" | "error";
 
-/** Compact metric card: an icon in a tonal container plus a value and label. */
-export function StatCard({
+/** Compact metric card: an icon in a tonal container plus a value and label.
+ * Memoized — pages rendering several of these in a row (e.g. a difficulty
+ * filter click) shouldn't force cards whose props didn't change to re-render. */
+export const StatCard = React.memo(function StatCard({
   icon,
   label,
   value,
@@ -122,4 +124,4 @@ export function StatCard({
       )}
     </Card>
   );
-}
+});

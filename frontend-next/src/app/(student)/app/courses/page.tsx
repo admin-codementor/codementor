@@ -13,7 +13,6 @@ import Select from "@mui/material/Select";
 import MenuItem from "@mui/material/MenuItem";
 import Skeleton from "@mui/material/Skeleton";
 import { SchoolOutlinedIcon, ViewModuleOutlinedIcon, FormatListBulletedOutlinedIcon, CheckCircleIcon } from "@/components/ui/icons";
-import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { SearchField } from "@/components/ui/SearchField";
@@ -21,6 +20,7 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
 import { shape } from "@/theme/tokens";
+import { useCoursesQuery } from "@/lib/queries/student";
 import type { CourseSummary } from "@/lib/types";
 
 const SORTS = ["Progress", "Title (A–Z)", "Most problems"] as const;
@@ -86,29 +86,13 @@ function CourseCard({ course }: { course: CourseSummary }) {
 }
 
 export default function CoursesPage() {
-  const [courses, setCourses] = React.useState<CourseSummary[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(false);
   const [search, setSearch] = React.useState("");
   const [sort, setSort] = React.useState<Sort>("Progress");
 
-  const load = React.useCallback(async () => {
-    setLoading(true);
-    setError(false);
-    try {
-      const res = await api.get<{ success: boolean; data: CourseSummary[] }>("/api/courses");
-      if (res.data?.success) setCourses(res.data.data ?? []);
-      else setError(true);
-    } catch {
-      setError(true);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  React.useEffect(() => {
-    load();
-  }, [load]);
+  const { data, isLoading, isError, refetch } = useCoursesQuery();
+  const courses = data ?? [];
+  const loading = isLoading;
+  const error = isError;
 
   const totals = courses.reduce(
     (acc, c) => ({
@@ -142,7 +126,7 @@ export default function CoursesPage() {
 
       {error ? (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-          <ErrorState title="Couldn't load courses" onRetry={load} />
+          <ErrorState title="Couldn't load courses" onRetry={() => refetch()} />
         </Card>
       ) : loading ? (
         <Box sx={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))", gap: 2 }}>
