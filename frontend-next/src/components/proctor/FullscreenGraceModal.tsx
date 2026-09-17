@@ -6,6 +6,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import { WarningAmberIcon, FullscreenIcon } from "@/components/ui/icons";
+import { shape } from "@/theme/tokens";
 
 /**
  * Full-viewport, non-dismissible blocker shown while a proctored session is
@@ -36,7 +37,7 @@ export function FullscreenGraceModal({
         sx={{
           bgcolor: "errorContainer",
           color: "onErrorContainer",
-          borderRadius: 4,
+          borderRadius: `${shape.extraLarge}px`,
           p: 4,
           maxWidth: 420,
           mx: 2,

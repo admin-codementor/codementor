@@ -14,6 +14,7 @@ import { ResponsiveRadar } from "@nivo/radar";
 import { ResponsiveFunnel } from "@nivo/funnel";
 import { ResponsivePie } from "@nivo/pie";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
+import { shape } from "@/theme/tokens";
 import { TrendingUpIcon, TrendingDownIcon } from "@/components/ui/icons";
 
 /** Compact KPI with a period-over-period delta and an inline sparkline. Pass
@@ -41,13 +42,13 @@ export function KpiTile({
         hero
           ? {
               p: 2,
-              borderRadius: 3,
+              borderRadius: `${shape.large}px`,
               minWidth: 0,
               color: "onPrimaryContainer",
               background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 20%, var(--mui-palette-primaryContainer)))",
               boxShadow: "0 6px 16px color-mix(in srgb, var(--mui-palette-primaryContainer) 55%, transparent)",
             }
-          : { p: 2, border: "1px solid", borderColor: "outlineVariant", borderRadius: 3, minWidth: 0 }
+          : { p: 2, border: "1px solid", borderColor: "outlineVariant", borderRadius: `${shape.medium}px`, minWidth: 0 }
       }
     >
       <Tooltip title={help ?? ""}>
