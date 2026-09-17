@@ -26,7 +26,9 @@ export function useNivoTheme() {
         color: s.onSurface,
         fontSize: 12,
         borderRadius: 10,
-        boxShadow: "0 6px 20px rgba(0,0,0,0.20)",
+        // M3 scrim is always black regardless of scheme, so this is already
+        // on-token — spelled via the resolved value since Nivo needs a concrete color.
+        boxShadow: `0 6px 20px color-mix(in srgb, ${s.scrim} 20%, transparent)`,
         padding: "8px 12px",
       },
     },

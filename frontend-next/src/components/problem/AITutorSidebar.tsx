@@ -259,7 +259,7 @@ export function AITutorSidebar({
                   whiteSpace: "pre-wrap",
                   ...(m.role === "ai"
                     ? { bgcolor: "surfaceContainerHigh", color: "text.primary", border: "1px solid", borderColor: "outlineVariant" }
-                    : { bgcolor: AI, color: "#fff" }),
+                    : { bgcolor: AI, color: "var(--mui-palette-onAi)" }),
                 }}
               >
                 {m.content}
