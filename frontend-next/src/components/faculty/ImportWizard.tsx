@@ -30,6 +30,7 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { EmptyState } from "@/components/ui/States";
+import { hoverTransition } from "@/theme/tokens";
 
 /**
  * Staged import: upload/paste → review → publish.
@@ -88,7 +89,7 @@ function DraftRow({
           : <Chip size="small" label="Needs work" sx={{ height: 22, bgcolor: "warningContainer", color: "onWarningContainer" }} />}
 
         <IconButton size="small" onClick={() => setOpen((v) => !v)} aria-label={open ? "Collapse" : "Edit draft"}>
-          <ExpandMoreIcon sx={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 150ms" }} />
+          <ExpandMoreIcon sx={{ transform: open ? "rotate(180deg)" : "none", transition: hoverTransition("transform") }} />
         </IconButton>
         <IconButton size="small" color="error" onClick={onDelete} aria-label="Discard draft">
           <DeleteOutlineIcon fontSize="small" />

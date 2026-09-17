@@ -271,3 +271,28 @@ export const stateLayerOpacity = {
   pressed: 0.12,
   dragged: 0.16,
 } as const;
+
+/**
+ * Shared transition timing — single source of truth so hover/press feedback
+ * feels identical everywhere instead of each component picking its own
+ * duration. `press` is for active-state feedback (button/chip scale-down),
+ * `hover` is for surfaces (cards, rows, list items), `fade` is for pure
+ * opacity transitions (toasts, progress indicators).
+ */
+export const motionDuration = {
+  press: 100,
+  hover: 150,
+  fade: 200,
+} as const;
+
+export const motionEasing = "ease" as const;
+
+/** Builds a CSS `transition` value for one or more properties at the shared `hover` duration. */
+export function hoverTransition(...properties: string[]): string {
+  return properties.map((p) => `${p} ${motionDuration.hover}ms ${motionEasing}`).join(", ");
+}
+
+/** Builds a CSS `transition` value for one or more properties at the shared `press` duration. */
+export function pressTransition(...properties: string[]): string {
+  return properties.map((p) => `${p} ${motionDuration.press}ms ${motionEasing}`).join(", ");
+}

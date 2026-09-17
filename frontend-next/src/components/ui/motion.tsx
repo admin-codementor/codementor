@@ -3,6 +3,7 @@
 import * as React from "react";
 import Box from "@mui/material/Box";
 import { motion, useReducedMotion, type Variants } from "framer-motion";
+import { motionDuration, motionEasing } from "@/theme/tokens";
 
 const fadeUp: Variants = {
   hidden: { opacity: 0, y: 12 },
@@ -92,7 +93,7 @@ export function NavigationProgress({ active }: { active: boolean }) {
         overflow: "hidden",
         pointerEvents: "none",
         opacity: active ? 1 : 0,
-        transition: "opacity 200ms ease",
+        transition: `opacity ${motionDuration.fade}ms ${motionEasing}`,
       }}
     >
       {active && reduce && (

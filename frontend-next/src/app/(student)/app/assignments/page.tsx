@@ -21,6 +21,7 @@ import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
+import { hoverTransition } from "@/theme/tokens";
 import type { Assignment } from "@/lib/types";
 
 const FILTERS = ["all", "pending", "completed"] as const;
@@ -147,7 +148,7 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
           textAlign: "left",
           color: "inherit",
           font: "inherit",
-          transition: "background-color 150ms ease",
+          transition: hoverTransition("background-color"),
           "&:hover": { bgcolor: "surfaceContainerHigh" },
         }}
       >
@@ -197,7 +198,7 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
           component="span"
           size="small"
           aria-hidden
-          sx={{ transform: expanded ? "rotate(180deg)" : "none", transition: "transform 150ms" }}
+          sx={{ transform: expanded ? "rotate(180deg)" : "none", transition: hoverTransition("transform") }}
         >
           <ExpandMoreIcon />
         </IconButton>

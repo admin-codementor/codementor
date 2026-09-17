@@ -26,6 +26,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { TagChip } from "@/components/ui/TagChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
+import { hoverTransition } from "@/theme/tokens";
 import type { CourseDetail, CourseModule } from "@/lib/types";
 
 // Pick a topic-appropriate icon for a module subcategory (varies per section instead
@@ -175,7 +176,7 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
                   px: 1.5,
                   py: 1.1,
                   borderRadius: 1.5,
-                  transition: "background-color 120ms ease",
+                  transition: hoverTransition("background-color"),
                   "&:hover": { bgcolor: "surfaceContainer" },
                   "&:hover .problem-row-title": { color: "primary.main" },
                 }}
@@ -197,7 +198,7 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
                 <Box component="span" sx={visuallyHidden}>{p.is_solved ? "Solved" : "Not solved"}</Box>
                 <Typography
                   className="problem-row-title"
-                  sx={{ flex: 1, fontWeight: 500, minWidth: 0, transition: "color 120ms ease" }}
+                  sx={{ flex: 1, fontWeight: 500, minWidth: 0, transition: hoverTransition("color") }}
                   noWrap
                 >
                   {p.title}

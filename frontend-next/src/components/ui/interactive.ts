@@ -1,4 +1,5 @@
 import type { SxProps, Theme } from "@mui/material/styles";
+import { hoverTransition } from "@/theme/tokens";
 
 /**
  * Shared hover/press treatment for clickable surfaces (cards, tiles, list rows).
@@ -16,7 +17,7 @@ export const interactiveSurfaceSx: SxProps<Theme> = {
   // compositor-friendly changes. `box-shadow` still changes on hover/active below,
   // but deliberately isn't listed in `transition`, so it snaps in one paint instead
   // of being interpolated (repainted) across every frame of a 150ms transition.
-  transition: "border-color 150ms ease, background-color 150ms ease, transform 150ms ease",
+  transition: hoverTransition("border-color", "background-color", "transform"),
   "&:hover": {
     borderColor: "outline",
     backgroundColor: "surfaceContainer",

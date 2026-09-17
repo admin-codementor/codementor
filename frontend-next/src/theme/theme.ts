@@ -7,6 +7,8 @@ import {
   shape,
   stateLayerOpacity,
   typeScale,
+  hoverTransition,
+  pressTransition,
   type M3ColorScheme,
 } from "./tokens";
 
@@ -218,7 +220,7 @@ export const theme = createTheme({
           // change on hover below, but animating them forces a repaint on every
           // frame of the transition (uncompositable properties). Leaving them
           // out of `transition-property` makes them snap instantly in one paint.
-          transition: "transform 100ms ease, background-color 150ms ease",
+          transition: `${pressTransition("transform")}, ${hoverTransition("background-color")}`,
           "&:active": { transform: "scale(0.97)" },
         },
         sizeSmall: { minHeight: 32, paddingInline: 16 },
@@ -232,7 +234,7 @@ export const theme = createTheme({
       styleOverrides: {
         root: {
           borderRadius: shape.full,
-          transition: "background-color 150ms ease, transform 100ms ease",
+          transition: `${hoverTransition("background-color")}, ${pressTransition("transform")}`,
           "&:active": { transform: "scale(0.92)" },
         },
       },
@@ -248,7 +250,7 @@ export const theme = createTheme({
     MuiListItemButton: {
       styleOverrides: {
         root: ({ theme }) => ({
-          transition: "background-color 150ms ease",
+          transition: hoverTransition("background-color"),
           "&:hover": { backgroundColor: theme.vars.palette.surfaceContainerHigh },
         }),
       },
@@ -269,7 +271,7 @@ export const theme = createTheme({
         // status chips (VerdictChip, DifficultyChip, TagChip) stay static, so
         // they never pick up a pointer cursor or hover state they can't act on.
         clickable: {
-          transition: "filter 150ms ease, transform 100ms ease",
+          transition: `${hoverTransition("filter")}, ${pressTransition("transform")}`,
           "&:hover": { filter: "brightness(0.94)" },
           "&:active": { transform: "scale(0.96)" },
         },
@@ -290,7 +292,7 @@ export const theme = createTheme({
         root: ({ theme }) => ({
           borderRadius: shape.extraSmall,
           margin: "0 4px",
-          transition: "background-color 150ms ease",
+          transition: hoverTransition("background-color"),
           "&:hover": {
             backgroundColor: alpha(
               theme.palette.mode === "dark" ? darkScheme.onSurface : lightScheme.onSurface,
