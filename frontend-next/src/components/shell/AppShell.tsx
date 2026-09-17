@@ -27,6 +27,7 @@ import { MenuIcon, CodeIcon, LogoutIcon, PersonOutlineIcon } from "@/components/
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { clearSession, getUser } from "@/lib/auth";
 import { NavigationProgress } from "@/components/ui/motion";
+import { hoverTransition } from "@/theme/tokens";
 import type { User } from "@/lib/types";
 
 /**
@@ -180,7 +181,7 @@ export function AppShell({
                     minHeight: 48,
                     color: active ? "onSecondaryContainer" : "onSurfaceVariant",
                     bgcolor: active ? "secondaryContainer" : "transparent",
-                    transition: "background-color 150ms ease",
+                    transition: hoverTransition("background-color"),
                     "&:hover": {
                       bgcolor: active ? "secondaryContainer" : "surfaceContainerHigh",
                     },

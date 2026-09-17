@@ -18,6 +18,7 @@ import { keyframes } from "@emotion/react";
 import { SmartToyOutlinedIcon, BugReportOutlinedIcon, CodeOutlinedIcon, PersonOutlineIcon, SendIcon, AutoAwesomeOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
+import { hoverTransition } from "@/theme/tokens";
 
 const AI = "var(--mui-palette-ai)";
 
@@ -259,7 +260,7 @@ export default function AITutorPage() {
                     p: 1.25, borderRadius: 2, cursor: "pointer", font: "inherit", color: "inherit",
                     border: "1px solid", borderColor: active ? "outlineVariant" : "transparent",
                     bgcolor: active ? "surfaceContainerHigh" : "transparent",
-                    transition: "background-color 150ms ease",
+                    transition: hoverTransition("background-color"),
                     "&:hover": { bgcolor: "surfaceContainerHigh" },
                   }}
                 >
@@ -283,7 +284,7 @@ export default function AITutorPage() {
                 sx={{
                   display: "flex", gap: 1, alignItems: "center", textAlign: "left", width: "100%",
                   px: 1, py: 0.75, borderRadius: 1.5, border: 0, bgcolor: "transparent", cursor: "pointer",
-                  color: "text.secondary", font: "inherit", transition: "background-color 150ms ease, color 150ms ease", "&:hover": { bgcolor: "surfaceContainerHigh", color: "text.primary" },
+                  color: "text.secondary", font: "inherit", transition: hoverTransition("background-color", "color"), "&:hover": { bgcolor: "surfaceContainerHigh", color: "text.primary" },
                   "&:disabled": { opacity: 0.4, cursor: "default" },
                 }}
               >

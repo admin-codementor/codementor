@@ -22,7 +22,7 @@ import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
 import { Reveal } from "@/components/ui/motion";
 import { StatCard } from "@/components/ui/StatCard";
-import { shape } from "@/theme/tokens";
+import { shape, hoverTransition } from "@/theme/tokens";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
@@ -430,7 +430,7 @@ export default function DashboardPage() {
                         sx={{
                           display: "block", textDecoration: "none", p: 1.5, borderRadius: 2,
                           border: "1px solid", borderColor: "outlineVariant",
-                          transition: "background-color 150ms ease, transform 150ms ease",
+                          transition: hoverTransition("background-color", "transform"),
                           "&:hover": { bgcolor: "surfaceContainerHigh", transform: "translateY(-2px)" },
                           "&:active": { transform: "translateY(0)" },
                         }}
@@ -576,7 +576,7 @@ export default function DashboardPage() {
                             ? "warningContainer"
                             : "outlineVariant",
                           bgcolor: urgent ? "warningContainer" : "transparent",
-                          transition: "background-color 150ms ease, transform 150ms ease",
+                          transition: hoverTransition("background-color", "transform"),
                           "&:hover": {
                             bgcolor: urgent ? "warningContainer" : "surfaceContainerHigh",
                             transform: "translateY(-2px)",

@@ -38,6 +38,7 @@ import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
 import { ImportWizard } from "@/components/faculty/ImportWizard";
+import { hoverTransition } from "@/theme/tokens";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 const STUB_LANGUAGES = [
@@ -80,7 +81,7 @@ function FormSection({ label, children }: { label: string; children: React.React
         }}
       >
         <Typography variant="overline">{label}</Typography>
-        <ExpandMoreIcon sx={{ transform: open ? "rotate(180deg)" : "none", transition: "transform 150ms" }} />
+        <ExpandMoreIcon sx={{ transform: open ? "rotate(180deg)" : "none", transition: hoverTransition("transform") }} />
       </Box>
       <Collapse in={open}>
         <Box sx={{ px: 2, pb: 2 }}>{children}</Box>
