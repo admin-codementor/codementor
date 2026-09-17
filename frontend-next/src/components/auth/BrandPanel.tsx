@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { CodeIcon, SmartToyOutlinedIcon, EmojiEventsOutlinedIcon, FingerprintOutlinedIcon, InsightsOutlinedIcon } from "@/components/ui/icons";
+import { shape } from "@/theme/tokens";
 
 const HIGHLIGHTS = [
   { icon: SmartToyOutlinedIcon, title: "Socratic AI Tutor", desc: "Guides you with questions, never hands over the answer." },
@@ -35,7 +36,7 @@ export function BrandPanel() {
             sx={{
               width: 44,
               height: 44,
-              borderRadius: 3,
+              borderRadius: `${shape.large}px`,
               display: "grid",
               placeItems: "center",
               bgcolor: "rgba(255,255,255,0.18)",

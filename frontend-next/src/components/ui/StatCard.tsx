@@ -9,6 +9,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Skeleton from "@mui/material/Skeleton";
 import { interactiveSurfaceSx } from "./interactive";
+import { shape } from "@/theme/tokens";
 
 type Accent = "primary" | "secondary" | "tertiary" | "success" | "warning" | "error";
 
@@ -59,7 +60,9 @@ export function StatCard({
         sx={{
           width: 48,
           height: 48,
-          borderRadius: 3,
+          // sx borderRadius shorthand multiplies by theme.shape.borderRadius (12px),
+          // so a plain number here doesn't map to the M3 shape scale — use px directly.
+          borderRadius: `${shape.large}px`,
           flexShrink: 0,
           display: "grid",
           placeItems: "center",
