@@ -24,7 +24,7 @@ import Avatar from "@mui/material/Avatar";
 import Menu from "@mui/material/Menu";
 import Drawer from "@mui/material/Drawer";
 import ListItemIcon from "@mui/material/ListItemIcon";
-import { SparkLineChart } from "@mui/x-charts/SparkLineChart";
+import { Sparkline } from "@/components/ui/Sparkline";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
@@ -316,11 +316,6 @@ function SummaryCard({ label, children }: { label: string; children: React.React
 }
 
 function ResultsSummary({ result }: { result: VerdictResult }) {
-  // MUI X Charts resolves its `colors` prop through d3-color, which can't
-  // parse a `var(--mui-palette-...)` string the way this cssVariables-mode
-  // theme returns from theme.palette.* (it calls .brighter() on the null
-  // result and crashes the whole page) — so this needs the same raw-token
-  // lookup components/ui/nivo.tsx already uses for its own chart colors.
   const theme = useTheme();
   const sparkColor = theme.palette.mode === "dark" ? darkScheme.primary : lightScheme.primary;
   const cases = result.test_case_results;
@@ -372,7 +367,7 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
           </Typography>
           {timesMs.length > 1 && (
             <Box sx={{ width: 56, height: 24 }} aria-hidden>
-              <SparkLineChart data={timesMs} height={24} width={56} area colors={[sparkColor]} />
+              <Sparkline data={timesMs} height={24} width={56} color={sparkColor} />
             </Box>
           )}
         </Stack>
