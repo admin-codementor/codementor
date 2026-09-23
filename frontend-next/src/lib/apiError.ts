@@ -9,10 +9,19 @@ import type { AxiosError } from "axios";
  * something.
  */
 export function apiErrorMessage(err: unknown, fallback = "Something went wrong. Please try again."): string {
-  const e = err as AxiosError<{ error?: string; message?: string }> | undefined;
+  const e = err as AxiosError<{ error?: unknown; message?: unknown }> | undefined;
 
-  const fromServer = e?.response?.data?.error || e?.response?.data?.message;
-  if (fromServer) return fromServer;
+  // Our own backend always sends `error`/`message` as strings. A platform-level
+  // failure (e.g. a Vercel rewrite hitting a dead target) returns its own JSON
+  // body instead, where these can be objects ({code, message}) — trusting the
+  // TS cast without checking crashes any caller that renders this as JSX
+  // (React error #31: objects are not valid as a child).
+  const fromServer = e?.response?.data?.error ?? e?.response?.data?.message;
+  if (typeof fromServer === "string" && fromServer) return fromServer;
+  if (fromServer && typeof fromServer === "object" && "message" in fromServer) {
+    const nested = (fromServer as { message?: unknown }).message;
+    if (typeof nested === "string" && nested) return nested;
+  }
 
   switch (e?.response?.status) {
     case 401:

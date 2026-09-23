@@ -46,8 +46,17 @@ export default function LoginPage() {
     router.replace(homeForRole(data.user.role));
   };
 
-  const errorMessage = (err: unknown) =>
-    (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+  const errorMessage = (err: unknown) => {
+    // The backend always sends `error` as a string, but a platform-level
+    // failure (e.g. a Vercel rewrite pointing at a dead target) returns its
+    // own JSON body instead, where `error` is an {code, message} object —
+    // rendering that directly as a React child crashes the whole page
+    // (error #31), so coerce anything unexpected to a string here.
+    const raw = (err as { response?: { data?: { error?: unknown } } })?.response?.data?.error;
+    if (typeof raw === "string") return raw;
+    if (raw && typeof raw === "object" && "message" in raw) return String((raw as { message?: unknown }).message);
+    return undefined;
+  };
 
   const firebaseErrorMessage = (err: unknown) => {
     const code = (err as { code?: string })?.code;

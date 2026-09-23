@@ -1,7 +1,7 @@
 # CodeMentor — Deployment & Operations Guide
 
 **Audience:** you, running this project solo, with no prior deployment experience.
-**Last updated:** 2026-08-09
+**Last updated:** 2026-09-22 (added Path C — see Part 2)
 
 This guide replaces the scattered advice in `DEPLOYMENT.md` and `DEPLOYMENT_AZURE.md`
 (both stale — Azure was a temporary demo). Read Part 0 even if you skip everything
@@ -66,10 +66,12 @@ hosting decision below.
 ### Why you're here
 
 The stack was assembled for a free-tier cloud demo. Your friend set it up and has
-since left. Right now the GCP VM hosting Judge0 is unreachable — all ports filtered,
-including SSH — so code execution is broken on the live site (`/api/submit` returns
-503). You need to decide whether to repair the cloud setup or move onto the college
-server, and you need to be able to run it yourself either way.
+since left. The GCP VM that used to host Judge0 was torn down (it was always a
+temporary demo, not a real deployment plan), and college server access isn't
+available yet. For the current VC/HOD demo, Judge0's own free public API
+(`ce.judge0.com`) sidesteps the VM question entirely — see **Part 2, Path C**. The
+GCP/college-server decision below is still the right one for when real classroom
+traffic arrives, but it isn't blocking the demo.
 
 ---
 
@@ -94,7 +96,110 @@ CDN, and self-hosting static Next.js output buys you nothing.
 
 ---
 
-## Part 2 — Path A: Cloud deployment (GCP VM + Vercel + Railway)
+## Part 2 — Path C: Free-tier demo deployment (Vercel + Render + public Judge0 API)
+
+**Status: this is the path actually in use, set up 2026-09-22 for an HOD/VC demo.**
+Cost: $0/month. No VM, no domain, no Docker on a machine you administer.
+
+This exists because Path A's biggest cost and complexity — the Judge0 VM — isn't
+needed for a demo. Judge0 publishes its own free instance for exactly this kind of
+use, and your backend already had a documented fallback for it
+(`backend/.env.example`, "Fallback: Judge0's free public demo API"). Combine that
+with Render's free web-service tier instead of Railway (which stopped being
+meaningfully free — see Part 4's cost table) and the whole stack costs nothing.
+
+**Everything else stays identical to Path A** — same Firebase project, same Upstash
+Redis, same Gemini key, same Vercel frontend. Only two things differ: where the
+backend runs, and where Judge0 requests go.
+
+### C1. Judge0 — use the public demo API, skip the VM entirely
+
+Set `JUDGE0_URL=https://ce.judge0.com` and leave `JUDGE0_AUTH_TOKEN` blank. No VM,
+no static IP, no Docker, no TLS to configure — this is Judge0's own hosted instance.
+
+**The trade-off, stated plainly:** it's rate-limited and Judge0's docs say it's not
+for production traffic. That's fine for you clicking through a demo, or a handful
+of people trying it. It is **not** fine for a full class of 60 students submitting
+at once — that will throttle or 503. If real classroom usage starts, that's the
+trigger to move to a paid Judge0 API key (e.g. RapidAPI's Judge0 CE) or Path A/B's
+self-hosted instance. The code change is the same one line either way
+(`JUDGE0_URL` + an auth header), so this isn't a wall, just a later decision.
+
+### C2. Backend on Render (free web service)
+
+1. <https://render.com> → sign up with the GitHub account that owns the repo
+2. **New +** → **Web Service** → connect the repo
+3. Settings:
+   - **Branch:** whichever branch you're deploying (doesn't have to be `main`)
+   - **Root Directory:** `backend`
+   - **Runtime:** Docker — Render should auto-detect `backend/Dockerfile`
+   - **Instance type:** Free
+4. **Environment** tab — set every variable from your local `backend/.env`,
+   **except** `JUDGE0_URL`, which becomes `https://ce.judge0.com`:
+
+   | Key | Value |
+   |---|---|
+   | `NODE_ENV` | `production` |
+   | `UPSTASH_REDIS_REST_URL` | same as local |
+   | `UPSTASH_REDIS_REST_TOKEN` | same as local |
+   | `JWT_SECRET` | same as local |
+   | `JWT_REFRESH_SECRET` | same as local |
+   | `JUDGE0_URL` | `https://ce.judge0.com` |
+   | `JUDGE0_AUTH_TOKEN` | leave blank |
+   | `GEMINI_API_KEY` | same as local |
+   | `FACULTY_EMAIL_DOMAINS` | same as local, if set |
+   | `FIREBASE_SERVICE_ACCOUNT` | same as local (full JSON) |
+   | `CORS_ORIGIN` | the Vercel URL from C3 — placeholder until then |
+
+5. **Create Web Service** — first build takes 5–10 minutes (Java 17 install, JPlag
+   JAR download, `npm ci`). Watch the log for the JPlag download warning, same as
+   Path A's Railway build.
+6. Verify: `curl -i https://<your-service>.onrender.com/health` → expect
+   `200 {"status":"ok"}`.
+
+**Free tier's real limitation:** the service spins down after 15 minutes idle and
+takes 30–60 seconds to wake on the next request. Open the site yourself a minute
+before anyone else looks at it. This is the one thing that separates "free" from
+Path A's Railway — pay $5/mo there and this problem disappears.
+
+### C3. Frontend on Vercel — identical to Path A's A3
+
+Follow [Part 3, section A3](#a3-frontend-on-vercel) exactly, with one substitution:
+`API_PROXY_TARGET` points at your Render URL (`https://<your-service>.onrender.com`)
+instead of a Railway URL. Everything else — the Firebase env vars, the Google
+client ID, the "frozen at build time" warning about `API_PROXY_TARGET` — applies
+unchanged.
+
+### C4. Close the loop
+
+Go back to Render → **Environment** → set `CORS_ORIGIN` to the exact Vercel URL
+(no trailing slash) → Render redeploys automatically.
+
+Verify end to end:
+
+```bash
+curl -i https://your-vercel-url/api/judge-health
+```
+
+Expect **401** (reached Express) not 404 (Vercel rewrite misconfigured) — same test
+as Path A.
+
+### C5. When to move off this path
+
+Move to Path A or Path B when either becomes true:
+- Real classroom traffic (a full class submitting together) — `ce.judge0.com` will
+  throttle.
+- You want the backend to respond instantly instead of waking from sleep.
+- The demo period ends and this becomes the permanent home.
+
+Migration is incremental, not a rewrite: swap `JUDGE0_URL` first (self-hosted or a
+paid Judge0 API key), then move the backend host from Render to Railway/the college
+server later. Nothing about the frontend or the managed services (Firebase,
+Upstash, Gemini) changes.
+
+---
+
+## Part 3 — Path A: Cloud deployment (GCP VM + Vercel + Railway)
 
 This is what you have now. Here's how to build or repair it from scratch.
 
@@ -316,7 +421,7 @@ Two cost traps specific to your situation:
 
 ---
 
-## Part 3 — Path B: College server
+## Part 4 — Path B: College server
 
 ### B1. What to ask the college for
 
@@ -459,20 +564,24 @@ IT reimages the box, the site goes down and you're the one fixing it.
 
 ---
 
-## Part 4 — Head to head
+## Part 5 — Head to head
 
-| | Path A: Cloud | Path B: College server |
-|---|---|---|
-| **Monthly cost** | ~$38–77 (₹3,200–6,500) | ~$1 (₹75) |
-| **Setup time** | Half a day | A weekend |
-| **Reliability** | Google/Railway's problem | Campus power, network, IT |
-| **Who fixes outages** | Mostly nobody — it self-heals | You, in person |
-| **Public reachability** | Built in | Needs Cloudflare Tunnel |
-| **Scaling for a big exam** | Change machine type, pay more | Limited by the hardware you have |
-| **Root access** | Full | Shared, policy-constrained |
-| **Self-hosted LLM** | No | ✅ Yes — the H100 |
-| **Survives you graduating** | Only while someone pays | Only while IT cooperates |
-| **Risk of silent death** | ⚠️ High — credits expire, VMs stop | ⚠️ Medium — reimaging, semester resets |
+| | Path C: Free demo | Path A: Cloud | Path B: College server |
+|---|---|---|---|
+| **Monthly cost** | $0 | ~$38–77 (₹3,200–6,500) | ~$1 (₹75) |
+| **Setup time** | An afternoon | Half a day | A weekend |
+| **Reliability** | Render sleeps after 15 min idle; Judge0's public API is rate-limited | Google/Railway's problem | Campus power, network, IT |
+| **Who fixes outages** | Mostly nobody — it self-heals | Mostly nobody — it self-heals | You, in person |
+| **Public reachability** | Built in | Built in | Needs Cloudflare Tunnel |
+| **Scaling for a big exam** | ❌ Will throttle — not built for this | Change machine type, pay more | Limited by the hardware you have |
+| **Root access** | None needed | Full | Shared, policy-constrained |
+| **Self-hosted LLM** | No | No | ✅ Yes — the H100 |
+| **Survives you graduating** | Only while free tiers exist | Only while someone pays | Only while IT cooperates |
+| **Risk of silent death** | Low — nothing expires, just sleeps | ⚠️ High — credits expire, VMs stop | ⚠️ Medium — reimaging, semester resets |
+
+Path C is the odd one out in this table on purpose: it's not a competitor to A and
+B, it's what you use *before* either of them is worth the setup cost — a single
+demo, a handful of users, no real classroom load yet.
 
 ### Pros and cons, honestly
 
@@ -498,21 +607,25 @@ reachable; if IT blocks outbound tunneling, the whole plan collapses.
 
 ### My recommendation
 
-**College server for the long run, GCP as a stopgap — and don't migrate before your
-next demo.**
+**Path C for this month's demo, college server for the long run, GCP only if the
+college server falls through.**
 
 Sequenced:
 
-1. **Now (before any VC/HOD demo):** repair the GCP VM. Start it, reserve a static
-   IP, update `JUDGE0_URL` in Railway. Do not re-architect with an evaluation
-   pending — you'd trade a known-broken-but-fixable state for an unknown one.
-2. **Next (after the demo):** stand up Judge0 on the college server behind
-   Cloudflare Tunnel. Point Railway's `JUDGE0_URL` at the tunnel hostname. Run both
-   in parallel for a few days, then decommission the GCP VM. Migration is *one
-   environment variable*, so rollback is trivial — that's exactly why you move
-   Judge0 first and everything else later.
-3. **Later:** move the backend onto the college box too. Evaluate a self-hosted
-   model for the AI tutor on the H100. Keep the frontend on Vercel permanently.
+1. **Now (before the VC/HOD demo):** Path C — Vercel + Render + `ce.judge0.com`.
+   Zero cost, zero IT dependency, live within an afternoon. This is what's
+   currently deployed.
+2. **Next (once real classroom usage starts, or the free-tier limits start to
+   bite):** move Judge0 off the public API — either a paid Judge0 API key
+   (fastest) or your own instance once college server access exists. Same
+   `JUDGE0_URL` swap either way, backend host unchanged.
+3. **Then:** stand up Judge0 (and eventually the backend) on the college server
+   behind Cloudflare Tunnel once IT grants sudo/Docker access. Run it in parallel
+   with Path C for a few days before switching over — again, just an environment
+   variable, trivial rollback.
+4. **Fallback:** if college IT access never materializes and classroom-scale
+   traffic arrives before then, GCP (Path A) is the paid stopgap — repair the VM,
+   reserve a static IP, point `JUDGE0_URL` at it.
 
 **The one thing that flips this:** if campus IT blocks outbound `cloudflared`, or
 the server is reimaged each semester, stay on GCP and pay the ~$40/mo. Reliability
@@ -521,7 +634,7 @@ during evaluations is worth it. Get answers to the four operational questions in
 
 ---
 
-## Part 5 — Learning resources
+## Part 6 — Learning resources
 
 I've given official documentation links (stable) and **search terms** for video
 content rather than specific URLs, because video links rot and I'd rather send you
@@ -573,7 +686,7 @@ problem in one of the first three.
 
 ---
 
-## Part 6 — Operational runbook
+## Part 7 — Operational runbook
 
 Things you'll need repeatedly, once it's running.
 
@@ -638,9 +751,17 @@ order, or you take the site down.
 
 ## Appendix — Immediate next steps
 
-1. Check GCP console: is the `judge0` VM running? What's its external IP?
-2. Compare that IP to `JUDGE0_URL` in Railway's variables
-3. If the VM is stopped: start it, **reserve a static IP**, update Railway
-4. Verify: `curl -i https://your-frontend/api/judge-health` → expect 401
-5. Ask your HOD the four operational questions in §B1
-6. Update the root `README.md` — it describes an architecture that no longer exists
+Current status (2026-09-22): Path C (Vercel + Render + `ce.judge0.com`) is the
+active deployment, set up for the upcoming demo.
+
+1. Confirm the Render backend responds: `curl -i https://<your-service>.onrender.com/health` → expect 200
+2. Confirm the Vercel rewrite reaches it: `curl -i https://your-frontend/api/judge-health` → expect 401
+3. Open the site yourself ~1 minute before any demo or walkthrough, so Render is awake
+4. If classroom-scale traffic shows up before the college server is ready, watch
+   for Judge0 503s — that's `ce.judge0.com` throttling, and the fix is a paid
+   Judge0 API key or moving to Path A/B, not a code change
+5. Ask your HOD the four operational questions in §B1 (college server access,
+   uptime expectations, reimaging, backup power) — worth doing in parallel with
+   the demo, not after
+6. Update the root `README.md` — it still describes an architecture that no
+   longer exists
