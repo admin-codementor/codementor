@@ -1266,10 +1266,13 @@ exports.getCohortDetail = async (req, res) => {
     const dim = analytics.COHORT_DIMS[dimension];
     const value = String(req.query.value ?? 'Unassigned');
 
-    // Faculty are already restricted to their own classrooms' students by the
-    // snapshot itself, so a department-name mismatch isn't a scope violation for
-    // them the way it is for an HOD (whose scope IS the department boundary).
-    if (!scope.ownClasses && dimension === 'department' && scope.dept !== null && value !== scope.dept) {
+    // Blocked for anyone with a department boundary — HOD/admin because their
+    // scope IS the department, and faculty too: a faculty member's classroom
+    // roster is normally their own students, but classes can be
+    // interdisciplinary (electives, combined sections), so a colleague's
+    // department name is never a safe value to request explicitly even if the
+    // snapshot itself would come back empty.
+    if (dimension === 'department' && scope.dept !== null && value !== scope.dept) {
       return res.status(403).json({ success: false, error: 'Outside your department scope.' });
     }
 

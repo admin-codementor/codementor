@@ -3,6 +3,24 @@
 const ai = require('../services/aiGateway');
 const aiTutorRepo = require('../repositories/aiTutorRepository');
 
+// Shared AI-failure responder. The old behaviour hardcoded 500 for every AI
+// failure here, which hid real upstream statuses (Gemini free-tier quota
+// comes back as 429) and gave students a bare "failed" instead of a reason to
+// retry. Mirrors the AiError handling already used by
+// problemImport.controller.js and faculty.controller.js#generateAITestCases.
+function sendAiError(res, error, fallbackMessage) {
+  if (error?.name === 'AiError') {
+    const busy = error.status === 429 || error.status === 503;
+    const status = busy ? 503 : (error.status >= 400 && error.status < 600 ? error.status : 502);
+    return res.status(status).json({
+      error: busy
+        ? 'The AI service is busy right now. Please try again in a moment.'
+        : `AI provider error: ${error.message}`,
+    });
+  }
+  return res.status(500).json({ error: fallbackMessage });
+}
+
 const SYSTEM_PROMPT = `You are a Socratic coding tutor for engineering students.
 Your ONLY job is to guide students to the answer through questions.
 NEVER give the solution or write code for them.
@@ -69,7 +87,7 @@ const askTutor = async (req, res) => {
     res.json({ success: true, response: aiResponseText });
   } catch (error) {
     console.error('AI Tutor Error:', error);
-    res.status(500).json({ error: 'Failed to communicate with AI Tutor' });
+    sendAiError(res, error, 'Failed to communicate with AI Tutor');
   }
 };
 
@@ -123,7 +141,7 @@ ${errorTrace}`;
     res.json({ success: true, explanation: text });
   } catch (error) {
     console.error('Explain Error failed:', error);
-    res.status(500).json({ error: 'Failed to explain error' });
+    sendAiError(res, error, 'Failed to explain error');
   }
 };
 
@@ -170,7 +188,7 @@ ${code}`;
     res.json({ success: true, review: parsedReview });
   } catch (error) {
     console.error('Code Review failed:', error);
-    res.status(500).json({ error: 'Failed to review code' });
+    sendAiError(res, error, 'Failed to review code');
   }
 };
 
