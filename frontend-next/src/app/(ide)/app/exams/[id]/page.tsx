@@ -126,6 +126,12 @@ export default function StudentExamPage() {
   }, [id]);
 
   const startExam = async () => {
+    // Must fire synchronously, inside the click handler and before any
+    // `await`, to count as a user gesture — browsers reject requestFullscreen()
+    // once it's called after a real network round trip, which is why the
+    // useProctor useEffect's own auto-request (on mount) silently fails in
+    // most browsers and previously left fullscreen entry effectively manual.
+    document.documentElement.requestFullscreen?.().catch(() => {});
     setStarting(true);
     try {
       const r = await api.post(`/api/exams/${id}/start`, {});
@@ -251,6 +257,11 @@ export default function StudentExamPage() {
   // submissions against this attempt and to extend proctoring across the tab
   // switch.
   const solveProblem = React.useCallback(async (sectionId: string, problemId: string) => {
+    // Same reasoning as startExam — re-request synchronously, on the actual
+    // click, so a student who briefly exited fullscreen (or whose browser
+    // never carried it across the exam-shell → IDE navigation) gets put back
+    // into fullscreen from a gesture that will actually be honored.
+    document.documentElement.requestFullscreen?.().catch(() => {});
     try {
       await api.patch(`/api/exams/${id}/attempt/visit/${problemId}`, { section_id: sectionId });
       setAttempt((prev) => {

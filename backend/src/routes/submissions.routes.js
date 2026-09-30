@@ -99,6 +99,9 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
         section_id: (isCustomRun || isSampleRun) ? null : (section_id || null),
       });
     } catch (startErr) {
+      if (startErr.code === 'EXAM_PROBLEM_OUT_OF_SCOPE') {
+        return res.status(403).json({ success: false, code: startErr.code, error: startErr.message });
+      }
       console.error('Failed to start judging:', startErr.message);
       // Distinguish "Judge0 is offline" from "Judge0's queue is full" so the
       // user gets an accurate message (retrying won't help if it's offline).

@@ -427,6 +427,7 @@ function IDEHeader({
   onSubmit,
   showAI,
   onToggleAI,
+  examId,
 }: {
   problem: ProblemDetail | null;
   problemId: string;
@@ -438,6 +439,11 @@ function IDEHeader({
   onSubmit: () => void;
   showAI: boolean;
   onToggleAI: () => void;
+  /** Present while solving a problem inside a live exam — hides catalog-wide
+   * navigation (logo, prev/next) so a student can't browse away to the other
+   * ~77 problems mid-exam. See exam.controller.js#markVisited, which already
+   * enforces this same per-section allowlist server-side. */
+  examId?: string | null;
 }) {
   const router = useRouter();
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
@@ -469,51 +475,58 @@ function IDEHeader({
         overflowX: "auto",
       }}
     >
-      {/* Logo */}
-      <IconButton component={NextLink} href="/app/problems" aria-label="Back to problems" size="small" sx={{ flexShrink: 0 }}>
-        <CodeIcon fontSize="small" />
-      </IconButton>
+      {/* Logo — hidden during a live exam: it links to the full public
+          catalog, which a student shouldn't be able to browse away to. */}
+      {!examId && (
+        <IconButton component={NextLink} href="/app/problems" aria-label="Back to problems" size="small" sx={{ flexShrink: 0 }}>
+          <CodeIcon fontSize="small" />
+        </IconButton>
+      )}
 
       <Divider orientation="vertical" flexItem sx={{ mx: 0.5, flexShrink: 0 }} />
 
-      {/* Prev / Next — the position counter is a nice-to-have that's the
-          first thing dropped on a real phone width; the chevrons stay since
-          they're the actual navigation. */}
-      <Tooltip title="Previous problem">
-        <span>
-          <IconButton
-            component={NextLink}
-            href={adjacent?.prev ? `/app/problems/${adjacent.prev}` : "#"}
-            aria-label="Previous problem"
-            size="small"
-            disabled={!adjacent?.prev}
-            sx={{ flexShrink: 0 }}
-          >
-            <ChevronLeftIcon fontSize="small" />
-          </IconButton>
-        </span>
-      </Tooltip>
+      {/* Prev / Next — hidden during a live exam for the same reason: they
+          walk the entire catalog via /api/problems/:id/adjacent, which has
+          no exam/section awareness at all. */}
+      {!examId && (
+        <>
+          <Tooltip title="Previous problem">
+            <span>
+              <IconButton
+                component={NextLink}
+                href={adjacent?.prev ? `/app/problems/${adjacent.prev}` : "#"}
+                aria-label="Previous problem"
+                size="small"
+                disabled={!adjacent?.prev}
+                sx={{ flexShrink: 0 }}
+              >
+                <ChevronLeftIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
 
-      {adjacent && (
-        <Typography variant="caption" color="text.secondary" sx={{ minWidth: 52, textAlign: "center", flexShrink: 0, display: { xs: "none", sm: "block" } }}>
-          {adjacent.position}/{adjacent.total}
-        </Typography>
+          {adjacent && (
+            <Typography variant="caption" color="text.secondary" sx={{ minWidth: 52, textAlign: "center", flexShrink: 0, display: { xs: "none", sm: "block" } }}>
+              {adjacent.position}/{adjacent.total}
+            </Typography>
+          )}
+
+          <Tooltip title="Next problem">
+            <span>
+              <IconButton
+                component={NextLink}
+                href={adjacent?.next ? `/app/problems/${adjacent.next}` : "#"}
+                aria-label="Next problem"
+                size="small"
+                disabled={!adjacent?.next}
+                sx={{ flexShrink: 0 }}
+              >
+                <ChevronRightIcon fontSize="small" />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </>
       )}
-
-      <Tooltip title="Next problem">
-        <span>
-          <IconButton
-            component={NextLink}
-            href={adjacent?.next ? `/app/problems/${adjacent.next}` : "#"}
-            aria-label="Next problem"
-            size="small"
-            disabled={!adjacent?.next}
-            sx={{ flexShrink: 0 }}
-          >
-            <ChevronRightIcon fontSize="small" />
-          </IconButton>
-        </span>
-      </Tooltip>
 
       {/* Problem title — minWidth:0 is required for a flex item to actually
           shrink/ellipsis instead of forcing the row wider than the viewport
@@ -1116,6 +1129,7 @@ export default function ProblemSolvingPage() {
         solved={solved}
         onRun={() => { setOutputTab("testcases"); setOutputOpen(true); execute("run"); }}
         onSubmit={() => execute("submit")}
+        examId={examId}
         showAI={showAI}
         onToggleAI={() => setShowAI((v) => !v)}
       />
@@ -1605,17 +1619,22 @@ export default function ProblemSolvingPage() {
               bgcolor: "surface",
             }}
           >
-            <Button
-              {...(adjacent?.prev
-                ? { component: NextLink, href: `/app/problems/${adjacent.prev}` }
-                : { disabled: true })}
-              size="small"
-              variant="text"
-              startIcon={<ChevronLeftIcon />}
-              sx={{ color: "text.secondary" }}
-            >
-              Prev
-            </Button>
+            {/* Prev/next hidden during a live exam — see IDEHeader above for why. */}
+            {examId ? (
+              <Box sx={{ width: 0 }} />
+            ) : (
+              <Button
+                {...(adjacent?.prev
+                  ? { component: NextLink, href: `/app/problems/${adjacent.prev}` }
+                  : { disabled: true })}
+                size="small"
+                variant="text"
+                startIcon={<ChevronLeftIcon />}
+                sx={{ color: "text.secondary" }}
+              >
+                Prev
+              </Button>
+            )}
             <Box sx={{ flex: 1 }} />
             <Button
               onClick={resetCode}
@@ -1635,17 +1654,21 @@ export default function ProblemSolvingPage() {
             >
               {submitting ? "Judging…" : "Submit"}
             </Button>
-            <Button
-              {...(adjacent?.next
-                ? { component: NextLink, href: `/app/problems/${adjacent.next}` }
-                : { disabled: true })}
-              size="small"
-              variant="text"
-              endIcon={<ChevronRightIcon />}
-              sx={{ color: "text.secondary" }}
-            >
-              Next
-            </Button>
+            {examId ? (
+              <Box sx={{ width: 0 }} />
+            ) : (
+              <Button
+                {...(adjacent?.next
+                  ? { component: NextLink, href: `/app/problems/${adjacent.next}` }
+                  : { disabled: true })}
+                size="small"
+                variant="text"
+                endIcon={<ChevronRightIcon />}
+                sx={{ color: "text.secondary" }}
+              >
+                Next
+              </Button>
+            )}
           </Box>
         </Box>
 

@@ -450,6 +450,24 @@ async function startJudging(jobId, jobData) {
     return;
   }
 
+  // Fail closed: a graded submission made under a live exam must be for a
+  // problem actually attached to one of that exam's coding sections. Without
+  // this, the exam's per-section problemIds allowlist (enforced correctly by
+  // exam.controller.js#markVisited for the "visit" ping) was never checked at
+  // the one place that actually judges and records the attempt — a student
+  // could submit any problem_id from the full catalog during a proctored
+  // exam and have it fully judged (just scored 0 at final tally). Mirrors the
+  // fail-closed pattern of middleware/examLock.js#blockDuringExam.
+  if (exam_id && problem_id) {
+    const sections = await examRepo.getSections(exam_id);
+    const inScope = sections.some((s) => (s.problemIds || []).includes(problem_id));
+    if (!inScope) {
+      const err = new Error('This problem is not part of your exam.');
+      err.code = 'EXAM_PROBLEM_OUT_OF_SCOPE';
+      throw err;
+    }
+  }
+
   const testCasesRaw = await getGradingTestCases(problem_id, sample_only);
   if (testCasesRaw.length === 0) {
     // A problem can have hidden test cases but no public/sample ones — that's
