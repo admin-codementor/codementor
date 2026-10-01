@@ -88,6 +88,12 @@ backend/_cleanup.js
 # Local design reference (not part of the app)
 Problem Solving Page Design After claude/
 
+# ── Local Claude Code skills (personal to this machine, not shared) ─────────
+.claude/skills/
+# One-off local admin-account creation script — writes real credentials to
+# the console when run; not something to ship in the repo.
+backend/scripts/create-admin-account.js
+
 # ── Internal planning docs (kept out of a public repo) ───────
 # The scale-readiness programme documents unfixed security findings, live
 # infrastructure details, and internal cost/negotiation notes. Keep these out
