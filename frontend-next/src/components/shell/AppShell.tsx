@@ -25,7 +25,7 @@ import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import { MenuIcon, CodeIcon, LogoutIcon, PersonOutlineIcon } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { clearSession, getUser } from "@/lib/auth";
+import { clearSession, getUser, ROLE_LABEL } from "@/lib/auth";
 import { NavigationProgress } from "@/components/ui/motion";
 import { hoverTransition } from "@/theme/tokens";
 import type { User } from "@/lib/types";
@@ -256,9 +256,9 @@ export function AppShell({
                 </Typography>
                 {user?.role && (
                   <Chip
-                    label={user.role}
+                    label={ROLE_LABEL[user.role] ?? user.role}
                     size="small"
-                    sx={{ height: 20, textTransform: "capitalize", bgcolor: "secondaryContainer", color: "onSecondaryContainer" }}
+                    sx={{ height: 20, bgcolor: "secondaryContainer", color: "onSecondaryContainer" }}
                   />
                 )}
               </Box>

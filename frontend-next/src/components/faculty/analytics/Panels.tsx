@@ -2,7 +2,6 @@
 
 import * as React from "react";
 import Box from "@mui/material/Box";
-import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
@@ -14,103 +13,9 @@ import { ResponsiveScatterPlot } from "@nivo/scatterplot";
 import { ResponsivePie } from "@nivo/pie";
 import { useTheme } from "@mui/material/styles";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
-import { TrendingUpIcon, TrendingDownIcon } from "@/components/ui/icons";
-import { shape, lightScheme, darkScheme } from "@/theme/tokens";
+import { lightScheme, darkScheme } from "@/theme/tokens";
 
-type Accent = "primary" | "secondary" | "tertiary" | "success" | "warning" | "error";
-
-/** KPI tile matching StatCard's icon-tile visual language (same tonal-gradient
- * icon container, same Card shell), extended with the period-over-period delta
- * and inline sparkline analytics needs — which is why this isn't StatCard
- * itself: adding a chart to StatCard would pull nivo into every page that uses
- * it, not just this one. */
-export function KpiTile({
-  icon, label, value, delta, series, suffix, help, accent = "primary",
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: number | string;
-  delta?: number | null;
-  series?: number[];
-  suffix?: string;
-  help?: string;
-  accent?: Accent;
-}) {
-  const colors = useChartColors();
-  const up = (delta ?? 0) > 0;
-  const flat = delta === 0 || delta == null;
-
-  const containerKey =
-    accent === "tertiary"
-      ? { bg: "tertiaryContainer", fg: "onTertiaryContainer" }
-      : accent === "success"
-        ? { bg: "successContainer", fg: "onSuccessContainer" }
-        : accent === "warning"
-          ? { bg: "warningContainer", fg: "onWarningContainer" }
-          : accent === "error"
-            ? { bg: "errorContainer", fg: "onErrorContainer" }
-            : accent === "secondary"
-              ? { bg: "secondaryContainer", fg: "onSecondaryContainer" }
-              : { bg: "primaryContainer", fg: "onPrimaryContainer" };
-
-  return (
-    <Card variant="outlined" sx={{ borderColor: "outlineVariant", height: "100%" }}>
-      <Box sx={{ p: 2.5, height: "100%" }}>
-        <Stack direction="row" spacing={2} alignItems="center">
-          <Box
-            aria-hidden
-            sx={{
-              width: 48,
-              height: 48,
-              borderRadius: `${shape.large}px`,
-              flexShrink: 0,
-              display: "grid",
-              placeItems: "center",
-              color: containerKey.fg,
-              background: `linear-gradient(135deg, var(--mui-palette-${containerKey.bg}), color-mix(in srgb, var(--mui-palette-${containerKey.fg}) 16%, var(--mui-palette-${containerKey.bg})))`,
-              boxShadow: `0 4px 12px color-mix(in srgb, var(--mui-palette-${containerKey.bg}) 55%, transparent)`,
-            }}
-          >
-            {icon}
-          </Box>
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Tooltip title={help ?? ""}>
-              <Typography variant="overline" color="text.secondary" sx={{ lineHeight: 1.4 }}>
-                {label}
-              </Typography>
-            </Tooltip>
-            <Stack direction="row" alignItems="baseline" spacing={1}>
-              <Typography variant="h5" fontWeight={600} sx={{ lineHeight: 1.2 }}>{value}{suffix}</Typography>
-              {!flat && (
-                <Stack direction="row" alignItems="center" spacing={0.25} sx={{ color: up ? "success.main" : "error.main" }}>
-                  {up ? <TrendingUpIcon sx={{ fontSize: 15 }} /> : <TrendingDownIcon sx={{ fontSize: 15 }} />}
-                  <Typography variant="caption" fontWeight={600}>{Math.abs(delta as number)}%</Typography>
-                </Stack>
-              )}
-            </Stack>
-          </Box>
-        </Stack>
-        {series && series.length > 1 && (
-          <Box sx={{ height: 28, mt: 1, mx: -0.5 }}>
-            <ResponsiveLine
-              data={[{ id: label, data: series.map((y, i) => ({ x: i, y })) }]}
-              margin={{ top: 4, right: 4, bottom: 4, left: 4 }}
-              colors={[colors[0]]}
-              enablePoints={false}
-              enableGridX={false}
-              enableGridY={false}
-              axisLeft={null}
-              axisBottom={null}
-              isInteractive={false}
-              curve="monotoneX"
-              lineWidth={2}
-            />
-          </Box>
-        )}
-      </Box>
-    </Card>
-  );
-}
+export { KpiTile } from "@/components/analytics/KpiTile";
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 

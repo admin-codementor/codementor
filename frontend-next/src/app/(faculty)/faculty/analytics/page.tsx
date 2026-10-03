@@ -12,6 +12,7 @@ import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
 import Skeleton from "@mui/material/Skeleton";
 import Alert from "@mui/material/Alert";
+import NextLink from "next/link";
 import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import MenuItem from "@mui/material/MenuItem";
@@ -27,6 +28,7 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
+import { ExportButton, toCsv } from "@/components/analytics";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
@@ -198,7 +200,26 @@ export default function FacultyAnalyticsPage() {
 
   return (
     <Box>
-      <PageHeader title="Analytics" subtitle={`${scopeNote} · drill from the whole cohort down to a single question`} />
+      <PageHeader
+        title="Analytics"
+        subtitle={`${scopeNote} · drill from the whole cohort down to a single question`}
+        actions={
+          <Stack direction="row" spacing={1}>
+            <ExportButton
+              filename="at-risk-students.csv"
+              label="Export at-risk"
+              disabled={!atRisk?.length}
+              csv={() => toCsv((atRisk ?? []).map((s) => ({
+                name: s.name, roll_no: s.rollNo ?? "",
+                solved: s.solved, submissions: s.subs, accuracy_pct: s.acRate,
+                avg_attempts_to_solve: s.avgAttemptsToSolve ?? "",
+                reasons: (s.riskReasons ?? []).join("; "),
+              })))}
+            />
+            <Button component={NextLink} href="/faculty/courses" variant="outlined">Course dashboards</Button>
+          </Stack>
+        }
+      />
 
       <Stack direction="row" spacing={1.5} alignItems="center" sx={{ mb: 2 }} flexWrap="wrap" useFlexGap>
         <Breadcrumbs separator={<ChevronRightIcon fontSize="small" sx={{ color: "text.disabled" }} />} sx={{ flex: 1 }}>

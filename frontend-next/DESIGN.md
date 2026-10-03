@@ -107,6 +107,21 @@ Level 3 = one student (`…/students/:id/detail` — learning curve/verdict pie/
 query. New `hod` role behaves like dept-scoped faculty. Keep analytics aggregation **server-side +
 cached + paginated** (never ship raw rows) for 1000-concurrent.
 
+## Analytics screens — one layering, every persona
+
+Faculty, HOD, Admin, T&P and student analytics all use the shared kit in
+`components/analytics/` (barrel: `@/components/analytics`). Never hand-roll tiles or chart cards.
+
+Layer top-to-bottom, in this order:
+
+1. `FilterBar` — period + optional group multi-select (controlled; page owns state).
+2. `KpiRow` of `KpiTile`s — headline numbers, `value / total`, delta, sparkline. `invertDelta` for lower-is-better metrics. `InsightTile` for named takeaways (Strongest / Focus on).
+3. `ChartRow` of `ChartCard`s — `StackedBars` (where is the problem: unit/topic) then `TrendLines` (direction over time). Every chart lives in a `ChartCard`, which owns title, one-line takeaway, and loading/empty/error states.
+4. `Leaderboard`s — sortable horizontal bars, "most/least active X". Rows are clickable to drill down.
+5. Drill-down — a dedicated page per entity (student, exam), reached from a leaderboard row or table action.
+
+Rules: segment colours follow meaning (green solved, amber partial, grey untouched), not rank. Aggregate server-side. Always supply `emptyDescription` that says what will appear and why it is empty. Preview all pieces at `/dev/analytics-kit` (dev builds only).
+
 ## Sidebar navigation
 
 Student nav items are grouped under `overline` section subheaders (Practice /

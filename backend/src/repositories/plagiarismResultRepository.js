@@ -25,4 +25,11 @@ async function getById(id) {
   return toResult(await col().doc(id).get());
 }
 
-module.exports = { replaceForAssignment, listByAssignment, getById };
+// Every stored pair, reduced to who and how similar. Full-collection scan: only
+// call from a cached aggregate (see services/courseAnalyticsService.js).
+async function listAllPairs() {
+  const snap = await col().select('studentA', 'studentB', 'similarity').get();
+  return snap.docs.map((d) => d.data());
+}
+
+module.exports = { replaceForAssignment, listByAssignment, getById, listAllPairs };

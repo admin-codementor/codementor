@@ -39,6 +39,11 @@ import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal, RevealGroup, RevealItem } from "@/components/ui/motion";
 import { CODING_PLATFORM_META } from "@/lib/codingPlatforms";
+import { StatusBanner, type StatusInfo } from "@/components/analytics/StatusFlag";
+import {
+  CourseProgressCard, ExamHistoryCard, WeeklyProgressCard,
+  type CourseRow, type ExamRow, type WeeklyRow,
+} from "@/components/faculty/StudentProgressSections";
 
 interface TopicScore {
   topic: string;
@@ -83,6 +88,11 @@ interface StudentProfile {
     syncStatus: string;
     lastSynced: string | null;
   }[];
+  weekly: WeeklyRow[];
+  status: StatusInfo;
+  exams: ExamRow[];
+  examSummary: { taken: number; available: number; avg_percent: number | null };
+  courses: CourseRow[];
   highlights: {
     topTopic: string | null;
     weakTopic: string | null;
@@ -184,6 +194,8 @@ export default function StudentProfilePage() {
 
       {!loading && !error && data && (
         <Stack spacing={3}>
+          {data.status && <Reveal><StatusBanner status={data.status} /></Reveal>}
+
           <RevealGroup>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
               <RevealItem><StatCard icon={<PersonOutlineIcon />} label="Problems Solved" value={data.totals.solved} accent="primary" /></RevealItem>
@@ -212,6 +224,13 @@ export default function StudentProfilePage() {
               </RevealItem>
             </Box>
           </RevealGroup>
+
+          <Reveal><WeeklyProgressCard weeks={data.weekly ?? []} /></Reveal>
+
+          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3, alignItems: "start" }}>
+            <Reveal><CourseProgressCard courses={data.courses ?? []} /></Reveal>
+            <Reveal><ExamHistoryCard exams={data.exams ?? []} summary={data.examSummary ?? { taken: 0, available: 0, avg_percent: null }} /></Reveal>
+          </Box>
 
           {/* Strengths & weaknesses */}
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3 }}>
