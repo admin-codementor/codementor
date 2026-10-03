@@ -109,11 +109,19 @@ export function useProctor({ active, assignmentId, examId, problemId, onAutoSubm
         });
       }, 1000);
     };
+    // Blocked, not just recorded: during a live exam a paste is almost always
+    // externally-sourced code, and logging it after the fact helps nobody.
+    // Scoped guards on the editor itself live in useClipboardGuard; this is the
+    // document-level net for the exam shell (MCQ options, answer fields).
     const onPaste = (e: ClipboardEvent) => {
+      e.preventDefault();
       setViolations((v) => v + 1);
-      log("paste", `${String(e.clipboardData?.getData("text") || "").length} chars`);
+      log("paste", `blocked, ${String(e.clipboardData?.getData("text") || "").length} chars`);
     };
-    const onCopy = () => log("copy");
+    const onCopy = (e: ClipboardEvent) => {
+      e.preventDefault();
+      log("copy", "blocked");
+    };
 
     document.addEventListener("visibilitychange", onVis);
     document.addEventListener("fullscreenchange", onFsChange);

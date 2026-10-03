@@ -23,8 +23,10 @@ export interface Problem {
   title: string;
   difficulty: Difficulty | string;
   /** Acceptance rate as a percentage (0–100). May be named differently per endpoint. */
-  acceptance?: number;
+  acceptance?: number | null;
   acceptance_rate?: number;
+  /** Distinct students who have solved it. */
+  solved_count?: number;
   tags?: string[];
   is_solved?: boolean;
 }

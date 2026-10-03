@@ -5,6 +5,8 @@ const { logAction } = require('../middleware/audit');
 const { scopeDept, canSeeDepartment, canManageResource, canManageOwnedBy } = require('../middleware/role.middleware');
 const { cached } = require('../utils/cache');
 const { computeStrengthsWeaknesses } = require('../utils/topicScores');
+const { flagFor, weeklyActivity } = require('../utils/studentState');
+const examRepo = require('../repositories/examRepository');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
@@ -16,6 +18,8 @@ const codingProfileRepo = require('../repositories/codingProfileRepository');
 const contestRepo = require('../repositories/contestRepository');
 const mcqRepo = require('../repositories/mcqRepository');
 const analytics = require('../services/analyticsService');
+const courseAnalyticsService = require('../services/courseAnalyticsService');
+const departmentAnalyticsService = require('../services/departmentAnalyticsService');
 const submissionRepo = require('../repositories/submissionRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 
@@ -1647,11 +1651,13 @@ exports.getStudentDetail = async (req, res) => {
 // Runs every query for one student's full profile bundle. Pulled out of the route
 // handler so the (department-check-free) result can be Redis-cached by id alone.
 async function buildStudentProfile(id, student) {
-  const [subs, ratingRows, masteryRes, codingProfilesRes] = await Promise.all([
+  const [subs, ratingRows, masteryRes, codingProfilesRes, allExams, allCourses] = await Promise.all([
     submissionRepo.listByUser(id),
     ratingHistoryRepo.listByUser(id),
     topicMasteryRepo.listByUser(id),
     codingProfileRepo.listByUser(id),
+    examRepo.listPublished(),
+    courseRepo.listAll(),
   ]);
   const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
   const subDate = (s) => s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
@@ -1700,6 +1706,7 @@ async function buildStudentProfile(id, student) {
   const total = subs.length;
   const accepted = subs.filter(s => s.verdict === 'Accepted').length;
   const solvedProblemIds = new Set(subs.filter(s => s.verdict === 'Accepted').map(s => s.problemId));
+  const attemptedProblemIds = new Set(subs.map(s => s.problemId));
 
   // Difficulty progression: accepted problems by difficulty tier.
   const difficultyCounts = {};
@@ -1768,6 +1775,78 @@ async function buildStudentProfile(id, student) {
   );
   const currentStreak = calculateStreakFromHeatmap(activityHeatmap);
 
+  // ── Week-over-week activity (HOD review: the weekly review loop) ──────────
+  const weekly = weeklyActivity(subs, 8);
+
+  // ── Traffic-light flag, same rules the department funnel uses ─────────────
+  const lastActiveMs = subs.length ? Math.max(...subs.map(subMillis)) : 0;
+  const status = flagFor({
+    subs: total,
+    solved: solvedProblemIds.size,
+    acRate: total ? Math.round((accepted / total) * 100) : 0,
+    lastActiveMs,
+  });
+
+  // ── Exam history: every published exam this student has an attempt on ─────
+  const examRows = await Promise.all(allExams.map(async (e) => {
+    const attempt = await examRepo.getAttempt(e.id, id);
+    if (!attempt) return null;
+    const startedMs = attempt.startedAt?.toMillis?.() ?? 0;
+    const submittedMs = attempt.submittedAt?.toMillis?.() ?? 0;
+    return {
+      id: e.id,
+      title: e.title,
+      submitted: !!attempt.submittedAt,
+      score: attempt.score ?? null,
+      total: attempt.total ?? null,
+      // Derived, not stored: the attempt keeps both timestamps, so this is the
+      // honest elapsed time rather than an estimate.
+      minutes_taken: startedMs && submittedMs ? Math.max(0, Math.round((submittedMs - startedMs) / 60000)) : null,
+      submitted_at: toISO(attempt.submittedAt),
+    };
+  }));
+  const exams = examRows.filter(Boolean).sort((a, b) => (b.submitted_at || '').localeCompare(a.submitted_at || ''));
+  const scoredExams = exams.filter((e) => e.submitted && e.total);
+  const examSummary = {
+    taken: exams.filter((e) => e.submitted).length,
+    available: allExams.length,
+    avg_percent: scoredExams.length
+      ? Math.round(scoredExams.reduce((n, e) => n + (e.score / e.total) * 100, 0) / scoredExams.length)
+      : null,
+  };
+
+  // ── Course progress: solved vs total problems per module ─────────────────
+  const courses = [];
+  for (const c of allCourses) {
+    if (!c.isPublished) continue;
+    const modules = await courseRepo.getModules(c.id);
+    const units = modules.map((m) => {
+      const pids = m.problemIds || [];
+      return {
+        id: m.id,
+        title: m.title,
+        total: pids.length,
+        solved: pids.filter((pid) => solvedProblemIds.has(pid)).length,
+        attempted: pids.filter((pid) => attemptedProblemIds.has(pid)).length,
+      };
+    });
+    const totalProblems = units.reduce((n, u) => n + u.total, 0);
+    if (totalProblems === 0) continue;
+    const solvedCount = units.reduce((n, u) => n + u.solved, 0);
+    courses.push({
+      id: c.id,
+      title: c.title,
+      total: totalProblems,
+      solved: solvedCount,
+      percent: Math.round((solvedCount / totalProblems) * 100),
+      // "Pending" is what the faculty member actually acts on: units started
+      // but not finished, plus units never touched.
+      pending_units: units.filter((u) => u.solved < u.total).length,
+      units,
+    });
+  }
+  courses.sort((a, b) => b.percent - a.percent || a.title.localeCompare(b.title));
+
   return {
     student: {
       id: student.id, name: student.name, email: student.email,
@@ -1791,6 +1870,11 @@ async function buildStudentProfile(id, student) {
     strengths,
     weaknesses,
     codingProfiles,
+    weekly,
+    status,
+    exams,
+    examSummary,
+    courses,
     highlights: {
       topTopic,
       weakTopic,
@@ -1956,6 +2040,38 @@ exports.getFacultyCourseDetail = async (req, res) => {
   } catch (error) {
     console.error('Get Faculty Course Detail Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch course' });
+  }
+};
+
+// @route GET /api/faculty/department?section=&year=
+// HOD/department dashboard: student-state funnel, flags, section comparison,
+// badge ladder and written insights. Department comes from the caller's token
+// (scopeDept), never the query string.
+exports.getDepartmentAnalytics = async (req, res) => {
+  try {
+    const section = String(req.query.section || '').trim().slice(0, 40) || null;
+    const year = String(req.query.year || '').trim().slice(0, 10) || null;
+    const data = await departmentAnalyticsService.getDepartmentAnalytics(req, { section, year });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Department analytics error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load department analytics.' });
+  }
+};
+
+// @route GET /api/faculty/courses/:id/analytics?days=7|30|182&classroomIds=a,b
+// Course-level class dashboard: KPIs, unit-wise completion, trends, leaderboards,
+// flagged students. Scoped to the viewer's own population (see resolveAnalyticsScope).
+exports.getCourseAnalytics = async (req, res) => {
+  try {
+    const days = parseInt(req.query.days, 10) || 7;
+    const classroomIds = String(req.query.classroomIds || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 50);
+    const data = await courseAnalyticsService.getCourseAnalytics(req, req.params.id, days, classroomIds);
+    if (!data) return res.status(404).json({ success: false, error: 'Course not found' });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Course analytics error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load course analytics.' });
   }
 };
 

@@ -41,9 +41,23 @@ export function clearSession(): void {
   localStorage.clear();
 }
 
-/** Default landing route for a role — mirrors the old App.tsx redirects. */
+/** Roles that work in the faculty console (everyone except students). */
+export const STAFF_ROLES: Role[] = ["faculty", "hod", "admin"];
+
+export function isStaff(role: Role | null | undefined): boolean {
+  return role != null && STAFF_ROLES.includes(role);
+}
+
+/** Human-readable role names (HOD is an acronym, so CSS capitalize is wrong for it). */
+export const ROLE_LABEL: Record<Role, string> = {
+  student: "Student",
+  faculty: "Faculty",
+  hod: "HOD",
+  admin: "Admin",
+};
+
+/** Default landing route for a role. Only students use the /app area; every
+ * staff role (faculty, HOD, admin) lands in the faculty console. */
 export function homeForRole(role: Role | null | undefined): string {
-  return role === "faculty" || role === "admin"
-    ? "/faculty/dashboard"
-    : "/app/dashboard";
+  return isStaff(role) ? "/faculty/dashboard" : "/app/dashboard";
 }

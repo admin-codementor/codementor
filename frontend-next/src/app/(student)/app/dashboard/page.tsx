@@ -28,6 +28,8 @@ import { VerdictChip } from "@/components/ui/VerdictChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useDashboardQuery } from "@/lib/queries/student";
+import { ProblemOfTheDay } from "@/components/student/ProblemOfTheDay";
+import { ExamPerformance } from "@/components/student/ExamPerformance";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -299,7 +301,7 @@ export default function DashboardPage() {
           icon={<LocalFireDepartmentOutlinedIcon />}
           label="Day Streak"
           value={stats.streak}
-          helper={stats.streak >= 3 ? "On fire!" : undefined}
+          helper={`Goal: ${Math.min(stats.streak, 30)} / 30 days`}
           accent="warning"
         />
         <StatCard
@@ -316,6 +318,12 @@ export default function DashboardPage() {
         />
       </Box>
       </Reveal>
+
+      <Box sx={{ mb: 3 }}>
+        <ProblemOfTheDay />
+      </Box>
+
+      <ExamPerformance />
 
       {/* ── New-user empty state ── */}
       {isNewUser && (

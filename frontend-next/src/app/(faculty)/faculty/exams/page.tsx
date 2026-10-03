@@ -1,5 +1,6 @@
 "use client";
 
+import NextLink from "next/link";
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
@@ -483,6 +484,7 @@ export default function FacultyExamsPage() {
                     </span>
                   </Tooltip>
                   <Button size="small" variant="outlined" startIcon={<BarChartOutlinedIcon />} onClick={() => openResults(e)}>Results</Button>
+                  <Button size="small" variant="outlined" component={NextLink} href={`/faculty/exams/${e.id}/report`}>Full report</Button>
                   <Tooltip title={e.can_edit === false ? "You can't delete another department's exam" : "Delete exam"}>
                     <span>
                       <IconButton size="small" color="error" disabled={e.can_edit === false} onClick={() => doDelete(e)} aria-label="Delete exam"><DeleteOutlineIcon fontSize="small" /></IconButton>

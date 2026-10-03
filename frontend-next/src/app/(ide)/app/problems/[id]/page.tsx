@@ -27,12 +27,13 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
+import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, ContentPasteOffOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import Alert from "@mui/material/Alert";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { pollUntilDone } from "@/lib/pollJudging";
 import { useProctor } from "@/hooks/useProctor";
+import { useClipboardGuard } from "@/hooks/useClipboardGuard";
 import { FullscreenGraceModal } from "@/components/proctor/FullscreenGraceModal";
 import { fireConfetti } from "@/components/feedback/confetti";
 import { clearSession, getUser } from "@/lib/auth";
@@ -699,6 +700,10 @@ export default function ProblemSolvingPage() {
   const examId = searchParams.get("exam");
   const examSectionId = searchParams.get("section");
   const proctored = (!!assignmentId && searchParams.get("proctor") === "1") || !!examId;
+  // Clipboard is locked for ALL problem solving, not only proctored work: this
+  // page is the course/practice problem screen, and the sandbox exists for
+  // free experimentation where pasting your own code is fine.
+  const [editorContainer, setEditorContainer] = React.useState<HTMLDivElement | null>(null);
 
   // ── Judging lifecycle refs (avoid stale closures / poll leaks) ──
   const cancelPollRef = React.useRef<(() => void) | null>(null);
@@ -963,6 +968,16 @@ export default function ProblemSolvingPage() {
     onAutoSubmit: () => (examId ? examAutoSubmitRef.current() : autoSubmitRef.current()),
   });
 
+  // Clipboard lock on the editor itself. Always on here — this is assessed or
+  // course practice; the sandbox is the place for pasting your own code.
+  const clipboard = useClipboardGuard({
+    active: true,
+    container: editorContainer,
+    examId,
+    assignmentId,
+    problemId,
+  });
+
   // Reflect Judge0 compile/runtime errors as inline editor markers (cleared on
   // the next run when `verdict` resets to null).
   React.useEffect(() => {
@@ -1061,6 +1076,21 @@ export default function ProblemSolvingPage() {
       }}
     >
       {/* ── Proctored exam banner ── */}
+      {clipboard.notice && (
+        <Box
+          role="status"
+          aria-live="polite"
+          sx={{
+            display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1,
+            bgcolor: "warningContainer", color: "onWarningContainer",
+            borderBottom: "1px solid", borderColor: "outlineVariant",
+          }}
+        >
+          <ContentPasteOffOutlinedIcon fontSize="small" />
+          <Typography variant="caption" fontWeight={600}>{clipboard.notice}</Typography>
+        </Box>
+      )}
+
       {proctored && (
         <Box
           sx={{
@@ -1377,8 +1407,8 @@ export default function ProblemSolvingPage() {
             </Tooltip>
           </Box>
 
-          {/* Monaco editor */}
-          <Box sx={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
+          {/* Monaco editor — clipboard-guarded (see useClipboardGuard) */}
+          <Box ref={setEditorContainer} sx={{ flex: 1, overflow: "hidden", minHeight: 0 }}>
             <MonacoEditor
               height="100%"
               language={lang.monaco}

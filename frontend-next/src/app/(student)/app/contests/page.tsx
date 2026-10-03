@@ -33,7 +33,7 @@ import { EmptyState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
-import { getUser } from "@/lib/auth";
+import { getUser, isStaff } from "@/lib/auth";
 
 interface Contest {
   id: string;
@@ -321,7 +321,7 @@ export default function ContestsPage() {
 
   React.useEffect(() => {
     const u = getUser();
-    setIsFaculty(u?.role === "faculty" || u?.role === "admin");
+    setIsFaculty(isStaff(u?.role));
     api
       .get("/api/contests")
       .then((r) => {

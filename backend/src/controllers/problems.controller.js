@@ -1,4 +1,5 @@
 const problemRepo = require('../repositories/problemRepository');
+const { getProblemStats } = require('../services/problemStatsService');
 
 const ALLOWED_DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 
@@ -30,11 +31,23 @@ exports.getProblems = async (req, res) => {
 
     problems = problems
       .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
-      .slice(0, parsedLimit)
-      .map(p => ({
+      .slice(0, parsedLimit);
+
+    // Popularity/difficulty signal. Best-effort: the list must still render if the
+    // aggregate is unavailable, so a failure just omits the two fields.
+    let stats = {};
+    try { stats = (await getProblemStats()) || {}; } catch (e) { console.error('Problem stats unavailable:', e.message); }
+
+    problems = problems.map(p => {
+      const st = stats[p.id];
+      return {
         id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [],
         time_limit: p.timeLimit, memory_limit: p.memoryLimit, created_at: p.createdAt,
-      }));
+        // null (not 0) when nobody has attempted it, so the UI can show "—".
+        acceptance: st?.attempts ? Math.round((st.accepted / st.attempts) * 100) : null,
+        solved_count: st?.solvers ?? 0,
+      };
+    });
 
     res.json({ success: true, count: problems.length, data: problems });
   } catch (error) {

@@ -360,6 +360,8 @@ export default function ExamBuilderPage() {
   const [generalInstructions, setGeneralInstructions] = React.useState("");
   const [negativeMarkingDefault, setNegativeMarkingDefault] = React.useState(0);
   const [classIds, setClassIds] = React.useState<string[]>([]);
+  const [groupIds, setGroupIds] = React.useState<string[]>([]);
+  const [groups, setGroups] = React.useState<{ id: string; name: string; student_count: number; description: string }[]>([]);
   const [isPublished, setIsPublished] = React.useState(false);
 
   const [sections, setSections] = React.useState<RawSection[]>([]);
@@ -374,8 +376,9 @@ export default function ExamBuilderPage() {
       api.get(`/api/exams/${id}`),
       api.get("/api/faculty/problems"),
       api.get("/api/classrooms"),
+      api.get("/api/faculty/groups"),
     ])
-      .then(([e, p, c]) => {
+      .then(([e, p, c, g]) => {
         if (!alive || !e.data?.success) return;
         const { exam, sections: secs } = e.data.data;
         setTitle(exam.title ?? "");
@@ -386,6 +389,7 @@ export default function ExamBuilderPage() {
         setGeneralInstructions(exam.general_instructions ?? "");
         setNegativeMarkingDefault(exam.negative_marking_default ?? 0);
         setClassIds(exam.classroom_ids ?? []);
+        setGroupIds(exam.group_ids ?? []);
         setIsPublished(!!exam.is_published);
         setSections((secs ?? []).sort((a: RawSection, b: RawSection) => a.order - b.order));
         const counts: Record<string, number> = {};
@@ -395,6 +399,7 @@ export default function ExamBuilderPage() {
         setContentCounts(counts);
         if (p.data?.success) setProblems(p.data.data);
         if (c.data?.success) setClasses(c.data.data);
+        if (g.data?.success) setGroups(g.data.data);
       })
       .catch((e) => { if (alive) setLoadError(apiErrorMessage(e, "Couldn't load this exam.")); })
       .finally(() => { if (alive) setLoading(false); });
@@ -405,9 +410,9 @@ export default function ExamBuilderPage() {
 
   // Details autosave — same debounce-on-edit pattern as the meta fields in the
   // MCQ/assignment builders.
-  const metaRef = React.useRef({ title, description, windowStart, windowEnd, duration, generalInstructions, negativeMarkingDefault, classIds });
+  const metaRef = React.useRef({ title, description, windowStart, windowEnd, duration, generalInstructions, negativeMarkingDefault, classIds, groupIds });
   React.useEffect(() => {
-    metaRef.current = { title, description, windowStart, windowEnd, duration, generalInstructions, negativeMarkingDefault, classIds };
+    metaRef.current = { title, description, windowStart, windowEnd, duration, generalInstructions, negativeMarkingDefault, classIds, groupIds };
   });
   const metaTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [metaError, setMetaError] = React.useState("");
@@ -426,6 +431,7 @@ export default function ExamBuilderPage() {
       general_instructions: m.generalInstructions.trim() || null,
       negative_marking_default: m.negativeMarkingDefault,
       classroom_ids: m.classIds,
+      group_ids: m.groupIds,
     })
       .then(() => setSaveState("saved"))
       .catch((e) => {
@@ -496,6 +502,9 @@ export default function ExamBuilderPage() {
 
   const emptySections = sections.filter((s) => (contentCounts[s.id] ?? 0) === 0);
   const targetedStudents = classIds.reduce((sum, cid) => sum + (classes.find((c) => c.id === cid)?.member_count ?? 0), 0);
+  // Counted separately from classes, and never summed with them: a student can be
+  // in both a class and a group, so one combined total would double-count them.
+  const targetedGroupStudents = groupIds.reduce((sum, gid) => sum + (groups.find((g) => g.id === gid)?.student_count ?? 0), 0);
 
   const detailsStep: AuthoringStep = {
     label: "Details",
@@ -581,11 +590,11 @@ export default function ExamBuilderPage() {
 
   const classesStep: AuthoringStep = {
     label: "Who takes it",
-    hint: "Pick the classes this exam is for. Selecting none means every student sees it.",
+    hint: "Pick the classes and/or groups this exam is for. Selecting none means every student sees it.",
     content: (
       <Stack spacing={2}>
-        {classIds.length === 0 && (
-          <Alert severity="info">No class selected — <strong>every student</strong> will see this exam.</Alert>
+        {classIds.length === 0 && groupIds.length === 0 && (
+          <Alert severity="info">Nothing selected — <strong>every student</strong> will see this exam.</Alert>
         )}
         {classes.length === 0 ? (
           <EmptyState icon={<GroupsOutlinedIcon />} title="No classes yet" description="Create a class to target this exam at it." />
@@ -615,6 +624,42 @@ export default function ExamBuilderPage() {
             })}
           </Box>
         )}
+        <Box>
+          <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>Student groups</Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+            Groups can span sections and branches — use one for a placement batch or a cross-branch drive.
+          </Typography>
+          {groups.length === 0 ? (
+            <EmptyState
+              icon={<GroupsOutlinedIcon />}
+              title="No groups yet"
+              description="Create one under Student Groups to target this exam at a custom cohort."
+            />
+          ) : (
+            <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 240, overflowY: "auto" }}>
+              {groups.map((g) => {
+                const chosen = groupIds.includes(g.id);
+                return (
+                  <Stack
+                    key={g.id} direction="row" alignItems="center" spacing={1}
+                    onClick={() => editMeta(() => setGroupIds((prev) => (chosen ? prev.filter((x) => x !== g.id) : [...prev, g.id])))}
+                    sx={{
+                      px: 1, py: 0.75, cursor: "pointer", borderBottom: "1px solid", borderColor: "outlineVariant",
+                      "&:last-of-type": { borderBottom: 0 }, bgcolor: chosen ? "primaryContainer" : "transparent",
+                    }}
+                  >
+                    <Checkbox size="small" checked={chosen} tabIndex={-1} />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography variant="body2" noWrap>{g.name}</Typography>
+                      {g.description && <Typography variant="caption" color="text.secondary" noWrap>{g.description}</Typography>}
+                    </Box>
+                    <Chip icon={<GroupsOutlinedIcon />} label={g.student_count} size="small" sx={{ height: 20, fontSize: 11, flexShrink: 0 }} />
+                  </Stack>
+                );
+              })}
+            </Box>
+          )}
+        </Box>
       </Stack>
     ),
   };
@@ -634,7 +679,12 @@ export default function ExamBuilderPage() {
             {emptySections.length === 0 ? "Every section has content" : `${emptySections.length} section(s) still empty: ${emptySections.map((s) => s.title).join(", ")}`}
           </CheckLine>
           <CheckLine ok>
-            {classIds.length === 0 ? "Visible to every student" : `${classIds.length} class${classIds.length === 1 ? "" : "es"} · ~${targetedStudents} student${targetedStudents === 1 ? "" : "s"}`}
+            {classIds.length === 0 && groupIds.length === 0
+              ? "Visible to every student"
+              : [
+                classIds.length ? `${classIds.length} class${classIds.length === 1 ? "" : "es"} · ~${targetedStudents} student${targetedStudents === 1 ? "" : "s"}` : null,
+                groupIds.length ? `${groupIds.length} group${groupIds.length === 1 ? "" : "s"} · ~${targetedGroupStudents} student${targetedGroupStudents === 1 ? "" : "s"}` : null,
+              ].filter(Boolean).join(" + ")}
           </CheckLine>
         </Stack>
         <Divider />
@@ -708,7 +758,7 @@ export default function ExamBuilderPage() {
   return (
     <AuthoringShell
       title={title || "Untitled exam"}
-      subtitle={`${sections.length} section${sections.length === 1 ? "" : "s"} · ${duration} min · ${classIds.length === 0 ? "all students" : `${classIds.length} class${classIds.length === 1 ? "" : "es"}`}`}
+      subtitle={`${sections.length} section${sections.length === 1 ? "" : "s"} · ${duration} min · ${classIds.length === 0 && groupIds.length === 0 ? "all students" : [classIds.length && `${classIds.length} class${classIds.length === 1 ? "" : "es"}`, groupIds.length && `${groupIds.length} group${groupIds.length === 1 ? "" : "s"}`].filter(Boolean).join(" + ")}`}
       statusChip={
         <Chip
           size="small" label={isPublished ? "Published" : "Draft"}

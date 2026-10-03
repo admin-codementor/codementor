@@ -16,7 +16,7 @@ import Box from "@mui/material/Box";
 import type { SxProps, Theme } from "@mui/material/styles";
 import type { LucideIcon } from "lucide-react";
 import {
-  Snowflake, Clock, Plus, UserCog, ArrowLeft, ArrowRight, ClipboardList, Sparkles,
+  Snowflake, Clock, Plus, UserCog, ArrowLeft, ArrowRight, ClipboardList, ClipboardX, Sparkles,
   ChartColumn, Zap, Bug, Building2, CircleX, Dices, Check, CircleCheck, ChevronLeft,
   ChevronRight, X, Code, CodeXml, Copy, Moon, Trash2, FileText, Server, Download,
   Pencil, Trophy, CircleAlert, ChevronUp, ChevronDown, Fingerprint, List, Maximize,
@@ -133,6 +133,7 @@ export const LayersOutlinedIcon = makeIcon(Layers, "LayersOutlinedIcon");
 export const LeaderboardOutlinedIcon = makeIcon(ChartNoAxesColumn, "LeaderboardOutlinedIcon");
 export const LightModeOutlinedIcon = makeIcon(Sun, "LightModeOutlinedIcon");
 export const LinkOutlinedIcon = makeIcon(Link, "LinkOutlinedIcon");
+export const ContentPasteOffOutlinedIcon = makeIcon(ClipboardX, "ContentPasteOffOutlinedIcon");
 export const ListAltOutlinedIcon = makeIcon(ClipboardList, "ListAltOutlinedIcon");
 export const LocalFireDepartmentIcon = makeIcon(Flame, "LocalFireDepartmentIcon");
 export const LocalFireDepartmentOutlinedIcon = makeIcon(Flame, "LocalFireDepartmentOutlinedIcon");

@@ -3,6 +3,10 @@ const { canManageOwnedBy, canManageResource } = require('../middleware/role.midd
 const { validateCIDR } = require('../middleware/cidrCheck');
 const userRepo = require('../repositories/userRepository');
 const classroomRepo = require('../repositories/classroomRepository');
+const groupRepo = require('../repositories/studentGroupRepository');
+const proctorEventRepo = require('../repositories/proctorEventRepository');
+const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
+const examReport = require('../utils/examReport');
 const problemRepo = require('../repositories/problemRepository');
 const examRepo = require('../repositories/examRepository');
 
@@ -73,6 +77,20 @@ async function validateClassroomIds(classroom_ids, req) {
   return { classroomIds };
 }
 
+// Custom groups (review item 6) sit alongside classes rather than replacing them:
+// an exam may target classes, groups, both, or neither (= everyone). A group can
+// span branches, which is exactly what classroom targeting cannot express.
+async function validateGroupIds(group_ids) {
+  let groupIds = [];
+  if (Array.isArray(group_ids) && group_ids.length) {
+    groupIds = [...new Set(group_ids.map(String))].slice(0, 50);
+    const found = await groupRepo.getMapByIds(groupIds);
+    const unknown = groupIds.filter((gid) => !found.has(gid));
+    if (unknown.length) return { error: `Unknown group id(s): ${unknown.slice(0, 3).join(', ')}` };
+  }
+  return { groupIds };
+}
+
 // Same "no drafts" rule as assignments — a draft problem 404s for students.
 async function validateProblemIds(problem_ids) {
   const ids = Array.isArray(problem_ids) ? [...new Set(problem_ids.map(String))] : [];
@@ -96,13 +114,18 @@ async function validateProblemIds(problem_ids) {
 // student.controller.js's visibleAssignmentsFor.
 async function visibleExamsFor(userId) {
   const all = await examRepo.listPublished();
-  const needsMembership = all.some((e) => (e.classroomIds || []).length > 0);
-  const myClassIds = needsMembership
-    ? new Set((await classroomRepo.listByStudentId(userId)).map((c) => c.id))
-    : new Set();
+  const needsClasses = all.some((e) => (e.classroomIds || []).length > 0);
+  const needsGroups = all.some((e) => (e.groupIds || []).length > 0);
+  const [myClassIds, myGroupIds] = await Promise.all([
+    needsClasses ? classroomRepo.listByStudentId(userId).then((cs) => new Set(cs.map((c) => c.id))) : new Set(),
+    needsGroups ? groupRepo.listByStudentId(userId).then((gs) => new Set(gs.map((g) => g.id))) : new Set(),
+  ]);
   return all.filter((e) => {
-    const target = e.classroomIds || [];
-    return target.length === 0 || target.some((cid) => myClassIds.has(cid));
+    const classes = e.classroomIds || [];
+    const groups = e.groupIds || [];
+    // No targeting at all = everyone. Otherwise membership of EITHER list is enough.
+    if (classes.length === 0 && groups.length === 0) return true;
+    return classes.some((cid) => myClassIds.has(cid)) || groups.some((gid) => myGroupIds.has(gid));
   });
 }
 
@@ -113,7 +136,7 @@ async function visibleExamsFor(userId) {
 exports.createExam = async (req, res) => {
   try {
     const { title, description, window_start, window_end, duration_minutes,
-      general_instructions, allowed_cidrs, classroom_ids, negative_marking_default } = req.body;
+      general_instructions, allowed_cidrs, classroom_ids, group_ids, negative_marking_default } = req.body;
 
     if (typeof title !== 'string' || !title.trim() || title.length > 200) {
       return res.status(400).json({ success: false, error: 'Title is required and must be ≤ 200 characters.' });
@@ -132,6 +155,9 @@ exports.createExam = async (req, res) => {
     const classRes = await validateClassroomIds(classroom_ids, req);
     if (classRes.error) return res.status(400).json({ success: false, error: classRes.error });
 
+    const groupRes = await validateGroupIds(group_ids);
+    if (groupRes.error) return res.status(400).json({ success: false, error: groupRes.error });
+
     const negDefault = Math.max(parseFloat(negative_marking_default) || 0, 0);
 
     const exam = await examRepo.create({
@@ -144,6 +170,7 @@ exports.createExam = async (req, res) => {
       generalInstructions: (general_instructions || '').slice(0, 4000) || null,
       allowedCidrs: cidrRes.cidrs,
       classroomIds: classRes.classroomIds,
+      groupIds: groupRes.groupIds,
       negativeMarkingDefault: negDefault,
       isPublished: false,
     });
@@ -161,7 +188,7 @@ exports.updateExam = async (req, res) => {
     if (!(await writableExam(req, id))) return res.status(404).json({ success: false, error: 'Exam not found' });
 
     const { title, description, window_start, window_end, duration_minutes,
-      general_instructions, allowed_cidrs, classroom_ids, negative_marking_default } = req.body;
+      general_instructions, allowed_cidrs, classroom_ids, group_ids, negative_marking_default } = req.body;
     const partial = {};
 
     if (title !== undefined) {
@@ -204,6 +231,12 @@ exports.updateExam = async (req, res) => {
       const classRes = await validateClassroomIds(classroom_ids, req);
       if (classRes.error) return res.status(400).json({ success: false, error: classRes.error });
       partial.classroomIds = classRes.classroomIds;
+    }
+
+    if (group_ids !== undefined) {
+      const groupRes = await validateGroupIds(group_ids);
+      if (groupRes.error) return res.status(400).json({ success: false, error: groupRes.error });
+      partial.groupIds = groupRes.groupIds;
     }
 
     if (negative_marking_default !== undefined) {
@@ -287,7 +320,8 @@ exports.getExamFaculty = async (req, res) => {
           id: exam.id, title: exam.title, description: exam.description || null,
           window_start: toISO(exam.windowStart), window_end: toISO(exam.windowEnd), duration_minutes: exam.durationMinutes,
           general_instructions: exam.generalInstructions || null, allowed_cidrs: exam.allowedCidrs || [],
-          classroom_ids: exam.classroomIds || [], negative_marking_default: exam.negativeMarkingDefault || 0,
+          classroom_ids: exam.classroomIds || [], group_ids: exam.groupIds || [],
+          negative_marking_default: exam.negativeMarkingDefault || 0,
           is_published: !!exam.isPublished, created_at: toISO(exam.createdAt),
         },
         sections: sectionsOut,
@@ -526,9 +560,20 @@ exports.getResults = async (req, res) => {
 
     const attempts = (await examRepo.listSubmittedAttempts(id))
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || (a.submittedAt?.toMillis?.() ?? 0) - (b.submittedAt?.toMillis?.() ?? 0));
-    const usersMap = await userRepo.getAllUsersMap();
+    const [usersMap, proctorEvents, plagiarismPairs] = await Promise.all([
+      userRepo.getAllUsersMap(),
+      proctorEventRepo.listByExam(id),
+      plagiarismResultRepo.listAllPairs(),
+    ]);
+    const proctorByUser = examReport.proctorSummary(proctorEvents);
 
     const sections = await examRepo.getSections(id);
+    // Per-section marks need the question bank, which the loop below also reads;
+    // collect it once here so each attempt's section score is a lookup, not a refetch.
+    const questionsBySection = new Map();
+    for (const s of sections) {
+      if (s.type === 'mcq') questionsBySection.set(s.id, await examRepo.getSectionQuestions(id, s.id));
+    }
     const sectionStats = [];
     for (const s of sections) {
       if (s.type === 'mcq') {
@@ -583,20 +628,55 @@ exports.getResults = async (req, res) => {
 
     const scores = attempts.map((a) => a.score || 0);
     const avg = scores.length ? Math.round((scores.reduce((sum, n) => sum + n, 0) / scores.length) * 10) / 10 : 0;
+    const times = attempts.map(examReport.minutesTaken).filter((n) => n != null);
 
+    // Similarity pairs are stored per assignment, not per exam, so they are
+    // matched by participant rather than by exam id: a pair counts here when
+    // both students sat this exam. Flagged by whoever ran the check, on
+    // whichever assignment — which is why the UI labels it platform-wide.
+    const attemptIds = new Set(attempts.map((a) => a.userId));
+    const similarity = plagiarismPairs
+      .filter((p) => attemptIds.has(p.studentA) && attemptIds.has(p.studentB))
+      .map((p) => ({
+        student_a: usersMap.get(p.studentA)?.name || 'Unknown',
+        student_b: usersMap.get(p.studentB)?.name || 'Unknown',
+        similarity: Math.round(p.similarity ?? 0),
+      }))
+      .sort((a, b) => b.similarity - a.similarity)
+      .slice(0, 50);
+
+    const rows = attempts.map((a) => {
+      const profile = usersMap.get(a.userId) || {};
+      const proctor = proctorByUser.get(a.userId) || null;
+      return {
+        userId: a.userId, name: profile.name || 'Unknown', email: profile.email || null,
+        rollNo: profile.rollNo || null, department: profile.department || null, section: profile.section || null,
+        score: a.score, total: a.total, submittedAt: toISO(a.submittedAt),
+        percent: a.total ? Math.round(((a.score ?? 0) / a.total) * 100) : null,
+        minutesTaken: examReport.minutesTaken(a),
+        sectionScores: examReport.sectionScoresFor(a, sections, questionsBySection),
+        proctor,
+      };
+    });
+
+    const totalMarks = attempts.find((a) => a.total)?.total ?? null;
     res.json({
       success: true,
       data: {
-        attempts: attempts.map((a) => {
-          const profile = usersMap.get(a.userId) || {};
-          return {
-            userId: a.userId, name: profile.name || 'Unknown', email: profile.email || null,
-            rollNo: profile.rollNo || null, department: profile.department || null, section: profile.section || null,
-            score: a.score, total: a.total, submittedAt: toISO(a.submittedAt),
-          };
-        }),
-        summary: { attempts: attempts.length, avgScore: avg, maxScore: scores.length ? Math.max(...scores) : 0 },
+        attempts: rows,
+        summary: {
+          attempts: attempts.length,
+          avgScore: avg,
+          maxScore: scores.length ? Math.max(...scores) : 0,
+          totalMarks,
+          avgPercent: totalMarks ? Math.round((avg / totalMarks) * 100) : null,
+          medianMinutes: examReport.median(times),
+          flaggedStudents: rows.filter((r) => r.proctor && r.proctor.risk !== 'low').length,
+          similarityPairs: similarity.length,
+        },
+        scoreBands: examReport.scoreBands(attempts),
         sections: sectionStats,
+        similarity,
       },
     });
   } catch (e) {

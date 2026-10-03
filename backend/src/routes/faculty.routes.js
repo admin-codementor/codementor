@@ -5,6 +5,7 @@ const { authorize, facultyStaff } = require('../middleware/role.middleware');
 const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../middleware/permissions');
 const facultyController = require('../controllers/faculty.controller');
 const plagiarismController = require('../controllers/plagiarism.controller');
+const groupController = require('../controllers/studentGroup.controller');
 const { logAction } = require('../middleware/audit');
 const userRepo = require('../repositories/userRepository');
 const auditLogRepo = require('../repositories/auditLogRepository');
@@ -27,6 +28,10 @@ const plagiarismLimiter = createLimiter({
 // ── Read-only dashboard endpoints (no extra permission needed) ───────────────
 router.get('/dashboard',  facultyController.getDashboardData);
 router.get('/analytics',  facultyController.getClassAnalytics);
+// HOD/admin only. A `faculty` token is scoped to its own CLASSES everywhere else
+// (resolveAnalyticsScope), so serving it a whole-department roster here would
+// quietly widen what a class teacher can see.
+router.get('/department', authorize('hod', 'admin'), facultyController.getDepartmentAnalytics);
 router.get('/cohort-topics', facultyController.getCohortTopics);
 // Hierarchical drill-down (department-scoped for HOD/faculty; admin = all).
 router.get('/analytics/cohorts', facultyController.getCohorts);
@@ -93,9 +98,21 @@ router.get('/assignments/:id', facultyController.getAssignmentDetail);
 router.get('/assignments/:id/submissions', facultyController.getAssignmentSubmissions);
 router.get('/assignments/:id/progress',    facultyController.getAssignmentProgress);
 
+// ── Custom student groups / mixed-branch batches ────────────────────
+// Reading is open to all teaching staff (they need to target an exam at a group);
+// creating and editing is gated on manage_students, the same permission that
+// governs class rosters.
+router.get('/groups', groupController.listGroups);
+router.get('/groups-candidates', groupController.listCandidates);
+router.get('/groups/:id', groupController.getGroup);
+router.post('/groups', requirePermission('manage_students'), groupController.createGroup);
+router.patch('/groups/:id', requirePermission('manage_students'), groupController.updateGroup);
+router.delete('/groups/:id', requirePermission('manage_students'), groupController.deleteGroup);
+
 // ── Courses / modules (student practice catalogue) ──────────────────────────
 router.get('/courses',    facultyController.getFacultyCourses);
 router.get('/courses/:id', facultyController.getFacultyCourseDetail);
+router.get('/courses/:id/analytics', facultyController.getCourseAnalytics);
 router.post('/courses',
   requirePermission('manage_problems'),
   facultyController.createCourse

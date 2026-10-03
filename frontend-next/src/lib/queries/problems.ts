@@ -8,6 +8,7 @@ export interface ProblemsQueryParams {
   page: number;
   difficulty?: string;
   search?: string;
+  tag?: string;
 }
 
 export interface ProblemsQueryResult {
@@ -21,6 +22,7 @@ export function useProblemsQuery(params: ProblemsQueryParams) {
     queryFn: async () => {
       const query: Record<string, string | number> = { page: params.page, limit: 50 };
       if (params.search) query.search = params.search;
+      if (params.tag) query.tag = params.tag;
       if (params.difficulty && params.difficulty !== "All") query.difficulty = params.difficulty;
 
       const res = await api.get("/api/problems", { params: query });

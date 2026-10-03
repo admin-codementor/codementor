@@ -31,6 +31,8 @@ import { EmptyState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
 import { useProblemsQuery, useSolvedProblemsQuery } from "@/lib/queries/problems";
 import { useDebouncedValue } from "@/lib/useDebouncedValue";
+import { ProblemOfTheDay } from "@/components/student/ProblemOfTheDay";
+import Chip from "@mui/material/Chip";
 
 const DIFFICULTY_FILTERS = ["All", "Easy", "Medium", "Hard"] as const;
 type DifficultyFilter = (typeof DIFFICULTY_FILTERS)[number];
@@ -84,6 +86,10 @@ const ProblemRow = React.memo(function ProblemRow({
       <TableCell>
         <DifficultyChip difficulty={problem.difficulty} />
       </TableCell>
+      <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>
+        {problem.acceptance != null ? `${problem.acceptance}%` : "—"}
+      </TableCell>
+      <TableCell sx={{ fontVariantNumeric: "tabular-nums" }}>{problem.solved_count ?? 0}</TableCell>
     </TableRow>
   );
 });
@@ -102,11 +108,20 @@ function ProblemsInner() {
     );
   });
   const [page, setPage] = React.useState(1);
+  const [tag, setTag] = React.useState<string | null>(null);
   // Debounce only what goes into the query key — typing updates the field
   // instantly, the request follows 300ms after typing stops.
   const debouncedSearch = useDebouncedValue(searchInput, 300);
 
-  const problemsQuery = useProblemsQuery({ page, difficulty, search: debouncedSearch });
+  const problemsQuery = useProblemsQuery({ page, difficulty, search: debouncedSearch, tag: tag ?? undefined });
+  // Unfiltered list (shared cache with Problem of the Day) so the topic chips
+  // stay put while a topic filter is active.
+  const allProblemsQuery = useProblemsQuery({ page: 1 });
+  const topics = React.useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const p of allProblemsQuery.data?.problems ?? []) for (const t of p.tags ?? []) counts.set(t, (counts.get(t) ?? 0) + 1);
+    return [...counts.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, 12);
+  }, [allProblemsQuery.data]);
   const solvedQuery = useSolvedProblemsQuery();
 
   React.useEffect(() => {
@@ -124,7 +139,7 @@ function ProblemsInner() {
   const countBy = (d: string) =>
     problems.filter((p) => p.difficulty?.toLowerCase() === d).length;
   const solvedPct = total > 0 ? Math.round((solved.length / total) * 100) : 0;
-  const hasActiveFilters = difficulty !== "All" || searchInput !== "";
+  const hasActiveFilters = difficulty !== "All" || searchInput !== "" || tag !== null;
 
   const pickRandom = () => {
     if (problems.length === 0) return;
@@ -143,6 +158,10 @@ function ProblemsInner() {
           </Button>
         }
       />
+
+      <Box sx={{ mb: 3 }}>
+        <ProblemOfTheDay />
+      </Box>
 
       {/* Progress */}
       <Box
@@ -219,6 +238,7 @@ function ProblemsInner() {
               onClick={() => {
                 setDifficulty("All");
                 setSearchInput("");
+                setTag(null);
                 setPage(1);
               }}
             >
@@ -228,16 +248,38 @@ function ProblemsInner() {
         </Stack>
       </Card>
 
+      {topics.length > 0 && (
+        <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" sx={{ mb: 3 }} role="group" aria-label="Filter by topic">
+          {topics.map(([t, n]) => (
+            <Chip
+              key={t}
+              label={`${t.replace(/[-_]/g, " ")} (${n})`}
+              clickable
+              color={tag === t ? "primary" : "default"}
+              variant={tag === t ? "filled" : "outlined"}
+              onClick={() => { setTag(tag === t ? null : t); setPage(1); }}
+              sx={{ textTransform: "capitalize" }}
+            />
+          ))}
+        </Stack>
+      )}
+
       {/* Table */}
       <Reveal>
       <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
         <TableContainer sx={{ overflowX: "auto" }}>
-          <Table aria-label="Problem list" sx={{ minWidth: 560 }}>
+          <Table aria-label="Problem list" sx={{ minWidth: 680 }}>
             <TableHead>
               <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600, borderColor: "outlineVariant" } }}>
                 <TableCell sx={{ width: 72 }}>Status</TableCell>
                 <TableCell>Title</TableCell>
                 <TableCell sx={{ width: 140 }}>Difficulty</TableCell>
+                <TableCell sx={{ width: 110 }}>
+                  <Tooltip title="Share of all submissions that were accepted"><span>Accuracy</span></Tooltip>
+                </TableCell>
+                <TableCell sx={{ width: 110 }}>
+                  <Tooltip title="Students who have solved it"><span>Solved by</span></Tooltip>
+                </TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -247,11 +289,13 @@ function ProblemsInner() {
                     <TableCell><Skeleton variant="circular" width={20} height={20} /></TableCell>
                     <TableCell><Skeleton width="60%" /></TableCell>
                     <TableCell><Skeleton width={64} height={28} /></TableCell>
+                    <TableCell><Skeleton width={40} /></TableCell>
+                    <TableCell><Skeleton width={32} /></TableCell>
                   </TableRow>
                 ))
               ) : problems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={3} sx={{ border: 0 }}>
+                  <TableCell colSpan={5} sx={{ border: 0 }}>
                     <EmptyState
                       icon={<CodeOffOutlinedIcon />}
                       title="No problems match your filters"
@@ -263,6 +307,7 @@ function ProblemsInner() {
                             onClick={() => {
                               setDifficulty("All");
                               setSearchInput("");
+                              setTag(null);
                               setPage(1);
                             }}
                           >

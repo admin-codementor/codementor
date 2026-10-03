@@ -317,16 +317,21 @@ export default function CourseEditorPage() {
       <PageHeader
         title=""
         actions={
-          course.canEdit ? (
-            <Button
-              variant={course.isPublished ? "outlined" : "contained"}
-              color={course.isPublished ? "warning" : "primary"}
-              disabled={publishing}
-              onClick={togglePublish}
-            >
-              {course.isPublished ? "Unpublish" : "Publish"}
+          <Stack direction="row" spacing={1}>
+            <Button component={NextLink} href={`/faculty/courses/${id}/analytics`} variant="outlined">
+              Class analytics
             </Button>
-          ) : undefined
+            {course.canEdit && (
+              <Button
+                variant={course.isPublished ? "outlined" : "contained"}
+                color={course.isPublished ? "warning" : "primary"}
+                disabled={publishing}
+                onClick={togglePublish}
+              >
+                {course.isPublished ? "Unpublish" : "Publish"}
+              </Button>
+            )}
+          </Stack>
         }
       />
 
