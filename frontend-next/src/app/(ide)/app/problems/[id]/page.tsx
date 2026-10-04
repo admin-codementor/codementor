@@ -27,7 +27,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, ContentPasteOffOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
+import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import Alert from "@mui/material/Alert";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
@@ -428,6 +428,8 @@ function IDEHeader({
   showAI,
   onToggleAI,
   examId,
+  proctored,
+  navContext,
 }: {
   problem: ProblemDetail | null;
   problemId: string;
@@ -439,6 +441,10 @@ function IDEHeader({
   onSubmit: () => void;
   showAI: boolean;
   onToggleAI: () => void;
+  /** Exam or proctored assignment — gives the clock prominence. */
+  proctored: boolean;
+  /** Query string that keeps prev/next inside the current module or assignment. */
+  navContext: string;
   /** Present while solving a problem inside a live exam — hides catalog-wide
    * navigation (logo, prev/next) so a student can't browse away to the other
    * ~77 problems mid-exam. See exam.controller.js#markVisited, which already
@@ -475,10 +481,10 @@ function IDEHeader({
         overflowX: "auto",
       }}
     >
-      {/* Logo — hidden during a live exam: it links to the full public
-          catalog, which a student shouldn't be able to browse away to. */}
+      {/* Logo — goes home, the way a logo is expected to. Hidden during a live
+          exam so a student can't browse away mid-sitting. */}
       {!examId && (
-        <IconButton component={NextLink} href="/app/problems" aria-label="Back to problems" size="small" sx={{ flexShrink: 0 }}>
+        <IconButton component={NextLink} href="/app/dashboard" aria-label="CodeMentor home" size="small" sx={{ flexShrink: 0 }}>
           <CodeIcon fontSize="small" />
         </IconButton>
       )}
@@ -494,7 +500,7 @@ function IDEHeader({
             <span>
               <IconButton
                 component={NextLink}
-                href={adjacent?.prev ? `/app/problems/${adjacent.prev}` : "#"}
+                href={adjacent?.prev ? `/app/problems/${adjacent.prev}${navContext}` : "#"}
                 aria-label="Previous problem"
                 size="small"
                 disabled={!adjacent?.prev}
@@ -515,7 +521,7 @@ function IDEHeader({
             <span>
               <IconButton
                 component={NextLink}
-                href={adjacent?.next ? `/app/problems/${adjacent.next}` : "#"}
+                href={adjacent?.next ? `/app/problems/${adjacent.next}${navContext}` : "#"}
                 aria-label="Next problem"
                 size="small"
                 disabled={!adjacent?.next}
@@ -528,22 +534,30 @@ function IDEHeader({
         </>
       )}
 
-      {/* Problem title — minWidth:0 is required for a flex item to actually
-          shrink/ellipsis instead of forcing the row wider than the viewport
-          (a flex item's default min-width is `auto`, not 0). */}
-      <Typography
-        variant="body2"
-        fontWeight={600}
-        noWrap
-        sx={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", mx: 1 }}
-      >
-        {problem?.title ?? "Loading…"}
-      </Typography>
+      {/* Problem title and difficulty. minWidth:0 is required for a flex item
+          to actually shrink/ellipsis instead of forcing the row wider than the
+          viewport (a flex item's default min-width is `auto`, not 0). */}
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: 1, minWidth: 0, mx: 1 }}>
+        <Typography
+          variant="body2"
+          fontWeight={600}
+          noWrap
+          sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
+        >
+          {problem?.title ?? "Loading…"}
+        </Typography>
+        {problem?.difficulty && (
+          <Box sx={{ flexShrink: 0, display: { xs: "none", md: "block" } }}>
+            <DifficultyChip difficulty={problem.difficulty} />
+          </Box>
+        )}
+      </Stack>
 
-      {/* Timer (session + Pomodoro) — hidden on phone widths, same reasoning
-          as the position counter above. */}
-      <Box sx={{ mr: 0.5, flexShrink: 0, display: { xs: "none", sm: "block" } }}>
-        <TimerWidget problemId={problemId} solved={solved} />
+      {/* Timer. Under proctoring it stays visible even on a phone and is given
+          real weight — the clock is the thing that matters in a sitting.
+          In ordinary practice it's a quiet chip and hides on narrow screens. */}
+      <Box sx={{ mr: 0.5, flexShrink: 0, display: proctored ? "block" : { xs: "none", sm: "block" } }}>
+        <TimerWidget problemId={problemId} solved={solved} prominent={proctored} />
       </Box>
 
       {/* Run */}
@@ -748,6 +762,15 @@ export default function ProblemSolvingPage() {
 
   // Timer (session + Pomodoro) lives in <TimerWidget>, keyed by problemId + solved.
 
+  // Which list the arrows should walk, taken from the link that opened this page.
+  const navContext = React.useMemo(() => {
+    const course = searchParams.get("course");
+    const moduleId = searchParams.get("module");
+    if (course && moduleId) return `?course=${encodeURIComponent(course)}&module=${encodeURIComponent(moduleId)}`;
+    if (assignmentId) return `?assignment=${encodeURIComponent(assignmentId)}`;
+    return "";
+  }, [searchParams, assignmentId]);
+
   // ── Load problem + adjacent ──
   React.useEffect(() => {
     let active = true;
@@ -760,7 +783,11 @@ export default function ProblemSolvingPage() {
     setMobilePane("problem");
     Promise.allSettled([
       api.get<{ success: boolean; data: ProblemDetail }>(`/api/problems/${problemId}`),
-      api.get<{ success: boolean; data: AdjacentProblems }>(`/api/problems/${problemId}/adjacent`),
+      // Context (module or assignment) makes prev/next follow the list the
+      // student is actually working through, not the whole catalogue.
+      api.get<{ success: boolean; data: AdjacentProblems }>(
+        `/api/problems/${problemId}/adjacent${navContext}`,
+      ),
     ]).then(([probRes, adjRes]) => {
       if (!active) return;
       if (probRes.status === "rejected") { setError(true); setLoading(false); return; }
@@ -975,7 +1002,7 @@ export default function ProblemSolvingPage() {
 
   // Clipboard lock on the editor itself. Always on here — this is assessed or
   // course practice; the sandbox is the place for pasting your own code.
-  const clipboard = useClipboardGuard({
+  useClipboardGuard({
     active: true,
     container: editorContainer,
     examId,
@@ -1080,22 +1107,8 @@ export default function ProblemSolvingPage() {
         overflow: "hidden",
       }}
     >
-      {/* ── Proctored exam banner ── */}
-      {clipboard.notice && (
-        <Box
-          role="status"
-          aria-live="polite"
-          sx={{
-            display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1,
-            bgcolor: "warningContainer", color: "onWarningContainer",
-            borderBottom: "1px solid", borderColor: "outlineVariant",
-          }}
-        >
-          <ContentPasteOffOutlinedIcon fontSize="small" />
-          <Typography variant="caption" fontWeight={600}>{clipboard.notice}</Typography>
-        </Box>
-      )}
-
+      {/* No clipboard banner: paste is blocked silently (see useClipboardGuard).
+          The attempt is still logged for faculty. */}
       {proctored && (
         <Box
           sx={{
@@ -1165,6 +1178,8 @@ export default function ProblemSolvingPage() {
         onRun={() => { setOutputTab("testcases"); setOutputOpen(true); execute("run"); }}
         onSubmit={() => execute("submit")}
         examId={examId}
+        proctored={proctored}
+        navContext={navContext}
         showAI={showAI}
         onToggleAI={() => setShowAI((v) => !v)}
       />
@@ -1651,71 +1666,6 @@ export default function ProblemSolvingPage() {
             </Collapse>
           </Box>
 
-          {/* Bottom action bar (Prev · Reset · Submit · Next) */}
-          <Box
-            sx={{
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              px: 1.5,
-              height: 48,
-              borderTop: "1px solid",
-              borderColor: "outlineVariant",
-              bgcolor: "surface",
-            }}
-          >
-            {/* Prev/next hidden during a live exam — see IDEHeader above for why. */}
-            {examId ? (
-              <Box sx={{ width: 0 }} />
-            ) : (
-              <Button
-                {...(adjacent?.prev
-                  ? { component: NextLink, href: `/app/problems/${adjacent.prev}` }
-                  : { disabled: true })}
-                size="small"
-                variant="text"
-                startIcon={<ChevronLeftIcon />}
-                sx={{ color: "text.secondary" }}
-              >
-                Prev
-              </Button>
-            )}
-            <Box sx={{ flex: 1 }} />
-            <Button
-              onClick={resetCode}
-              size="small"
-              variant="text"
-              startIcon={<RestartAltOutlinedIcon />}
-              sx={{ color: "text.secondary" }}
-            >
-              Reset
-            </Button>
-            <Button
-              onClick={() => execute("submit")}
-              disabled={submitting || running}
-              size="small"
-              variant="contained"
-              startIcon={submitting ? <CircularProgress size={14} sx={{ color: "inherit" }} /> : <UploadOutlinedIcon />}
-            >
-              {submitting ? "Judging…" : "Submit"}
-            </Button>
-            {examId ? (
-              <Box sx={{ width: 0 }} />
-            ) : (
-              <Button
-                {...(adjacent?.next
-                  ? { component: NextLink, href: `/app/problems/${adjacent.next}` }
-                  : { disabled: true })}
-                size="small"
-                variant="text"
-                endIcon={<ChevronRightIcon />}
-                sx={{ color: "text.secondary" }}
-              >
-                Next
-              </Button>
-            )}
-          </Box>
         </Box>
 
       </Box>

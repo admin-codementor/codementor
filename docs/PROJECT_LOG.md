@@ -5,6 +5,30 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 9
+**Area:** Student persona — S6 problem page
+**Did:**
+- **Fixed the real cause of "next problem is too hard".** Prev/next called an endpoint that walked **every
+  published problem in creation order**, so "next" from problem 2 of a Java module landed on an unrelated problem
+  23 of 77. The endpoint now takes a context (`?course=&module=` or `?assignment=`) and walks that list instead.
+  Verified: the same problem reads **2/22 "Basics"** with context and 23/77 without, and the arrows keep the
+  context as you move.
+- **Each control appears once.** Removed the bottom action bar that duplicated Submit, Prev, Next and Reset —
+  Run/Submit live in the header, navigation beside them, Reset in the editor toolbar. Verified in the browser:
+  Submit 1, Run 1, duplicate Prev/Next 0 (was 2 of each).
+- **Logo goes home** (`/app/dashboard`) instead of the problem catalogue, matching every other screen.
+- **Title shows difficulty** alongside it, properly aligned and ellipsised.
+- **Timer earns its weight when it matters**: under proctoring it's a large amber countdown that stays visible on
+  a phone; in ordinary practice it stays a quiet chip — a stopwatch counting up while someone is thinking is
+  pressure they didn't ask for.
+- **Copy/paste blocking is now silent**, as decided. The banner ("Pasting is turned off here…") is gone; the
+  keystroke simply does nothing, and the attempt is still logged for faculty. Verified: dispatching a paste
+  produces no banner.
+**Next:** S7 — the results panel.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 8
 **Area:** Student persona — S5 Tests hub + proctoring as a switch
 **Did:**

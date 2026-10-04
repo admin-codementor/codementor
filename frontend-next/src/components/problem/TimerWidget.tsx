@@ -38,7 +38,20 @@ type Mode = "session" | "focus";
  * The header chip shows the selected mode; clicking it opens a popover to switch modes
  * and control the Pomodoro.
  */
-export function TimerWidget({ problemId, solved }: { problemId: string; solved: boolean }) {
+export function TimerWidget({
+  problemId,
+  solved,
+  prominent = false,
+}: {
+  problemId: string;
+  solved: boolean;
+  /**
+   * Under proctoring the clock is the most important thing in the header, so it
+   * gets real weight. In ordinary practice it stays a quiet chip — a stopwatch
+   * counting up while someone is thinking is pressure they didn't ask for.
+   */
+  prominent?: boolean;
+}) {
   const showToast = useToast();
   const [mode, setMode] = React.useState<Mode>("session");
   const [anchorEl, setAnchorEl] = React.useState<HTMLElement | null>(null);
@@ -122,10 +135,22 @@ export function TimerWidget({ problemId, solved }: { problemId: string; solved: 
         aria-label={`${focusMode ? "Focus" : "Session"} timer ${display}. Open timer options`}
         sx={{
           fontFamily: "ui-monospace, monospace",
-          fontWeight: 600,
-          borderColor: chipActive ? "var(--mui-palette-ai)" : "outlineVariant",
-          color: chipActive ? "var(--mui-palette-ai)" : "text.secondary",
-          "& .MuiChip-icon": { color: chipActive ? "var(--mui-palette-ai)" : "text.secondary" },
+          fontWeight: prominent ? 700 : 600,
+          ...(prominent
+            ? {
+              height: 34,
+              fontSize: "1rem",
+              letterSpacing: "0.02em",
+              bgcolor: "warningContainer",
+              color: "onWarningContainer",
+              borderColor: "warning.main",
+              "& .MuiChip-icon": { color: "onWarningContainer" },
+            }
+            : {
+              borderColor: chipActive ? "var(--mui-palette-ai)" : "outlineVariant",
+              color: chipActive ? "var(--mui-palette-ai)" : "text.secondary",
+              "& .MuiChip-icon": { color: chipActive ? "var(--mui-palette-ai)" : "text.secondary" },
+            }),
           ...(chipLow ? { animation: `${pulse} 1s infinite ease-in-out` } : {}),
         }}
       />

@@ -85,7 +85,7 @@ function moduleDueLabel(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defaultExpanded?: boolean }) {
+function ModuleSection({ module, courseId, defaultExpanded }: { module: CourseModule; courseId: string; defaultExpanded?: boolean }) {
   const solved = module.problems.filter((p) => p.is_solved).length;
   const total = module.problems.length;
   const pct = total > 0 ? Math.round((solved / total) * 100) : 0;
@@ -194,7 +194,9 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
               <Link
                 key={p.id}
                 component={NextLink}
-                href={`/app/problems/${p.id}`}
+                // Carries the module so prev/next on the problem page walks
+                // this module in order instead of the whole catalogue.
+                href={`/app/problems/${p.id}?course=${courseId}&module=${module.id}`}
                 underline="none"
                 color="inherit"
                 sx={{
@@ -342,7 +344,7 @@ export default function CourseDetailPage() {
             {course.nextUp?.problemId && (
               <Button
                 component={NextLink}
-                href={`/app/problems/${course.nextUp.problemId}`}
+                href={`/app/problems/${course.nextUp.problemId}?course=${courseId}&module=${course.nextUp.moduleId}`}
                 variant="contained"
                 endIcon={<ArrowForwardIcon fontSize="small" />}
                 sx={{ flexShrink: 0 }}
@@ -361,6 +363,7 @@ export default function CourseDetailPage() {
                 <ModuleSection
                   key={m.id}
                   module={m}
+                  courseId={courseId}
                   // Open where the work is, not simply the first module.
                   defaultExpanded={m.id === course.nextUp?.moduleId}
                 />
