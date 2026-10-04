@@ -253,7 +253,7 @@ export const typeScale = {
   labelSmall: { fontSize: "0.6875rem", lineHeight: "1rem", fontWeight: 500, letterSpacing: "0.03125rem" },
 } as const;
 
-/** M3 shape scale (corner radii, px). */
+/** M3 shape scale (corner radii, px). For `styled()`/theme overrides. */
 export const shape = {
   none: 0,
   extraSmall: 4,
@@ -262,6 +262,61 @@ export const shape = {
   large: 16,
   extraLarge: 28,
   full: 9999,
+} as const;
+
+/**
+ * The same scale as CSS strings, for use inside `sx`.
+ *
+ * Why this exists: `sx={{ borderRadius: 2 }}` does NOT mean 2px or 8px — MUI
+ * multiplies a bare number by `theme.shape.borderRadius` (12 here), so it
+ * renders 24px. That mistake was spread across ~20 student-page call sites and
+ * is the main reason corners looked inconsistent. These values are explicit
+ * strings, so what you write is what renders.
+ *
+ *   sx={{ borderRadius: radius.lg }}   ✅ 16px
+ *   sx={{ borderRadius: 2 }}            ❌ 24px, almost certainly not intended
+ */
+export const radius = {
+  none: "0px",
+  xs: "4px",
+  sm: "8px",
+  md: "12px",
+  lg: "16px",
+  xl: "28px",
+  full: "9999px",
+  /** Circular avatars/badges only. */
+  circle: "50%",
+} as const;
+
+/**
+ * Layout constants. Spacing itself stays on MUI's 8px scale (`p: 2` = 16px);
+ * these cover the few values that are not simple multiples, so pages stop
+ * inventing their own.
+ *
+ * Page gutter follows Material 3's window size classes: a tighter margin on
+ * phones, more breathing room as the window grows.
+ */
+export const layout = {
+  /** Responsive page side padding — pass straight to `sx={{ px: layout.pageGutter }}`. */
+  pageGutter: { xs: 2, sm: 3, lg: 4 },
+  /** Vertical rhythm between major page sections. */
+  sectionGap: 3,
+  /** Padding inside a card: default, and a tighter one for dense list cards. */
+  cardPadding: 2.5,
+  cardPaddingCompact: 2,
+  /** Reading width for long-form text, so lines stay under ~80 characters. */
+  proseMaxWidth: 680,
+  /** Widest the main content column grows before it stops stretching. */
+  contentMaxWidth: 1400,
+} as const;
+
+/**
+ * Minimum hit sizes. Material 3 asks for 48px on touch; 40px is acceptable for
+ * pointer-driven desktop controls, which is what MuiButton already uses.
+ */
+export const touchTarget = {
+  pointer: 40,
+  touch: 48,
 } as const;
 
 /** M3 state-layer opacities for hover/focus/press. */

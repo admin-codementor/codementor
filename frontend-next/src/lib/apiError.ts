@@ -47,3 +47,75 @@ export function apiErrorMessage(err: unknown, fallback = "Something went wrong. 
 
   return fallback;
 }
+
+/**
+ * What kind of failure this is. The UI treats these differently: an offline
+ * error is worth retrying automatically, a 403 is not, and a 404 should offer a
+ * way back rather than a retry button that will fail again.
+ */
+export type ErrorKind = "offline" | "server" | "forbidden" | "notFound" | "timeout" | "unknown";
+
+export interface ClassifiedError {
+  kind: ErrorKind;
+  title: string;
+  description: string;
+  /** False when retrying cannot plausibly help (no permission, does not exist). */
+  retryable: boolean;
+}
+
+const ERROR_SHAPES: Record<ErrorKind, Omit<ClassifiedError, "kind">> = {
+  offline: {
+    title: "You're offline",
+    description: "Check your connection — this will work again once you're back.",
+    retryable: true,
+  },
+  server: {
+    title: "The server had a problem",
+    description: "This isn't something you did. Please try again in a moment.",
+    retryable: true,
+  },
+  forbidden: {
+    title: "You don't have access to this",
+    description: "If you think you should, ask your faculty to check your account.",
+    retryable: false,
+  },
+  notFound: {
+    title: "This isn't here any more",
+    description: "It may have been deleted or moved.",
+    retryable: false,
+  },
+  timeout: {
+    title: "This is taking longer than usual",
+    description: "The server is slow to answer right now. Try again in a moment.",
+    retryable: true,
+  },
+  unknown: {
+    title: "Something went wrong",
+    description: "Please try again.",
+    retryable: true,
+  },
+};
+
+/** Classifies a failure so a component can show the right state, not just a message. */
+export function classifyApiError(err: unknown): ClassifiedError {
+  const e = err as (AxiosError & { code?: string }) | undefined;
+  const status = e?.response?.status;
+
+  let kind: ErrorKind = "unknown";
+  if (e?.code === "ECONNABORTED" || e?.code === "ETIMEDOUT") kind = "timeout";
+  else if (typeof navigator !== "undefined" && navigator.onLine === false) kind = "offline";
+  else if (!e?.response && e?.request) kind = "offline";
+  else if (status === 401 || status === 403) kind = "forbidden";
+  else if (status === 404) kind = "notFound";
+  else if (status && status >= 500) kind = "server";
+
+  const shape = ERROR_SHAPES[kind];
+
+  // Prefer what the server actually said — it's more specific than anything we
+  // can guess. When there was no response at all (offline, timed out), there is
+  // no server message, and apiErrorMessage() would wrongly report every such
+  // case as "can't reach the server", including a timeout.
+  const serverMessage = e?.response ? apiErrorMessage(err, shape.description) : null;
+
+  return { kind, ...shape, description: serverMessage ?? shape.description };
+}

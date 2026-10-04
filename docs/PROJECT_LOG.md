@@ -5,7 +5,39 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
-## 2026-10-04 (Sun)
+## 2026-10-04 (Sun) — part 2
+**Area:** Student persona — S0 design foundations
+**Did:**
+- **Fixed the corner-radius trap:** added a `radius` token set of CSS strings. A bare number in `sx`
+  (`borderRadius: 2`) is multiplied by the theme radius of 12 and renders **24px**, not 8px — the main reason
+  corners looked inconsistent across ~20 student-page call sites.
+- **Added `layout` and `touchTarget` tokens** (page gutter, section gap, card padding, prose width, 40/48px hit
+  sizes) and pointed `AppShell` at them instead of hard-coded values.
+- **Built the full state kit:** `DataState` (loading → error → empty → content, in that fixed order, so a failed
+  request is never shown as "nothing here"), `classifyApiError` (offline / server / forbidden / notFound / timeout /
+  unknown — each with its own wording, and **Retry only when retrying can help**, never on 403/404), `EmptyState`
+  variants (first-use / filtered / nothing-assigned), `InlineError` for one failed section, `StaleBanner` for a
+  failed refresh, and six content-shaped skeletons.
+- **`InteractiveCard`:** one hover / focus / pressed / selected / disabled treatment. MUI's `Card` has no hover
+  style at all, which is why every page invented its own. Renders a real link or button, so keyboard works.
+- **Lint guards** for the three drift causes: numeric `borderRadius` in `sx`, hard-coded `fontSize`, raw colours.
+  Warnings for now (98 existing cases), flipping to errors after the S8 sweep. `theme/` is exempt.
+- **`/dev/states` gallery** — every state, light and dark. This is the review surface.
+- **Wrote `.claude/skills/codementor-ui/SKILL.md`** (the binding project UI rules, beats the vendored MUI skills)
+  and rewrote the matching DESIGN.md sections.
+**Two real bugs found and fixed while verifying in the browser:**
+- The "timed out" state showed the offline message, because a timeout has no server response and fell through to
+  the generic network text.
+- `StaleBanner` broke hydration — the server renders "10:02 am" and the browser "10:02 AM".
+**Verified:** `tsc` clean, production build passes, no lint errors, gallery renders in light and dark, 403/404
+correctly offer no Retry, the interactive card toggles, no horizontal scroll at 375px, no hydration errors.
+**Note:** existing pages are not restyled yet — S0 is foundations. Visible change starts at S1.
+**Next:** S1 — illustrated Quick Access tiles on the dashboard, new menu, logo → home, Contests removed.
+**Branch:** `feat/student-persona`
+
+---
+
+## 2026-10-04 (Sun) — part 1
 **Area:** Backend — B0 safety net (first step of the backend upgrade track)
 **Did:**
 - **Node version mismatch fixed:** Dockerfile built on Node 20 while `package.json` required 22 — now both 22.

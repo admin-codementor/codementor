@@ -28,6 +28,7 @@ import {
   Eye, EyeOff, TriangleAlert, Briefcase,
   SignalLow, SignalMedium, SignalHigh, Type, Hash, ArrowRightLeft, ArrowDownUp, GitFork,
   Boxes, Binary, PenTool, Waypoints, TrendingUp, TrendingDown, GripVertical,
+  CloudOff, Inbox, FilterX,
 } from "lucide-react";
 
 export type IconFontSize = "small" | "medium" | "large" | "inherit";
@@ -107,6 +108,7 @@ export const CloseIcon = makeIcon(X, "CloseIcon");
 export const CodeIcon = makeIcon(Code, "CodeIcon");
 export const CodeOffOutlinedIcon = makeIcon(CodeXml, "CodeOffOutlinedIcon");
 export const CodeOutlinedIcon = makeIcon(Code, "CodeOutlinedIcon");
+export const CloudOffIcon = makeIcon(CloudOff, "CloudOffIcon");
 export const ContentCopyIcon = makeIcon(Copy, "ContentCopyIcon");
 export const ContentCopyOutlinedIcon = makeIcon(Copy, "ContentCopyOutlinedIcon");
 export const DarkModeOutlinedIcon = makeIcon(Moon, "DarkModeOutlinedIcon");
@@ -119,7 +121,9 @@ export const EmojiEventsOutlinedIcon = makeIcon(Trophy, "EmojiEventsOutlinedIcon
 export const ErrorOutlineIcon = makeIcon(CircleAlert, "ErrorOutlineIcon");
 export const ExpandLessIcon = makeIcon(ChevronUp, "ExpandLessIcon");
 export const ExpandMoreIcon = makeIcon(ChevronDown, "ExpandMoreIcon");
+export const FilterXIcon = makeIcon(FilterX, "FilterXIcon");
 export const FingerprintOutlinedIcon = makeIcon(Fingerprint, "FingerprintOutlinedIcon");
+export const InboxIcon = makeIcon(Inbox, "InboxIcon");
 export const FormatListBulletedOutlinedIcon = makeIcon(List, "FormatListBulletedOutlinedIcon");
 export const FullscreenIcon = makeIcon(Maximize, "FullscreenIcon");
 export const GppGoodOutlinedIcon = makeIcon(ShieldCheck, "GppGoodOutlinedIcon");

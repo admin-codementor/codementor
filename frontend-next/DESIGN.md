@@ -25,23 +25,57 @@ scheme-aware (light/dark) via CSS variables (`var(--mui-palette-*)`).
 
 ## Loading / empty / error states
 
-- **Content loading** → MUI `<Skeleton>` shaped like the content (not a centered spinner).
-- **Empty** → `<EmptyState icon title description action />`.
-- **Fetch failure** → `<ErrorState onRetry />`.
-- **Button-level** async → inline spinner only.
+Preview every one of these at **`/dev/states`** (dev builds only). If a state isn't
+there, it isn't designed.
+
+Wrap any data-bound view in **`<DataState>`** (`components/ui/DataState.tsx`). The
+order is fixed: **loading → error → empty → content**. A failed request must never
+render as "nothing here" — pages that did `.catch(() => {})` made a 403 look
+identical to an empty list, which is how a permissions bug got reported as "class
+creation is broken".
+
+- **Loading** → a `<Skeleton>` shaped like the content, from `components/ui/Skeletons.tsx`
+  (`ListSkeleton`, `CardGridSkeleton`, `StatRowSkeleton`, `TableSkeleton`, `TextSkeleton`,
+  `SectionSkeleton`). Never a centered spinner for page/section loads.
+- **Background refresh** → pass `fetching`; content stays, a thin progress line appears.
+- **Empty** → `<EmptyState variant>` where variant says *why*: `firstUse` (invite an
+  action), `filtered` (offer to clear), `unassigned` (nothing to offer). Each needs
+  different words.
+- **Failure** → `<ErrorState error onRetry />`. `classifyApiError()` sorts failures into
+  offline / server / forbidden / notFound / timeout / unknown, each with its own icon and
+  wording, and **Retry is only offered when retrying could help** (never on 403/404).
+- **One section failed** → `<InlineError>`, so the rest of the page keeps working.
+- **Stale after a failed refresh** → `<StaleBanner since>`. Never pass old numbers off as current.
+- **Button-level** async → inline spinner only, keep the label ("Saving…").
 
 ## Layout & spacing
 
-- Page shell: `AppShell` (student/faculty) or the full-screen IDE layout. Full-screen views (IDE, exam-taking) intentionally skip `AppShell`.
+- Page shell: `AppShell` (student/faculty) or the full-screen IDE layout. Full-screen views (IDE, exam-taking) intentionally skip `AppShell`. `AppShell` already applies the page gutter and max width — don't wrap a page in another container.
 - Every page starts with `<PageHeader title subtitle actions />` (except full-screen views).
 - Group related content in `Card variant="outlined"` (border `outlineVariant`) or the local `SectionCard`.
-- Spacing uses the MUI 8px scale via `sx` (`p: 2` = 16px). Prefer `Stack`/`Box` grid over manual margins.
+- Spacing uses the MUI 8px scale via `sx` (`p: 2` = 16px). Prefer `Stack`/`Box` grid over manual margins. Non-multiples live in `layout` (`theme/tokens.ts`): `pageGutter`, `sectionGap`, `cardPadding`, `proseMaxWidth`, `contentMaxWidth`.
 - One **contained** (filled) button per view = the primary action (Von Restorff); everything else `outlined`/`text`.
+
+## Corner radius, type and colour — three enforced rules
+
+ESLint (`no-restricted-syntax`) flags all three. They're warnings while existing
+pages still contain them, and become errors after the S8 sweep; don't add new ones.
+
+1. **Never put a bare number in `borderRadius` inside `sx`.** MUI multiplies it by
+   `theme.shape.borderRadius` (12 here), so `borderRadius: 2` renders **24px**, not 8px.
+   Use `radius.xs|sm|md|lg|xl|full|circle` from `theme/tokens.ts` — they're CSS strings,
+   so what you write is what renders. (`styled()` and theme overrides use the numeric
+   `shape` scale instead, where numbers *are* pixels.)
+2. **Never hard-code `fontSize`.** Use a Typography variant; the M3 type scale is the
+   source of truth.
+3. **Never hard-code a colour.** Use palette roles or `var(--mui-palette-*)`. Raw hex
+   belongs only in `theme/tokens.ts`, which is exempt.
 
 ## Shared primitives (reuse these)
 
-`PageHeader`, `StatCard`, `SectionCard`, `SearchField`, `SegmentedButtons`,
-`DifficultyChip`, `VerdictChip`, `RatingBadge`, `EmptyState`/`ErrorState`,
+`PageHeader`, `StatCard`, `SectionCard`, `InteractiveCard`, `SearchField`,
+`SegmentedButtons`, `DifficultyChip`, `VerdictChip`, `RatingBadge`, `DataState`,
+`EmptyState`/`ErrorState`/`InlineError`/`StaleBanner`, the `Skeletons` set,
 `AITutorSidebar`, `ToastProvider`/`useToast`, `ConfirmProvider`/`useConfirm`,
 `interactiveSurfaceSx`, `lib/languages` (`languageName`).
 
@@ -73,8 +107,13 @@ icon (`moduleIcon()` in the course page), never a single repeated icon.
 
 ## Interactive surfaces (hover/press)
 
-Any clickable card/tile/row uses **one** shared affordance so hover feels the same
-everywhere. Spread `interactiveSurfaceSx` (from `components/ui/interactive.ts`) onto
+A card whose whole surface is clickable uses **`<InteractiveCard href|onClick selected
+disabled>`** — MUI's `Card` ships no hover style at all, which is why each page was
+inventing its own. It renders a real `<a>` when given `href` and a real `<button>`
+otherwise, so keyboard focus, Enter/Space and open-in-new-tab work without extra props,
+and it carries the hover, focus-visible, pressed, selected and disabled states.
+
+For any other clickable surface, spread `interactiveSurfaceSx` (from `components/ui/interactive.ts`) onto
 the surface `sx` and make the element itself actionable (`CardActionArea`, button, or
 `role="button"`): it lifts (`translateY(-2px)`), strengthens the border to `outline`,
 tints to `surfaceContainer`, and adds a soft shadow. `StatCard` takes `href`/`onClick`

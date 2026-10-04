@@ -98,6 +98,8 @@ Problem Solving Page Design After claude/
 # .claude/skills/THIRD_PARTY_NOTICES.md.
 .claude/skills/*
 !.claude/skills/THIRD_PARTY_NOTICES.md
+# Our own UI rules — the binding standard for every screen. Must be tracked.
+!.claude/skills/codementor-ui/
 !.claude/skills/material-ui-styling/
 !.claude/skills/material-ui-theming/
 !.claude/skills/material-ui-nextjs/

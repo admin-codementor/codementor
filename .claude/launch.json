@@ -8,6 +8,13 @@
       "port": 3000
     },
     {
+      "_comment": "Port 3000 is often taken by another local project, so this entry runs the same dev server on 3100.",
+      "name": "codementor-next-3100",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "frontend-next", "run", "dev", "--", "-p", "3100"],
+      "port": 3100
+    },
+    {
       "name": "codementor-backend",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["--prefix", "backend", "run", "dev"],

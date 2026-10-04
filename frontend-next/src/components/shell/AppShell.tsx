@@ -27,7 +27,7 @@ import { MenuIcon, CodeIcon, LogoutIcon, PersonOutlineIcon } from "@/components/
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { clearSession, getUser, ROLE_LABEL } from "@/lib/auth";
 import { NavigationProgress } from "@/components/ui/motion";
-import { hoverTransition } from "@/theme/tokens";
+import { hoverTransition, layout } from "@/theme/tokens";
 import type { User } from "@/lib/types";
 
 /**
@@ -316,7 +316,7 @@ export function AppShell({
         sx={{ flexGrow: 1, width: { lg: `calc(100% - ${DRAWER_WIDTH}px)` }, minWidth: 0 }}
       >
         <Toolbar aria-hidden />
-        <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+        <Box sx={{ p: layout.pageGutter, maxWidth: layout.contentMaxWidth, mx: "auto" }}>
           {children}
         </Box>
       </Box>
