@@ -11,7 +11,13 @@ on:
 
 jobs:
   backend:
-    name: Backend — lint & Docker build
+    # This name is load-bearing: branch protection on `main` requires a status
+    # check called exactly "Backend — install & Docker build". Renaming the job
+    # does not rename the required check, so a rename leaves every pull request
+    # waiting forever for a check that will never be reported. It lints as well
+    # as installs now — change the steps freely, but leave the name alone unless
+    # you are also updating the branch protection rule.
+    name: Backend — install & Docker build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
