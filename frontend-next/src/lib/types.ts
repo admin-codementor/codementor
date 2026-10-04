@@ -94,12 +94,20 @@ export interface TopicMastery {
   mastery: number;  // 0–100
 }
 
-export interface DashboardRecentSubmission {
-  verdict: string;
+/**
+ * One problem the student has solved — the accepted submission only.
+ *
+ * Replaces the old recent-submissions list: wrong answers and errors are not a
+ * history worth scrolling. Unsolved attempts live in the retry list instead,
+ * and faculty still see every attempt in their own views.
+ */
+export interface DashboardSolvedProblem {
   language: string;
-  created_at: string;
+  runtime: number | null;
+  solved_at: string;
   problem_title: string;
   problem_id: string | number;
+  difficulty: string | null;
 }
 
 export interface DashboardData {
@@ -107,7 +115,7 @@ export interface DashboardData {
   languages: Array<{ language: string; count: number }>;
   heatmap: HeatmapDay[];
   topics: TopicMastery[];
-  recentSubmissions: DashboardRecentSubmission[];
+  recentSolved: DashboardSolvedProblem[];
 }
 
 // ── Assignments ───────────────────────────────────────────────────────────────

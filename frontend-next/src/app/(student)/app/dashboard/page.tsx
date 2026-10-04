@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import NextLink from "next/link";
@@ -17,14 +17,13 @@ import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
-import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon, MenuBookOutlinedIcon } from "@/components/ui/icons";
+import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon, MenuBookOutlinedIcon, TimerOutlinedIcon } from "@/components/ui/icons";
 import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
 import { Reveal } from "@/components/ui/motion";
 import { StatCard } from "@/components/ui/StatCard";
-import { shape, hoverTransition } from "@/theme/tokens";
+import { shape, hoverTransition, radius } from "@/theme/tokens";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
-import { VerdictChip } from "@/components/ui/VerdictChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useAvailableExamsQuery, useDashboardQuery } from "@/lib/queries/student";
@@ -32,7 +31,19 @@ import { ProblemOfTheDay } from "@/components/student/ProblemOfTheDay";
 import { ExamPerformance } from "@/components/student/ExamPerformance";
 import { QuickAccess } from "@/components/student/quick-access/QuickAccess";
 
-// ── Utilities ─────────────────────────────────────────────────────────────────
+/** One deadline on the dashboard, whether it came from an assignment or an exam. */
+interface DueItem {
+  id: string;
+  kind: "assignment" | "exam";
+  title: string;
+  due: string;
+  detail: string;
+  /** Percent complete, or null when the item has no partial progress (an exam). */
+  progress: number | null;
+  href: string;
+}
+
+// â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -72,7 +83,7 @@ function deadlineLabel(deadlineStr: string): {
   };
 }
 
-// ── Section card wrapper ──────────────────────────────────────────────────────
+// â”€â”€ Section card wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function SectionCard({
   title,
@@ -114,7 +125,7 @@ function SectionCard({
   );
 }
 
-// ── Loading skeleton ──────────────────────────────────────────────────────────
+// â”€â”€ Loading skeleton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function DashboardSkeleton() {
   return (
@@ -201,11 +212,14 @@ function DashboardSkeleton() {
   );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// â”€â”€ Main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export default function DashboardPage() {
   const [name, setName] = React.useState("");
   const [className, setClassName] = React.useState<string | null>(null);
+  // Fixed per mount: reading the clock during render makes the output depend on
+  // when React happens to re-render.
+  const [renderedAt] = React.useState(() => Date.now());
 
   React.useEffect(() => {
     const user = getUser();
@@ -223,7 +237,7 @@ export default function DashboardPage() {
   if (isError || !data) return <ErrorState error={error} onRetry={() => refetch()} />;
 
   const { dashboard, assignments, recommendations, courses } = data;
-  const { stats, topics, recentSubmissions, heatmap } = dashboard;
+  const { stats, topics, recentSolved, heatmap } = dashboard;
   const isNewUser = stats.totalSubs === 0;
 
   // Sort assignments by deadline, only show ones with a deadline
@@ -238,6 +252,35 @@ export default function DashboardPage() {
   const coursesCompleted = courses.filter(
     (c) => c.problemCount > 0 && c.solvedCount >= c.problemCount,
   ).length;
+
+  // Everything with a deadline in one list. Assignments and exams were shown in
+  // separate places, so "what's due next" meant checking two screens.
+  const dueSoon: DueItem[] = [
+    ...assignments
+      .filter((a) => a.deadline && a.solved < a.total)
+      .map((a) => ({
+        id: `assignment-${a.id}`,
+        kind: "assignment" as const,
+        title: a.title,
+        due: a.deadline,
+        detail: `${a.solved}/${a.total} solved`,
+        progress: a.total > 0 ? Math.round((a.solved / a.total) * 100) : 0,
+        href: "/app/assignments",
+      })),
+    ...(exams ?? [])
+      .filter((e) => !e.attempted && new Date(e.window_end).getTime() > renderedAt)
+      .map((e) => ({
+        id: `exam-${e.id}`,
+        kind: "exam" as const,
+        title: e.title,
+        due: e.window_start,
+        detail: `${e.duration_minutes} min Â· ${e.section_count} section${e.section_count === 1 ? "" : "s"}`,
+        progress: null,
+        href: "/app/exams",
+      })),
+  ]
+    .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
+    .slice(0, 5);
 
   const topTopics = topics.slice(0, 6);
   const topRecs = recommendations.slice(0, 5);
@@ -263,9 +306,9 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      {/* ── Hero greeting — dashboard-only, not the shared PageHeader, so no
+      {/* â”€â”€ Hero greeting â€” dashboard-only, not the shared PageHeader, so no
           other page inherits this treatment. Same tonal-gradient + colored-
-          shadow technique as StatCard's icon tile, scaled up into a band. ── */}
+          shadow technique as StatCard's icon tile, scaled up into a band. â”€â”€ */}
       <Box
         sx={{
           mb: 3,
@@ -294,7 +337,7 @@ export default function DashboardPage() {
         className={className}
       />
 
-      {/* ── Stats row ── */}
+      {/* â”€â”€ Stats row â”€â”€ */}
       <Reveal>
       <Box
         sx={{
@@ -317,10 +360,15 @@ export default function DashboardPage() {
           helper={`Goal: ${Math.min(stats.streak, 30)} / 30 days`}
           accent="warning"
         />
+        {/* Labelled "Overall" deliberately: the backend ranks this student
+            against every student on the platform, not their class. Class and
+            department scoping arrives with the scoped leaderboard. */}
         <StatCard
           icon={<LeaderboardOutlinedIcon />}
-          label="Class Rank"
-          value={stats.rank > 0 ? `#${stats.rank}` : "—"}
+          label="Overall Rank"
+          value={stats.rank > 0 ? `#${stats.rank}` : "â€”"}
+          helper="Across all students"
+          href="/app/leaderboard"
           accent="secondary"
         />
         <StatCard
@@ -339,7 +387,7 @@ export default function DashboardPage() {
 
       <ExamPerformance />
 
-      {/* ── New-user empty state ── */}
+      {/* â”€â”€ New-user empty state â”€â”€ */}
       {isNewUser && (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant", mb: 3 }}>
           <EmptyState
@@ -360,7 +408,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* ── Content grid ── */}
+      {/* â”€â”€ Content grid â”€â”€ */}
       {!isNewUser && (
         <Box
           sx={{
@@ -373,12 +421,13 @@ export default function DashboardPage() {
             alignItems: "start",
           }}
         >
-          {/* ── Left column ── */}
+          {/* â”€â”€ Left column â”€â”€ */}
           <Stack spacing={3}>
-            {/* Recent Submissions */}
+            {/* Recently solved â€” accepted work only; failed attempts are not a
+                history worth scrolling. */}
             <SectionCard
-              title="Recent Submissions"
-              aria-label="Recent submissions"
+              title="Recently Solved"
+              aria-label="Recently solved problems"
               action={
                 <Link
                   component={NextLink}
@@ -386,37 +435,48 @@ export default function DashboardPage() {
                   variant="body2"
                   sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
                 >
-                  View all <ArrowForwardIcon sx={{ fontSize: 16 }} />
+                  View all <ArrowForwardIcon fontSize="small" />
                 </Link>
               }
             >
-              {recentSubmissions.length === 0 ? (
-                <Typography variant="body2" color="text.secondary" sx={{ py: 2, textAlign: "center" }}>
-                  No submissions yet.
-                </Typography>
+              {recentSolved.length === 0 ? (
+                <EmptyState
+                  compact
+                  variant="firstUse"
+                  title="Nothing solved yet"
+                  description="Problems you solve will be listed here."
+                  action={
+                    <Button component={NextLink} href="/app/problems" variant="outlined" size="small">
+                      Find a problem
+                    </Button>
+                  }
+                />
               ) : (
                 <List disablePadding>
-                  {recentSubmissions.map((sub, idx) => (
-                    <React.Fragment key={`${sub.problem_id}-${sub.created_at}-${idx}`}>
+                  {recentSolved.map((item, idx) => (
+                    <React.Fragment key={`${item.problem_id}-${item.solved_at}`}>
                       {idx > 0 && <Divider component="li" />}
                       <ListItem disablePadding>
                         <ListItemButton
                           component={NextLink}
-                          href={`/app/problems/${sub.problem_id}`}
-                          sx={{ px: 1, py: 1.25, borderRadius: 2, overflow: "hidden" }}
+                          href={`/app/problems/${item.problem_id}`}
+                          sx={{ px: 1, py: 1.25, borderRadius: radius.sm, overflow: "hidden" }}
                         >
+                          <CheckCircleOutlinedIcon fontSize="small" color="success" sx={{ mr: 1.25 }} />
                           <ListItemText
-                            primary={sub.problem_title}
-                            secondary={`${languageName(sub.language)} · ${timeAgo(sub.created_at)}`}
+                            primary={item.problem_title}
+                            secondary={`${languageName(item.language)} Â· ${timeAgo(item.solved_at)}`}
                             sx={{ minWidth: 0, mr: 1 }}
                             slotProps={{
                               primary: { variant: "body2", fontWeight: 500, noWrap: true },
                               secondary: { variant: "caption", noWrap: true },
                             }}
                           />
-                          <Box sx={{ flexShrink: 0 }}>
-                            <VerdictChip verdict={sub.verdict} />
-                          </Box>
+                          {item.difficulty && (
+                            <Box sx={{ flexShrink: 0 }}>
+                              <DifficultyChip difficulty={item.difficulty} />
+                            </Box>
+                          )}
                         </ListItemButton>
                       </ListItem>
                     </React.Fragment>
@@ -425,7 +485,7 @@ export default function DashboardPage() {
               )}
             </SectionCard>
 
-            {/* Continue Learning — modules/courses already in progress surface first. */}
+            {/* Continue Learning â€” modules/courses already in progress surface first. */}
             {courseRows.length > 0 && (
               <SectionCard
                 title="Continue Learning"
@@ -530,7 +590,7 @@ export default function DashboardPage() {
             )}
           </Stack>
 
-          {/* ── Right column ── */}
+          {/* â”€â”€ Right column â”€â”€ */}
           <Stack spacing={3}>
             {/* Activity heatmap */}
             <SectionCard title="Last 28 Days" aria-label="Activity heatmap">
@@ -559,44 +619,46 @@ export default function DashboardPage() {
               </Stack>
             </SectionCard>
 
-            {/* Upcoming Assignments */}
-            {upcomingAssignments.length > 0 && (
-              <SectionCard
-                title="Upcoming Assignments"
-                aria-label="Upcoming assignments"
-                action={
-                  <Link
-                    component={NextLink}
-                    href="/app/assignments"
-                    variant="body2"
-                    sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
-                  >
-                    All <ArrowForwardIcon sx={{ fontSize: 16 }} />
-                  </Link>
-                }
-              >
+            {/* Due Soon â€” assignments and exams in one list, so "what's next"
+                doesn't mean checking two separate screens. */}
+            <SectionCard
+              title="Due Soon"
+              aria-label="Work due soon"
+              action={
+                <Link
+                  component={NextLink}
+                  href="/app/assignments"
+                  variant="body2"
+                  sx={{ display: "flex", alignItems: "center", gap: 0.5 }}
+                >
+                  All <ArrowForwardIcon fontSize="small" />
+                </Link>
+              }
+            >
+              {dueSoon.length === 0 ? (
+                <EmptyState
+                  compact
+                  variant="unassigned"
+                  title="Nothing due"
+                  description="Assignments and exams with a deadline will appear here."
+                />
+              ) : (
                 <Stack spacing={1.5}>
-                  {upcomingAssignments.map((a) => {
-                    const { text, urgent } = deadlineLabel(a.deadline);
-                    const progress =
-                      a.total > 0
-                        ? Math.round((a.solved / a.total) * 100)
-                        : 0;
-                    const done = a.solved === a.total && a.total > 0;
+                  {dueSoon.map((item) => {
+                    const { text, urgent } = deadlineLabel(item.due);
                     return (
                       <Box
-                        key={a.id}
+                        key={item.id}
                         component={NextLink}
-                        href="/app/assignments"
+                        href={item.href}
                         sx={{
                           display: "block",
                           textDecoration: "none",
+                          color: "inherit",
                           p: 1.5,
-                          borderRadius: 2,
+                          borderRadius: radius.sm,
                           border: "1px solid",
-                          borderColor: urgent
-                            ? "warningContainer"
-                            : "outlineVariant",
+                          borderColor: urgent ? "warningContainer" : "outlineVariant",
                           bgcolor: urgent ? "warningContainer" : "transparent",
                           transition: hoverTransition("background-color", "transform"),
                           "&:hover": {
@@ -606,12 +668,7 @@ export default function DashboardPage() {
                           "&:active": { transform: "translateY(0)" },
                         }}
                       >
-                        <Stack
-                          direction="row"
-                          alignItems="flex-start"
-                          justifyContent="space-between"
-                          spacing={1}
-                        >
+                        <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1}>
                           <Typography
                             variant="body2"
                             fontWeight={500}
@@ -619,68 +676,52 @@ export default function DashboardPage() {
                             sx={{ flex: 1, lineHeight: 1.3 }}
                             noWrap
                           >
-                            {a.title}
+                            {item.title}
                           </Typography>
-                          {done ? (
-                            <CheckCircleOutlinedIcon
-                              sx={{ fontSize: 18, color: "success.main", flexShrink: 0 }}
+                          {item.kind === "exam" ? (
+                            <TimerOutlinedIcon
+                              fontSize="small"
+                              sx={{ color: urgent ? "onWarningContainer" : "text.secondary", flexShrink: 0 }}
                             />
                           ) : urgent ? (
                             <WarningAmberOutlinedIcon
-                              sx={{
-                                fontSize: 18,
-                                color: "onWarningContainer",
-                                flexShrink: 0,
-                              }}
+                              fontSize="small"
+                              sx={{ color: "onWarningContainer", flexShrink: 0 }}
                             />
                           ) : (
                             <AssignmentOutlinedIcon
-                              sx={{
-                                fontSize: 18,
-                                color: "text.secondary",
-                                flexShrink: 0,
-                              }}
+                              fontSize="small"
+                              sx={{ color: "text.secondary", flexShrink: 0 }}
                             />
                           )}
                         </Stack>
-                        <Stack
-                          direction="row"
-                          alignItems="center"
-                          justifyContent="space-between"
-                          sx={{ mt: 0.75 }}
-                        >
-                          <Typography
-                            variant="caption"
-                            color={urgent ? "onWarningContainer" : "text.secondary"}
-                          >
-                            {text} · {a.solved}/{a.total} solved
+                        <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.75 }}>
+                          <Typography variant="caption" color={urgent ? "onWarningContainer" : "text.secondary"}>
+                            {text} Â· {item.detail}
                           </Typography>
-                          {a.isExam && (
+                          {item.kind === "exam" && (
                             <Chip
                               label="Exam"
                               size="small"
-                              sx={{
-                                height: 18,
-                                fontSize: "0.65rem",
-                                bgcolor: "tertiaryContainer",
-                                color: "onTertiaryContainer",
-                              }}
+                              sx={{ height: 18, bgcolor: "tertiaryContainer", color: "onTertiaryContainer" }}
                             />
                           )}
                         </Stack>
-                        <LinearProgress
-                          variant="determinate"
-                          value={progress}
-                          color={done ? "success" : urgent ? "warning" : "primary"}
-                          sx={{ height: 4, borderRadius: 2, mt: 1 }}
-                          aria-label={`${a.title}: ${a.solved} of ${a.total} problems solved`}
-                        />
+                        {item.progress !== null && (
+                          <LinearProgress
+                            variant="determinate"
+                            value={item.progress}
+                            color={urgent ? "warning" : "primary"}
+                            sx={{ height: 4, borderRadius: radius.xs, mt: 1 }}
+                            aria-label={`${item.title}: ${item.progress}% complete`}
+                          />
+                        )}
                       </Box>
                     );
                   })}
                 </Stack>
-              </SectionCard>
-            )}
+              )}
+            </SectionCard>
 
             {/* Recommended Problems */}
             {topRecs.length > 0 && (

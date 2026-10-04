@@ -5,6 +5,36 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 4
+**Area:** Student persona — S2 dashboard body (first phase with backend work)
+**Did:**
+- **"Recent Submissions" → "Recently Solved."** The dashboard listed the last 5 submissions *including wrong
+  answers and errors*. It now lists one row per problem actually solved, newest first, with the accepted attempt
+  only (backend: `recentSolved` replaces `recentSubmissions` in `/api/student/dashboard`). Faculty views are
+  untouched — they still see every attempt.
+- **Fixed a misleading stat.** The card labelled "Class Rank" ranks the student against *every student on the
+  platform*, not their class. Relabelled "Overall Rank · Across all students" and made it link to the leaderboard.
+  Real class/department scoping comes with S4; until then the label tells the truth.
+- **"Due Soon" replaces "Upcoming Assignments"** — assignments and exams in one deadline-sorted list, so "what's
+  next" no longer means checking two screens.
+- **Problem of the Day now comes from the backend.** It used to fetch the first 50 problems plus the solved list
+  and pick in the browser, so the "daily" problem could only ever come from page one. The existing
+  `/api/student/daily-challenge` endpoint (previously unused) now also reports whether the student solved it —
+  one request instead of two, chosen across the whole catalogue. Deleted the dead client-side picker.
+- **Performance fix:** the rank calculation called `listAll()`, downloading **every student's source code** on
+  every dashboard load. Switched to the field-masked `listAllForAnalytics()` — same numbers, a fraction of the read.
+- **Added backend test coverage** (`tests/suites/studentDashboard.js`, 14 checks). It seeds real submissions and
+  asserts the product rule, not just a 200: a problem solved twice appears once, the latest accepted attempt wins,
+  an attempted-but-unsolved problem never appears, and no verdict leaks back to the student.
+**Verified:** full smoke suite **240 passed** (was 226), 5 skipped (AI quota — pre-existing). `tsc`, lint and
+production build clean.
+**Not yet verified:** the dashboard rendered in a browser with a logged-in student — still needs a sign-in.
+**Deferred to S4:** the class leaderboard snippet, which needs the scoped leaderboard to exist first.
+**Next:** S3 — solved-only everywhere (profile + problem page) and the Mistakes notebook.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 3
 **Area:** Student persona — S1 Quick Access tiles + navigation
 **Did:**

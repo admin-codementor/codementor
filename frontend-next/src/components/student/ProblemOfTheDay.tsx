@@ -9,29 +9,24 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { ArrowForwardIcon, CheckCircleIcon, TipsAndUpdatesOutlinedIcon } from "@/components/ui/icons";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
-import { useProblemsQuery, useSolvedProblemsQuery } from "@/lib/queries/problems";
-import { pickProblemOfTheDay } from "@/lib/problemOfTheDay";
-import { shape } from "@/theme/tokens";
+import { useDailyChallengeQuery } from "@/lib/queries/student";
+import { radius } from "@/theme/tokens";
 
 /** Banner card: today's problem with a direct "Solve now" action. */
 export function ProblemOfTheDay() {
-  const problemsQuery = useProblemsQuery({ page: 1 });
-  const solvedQuery = useSolvedProblemsQuery();
+  const { data: problem, isLoading } = useDailyChallengeQuery();
 
-  const problem = React.useMemo(
-    () => pickProblemOfTheDay(problemsQuery.data?.problems ?? []),
-    [problemsQuery.data],
-  );
-  const solved = problem ? (solvedQuery.data ?? []).map(String).includes(String(problem.id)) : false;
-
-  if (problemsQuery.isLoading) return <Skeleton variant="rounded" height={104} sx={{ borderRadius: `${shape.large}px` }} />;
+  if (isLoading) return <Skeleton variant="rounded" height={104} sx={{ borderRadius: radius.lg }} />;
+  // Nothing to show when the catalogue is empty, and a failure here must not
+  // take the dashboard down — the rest of the page is unaffected.
   if (!problem) return null;
+  const solved = problem.solved;
 
   return (
     <Box
       sx={{
         p: 2.5,
-        borderRadius: `${shape.large}px`,
+        borderRadius: radius.lg,
         bgcolor: "tertiaryContainer",
         color: "onTertiaryContainer",
         display: "flex",

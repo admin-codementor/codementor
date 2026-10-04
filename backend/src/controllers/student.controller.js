@@ -97,9 +97,14 @@ exports.getDashboardData = async (req, res) => {
     // 5. Real streak calculation
     const streak = calculateStreak(heatmap);
 
-    // 6. Real rank from leaderboard — student roster comes from Firestore.
+    // 6. Rank across all students. NOTE: this is a platform-wide rank, not a
+    // class rank — the UI must label it as such.
+    //
+    // listAllForAnalytics() rather than listAll(): ranking only needs userId,
+    // problemId and verdict, while listAll() also downloads every student's
+    // source code on every dashboard load. Same numbers, a fraction of the read.
     const studentIds = (await userRepo.listByRole('student')).map(u => u.id);
-    const allSubs = await submissionRepo.listAll();
+    const allSubs = await submissionRepo.listAllForAnalytics();
     const solvedCountByUser = {};
     for (const s of allSubs) {
       if (s.verdict !== 'Accepted') continue;
@@ -137,12 +142,29 @@ exports.getDashboardData = async (req, res) => {
       }));
     }
 
-    // Recent submissions for the dashboard widget
-    const recentRows = [...mySubs].sort((a, b) => subMillis(b) - subMillis(a)).slice(0, 5);
-    const recentProblemsMap = await problemRepo.getMapByIds(recentRows.map(r => r.problemId));
-    const recentSubmissions = recentRows.map(r => ({
-      verdict: r.verdict, language: r.language, created_at: subDate(r),
-      problem_id: r.problemId, problem_title: recentProblemsMap.get(r.problemId)?.title || 'Unknown',
+    // Recently solved — one row per problem, the accepted submission only.
+    //
+    // This replaces the old "recent submissions" list, which showed wrong
+    // answers and errors back to the student. Failed attempts are not a useful
+    // history to scroll; they belong in the retry list (Mistakes notebook), and
+    // faculty still see every attempt in their own views.
+    const latestAcceptedByProblem = new Map();
+    for (const s of mySubs) {
+      if (s.verdict !== 'Accepted') continue;
+      const existing = latestAcceptedByProblem.get(s.problemId);
+      if (!existing || subMillis(s) > subMillis(existing)) latestAcceptedByProblem.set(s.problemId, s);
+    }
+    const solvedRows = [...latestAcceptedByProblem.values()]
+      .sort((a, b) => subMillis(b) - subMillis(a))
+      .slice(0, 5);
+    const solvedProblemsMap = await problemRepo.getMapByIds(solvedRows.map(r => r.problemId));
+    const recentSolved = solvedRows.map(r => ({
+      language: r.language,
+      runtime: r.runtime ?? null,
+      solved_at: toISO(r.submittedAt),
+      problem_id: r.problemId,
+      problem_title: solvedProblemsMap.get(r.problemId)?.title || 'Unknown',
+      difficulty: solvedProblemsMap.get(r.problemId)?.difficulty || null,
     }));
 
     res.json({
@@ -152,7 +174,7 @@ exports.getDashboardData = async (req, res) => {
         languages,
         heatmap,
         topics: masteredTopics,
-        recentSubmissions
+        recentSolved,
       }
     });
 
@@ -348,7 +370,15 @@ exports.getDailyChallenge = async (req, res) => {
     }
 
     const p = problems[dateHash % problems.length];
-    res.json({ success: true, data: { id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [] } });
+    // Whether this student has already solved it, so the card can say so rather
+    // than inviting them to redo it.
+    const mine = await submissionRepo.listByUserAndProblem(req.user.id, p.id);
+    const solved = mine.some((s) => s.verdict === 'Accepted');
+
+    res.json({
+      success: true,
+      data: { id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [], solved },
+    });
   } catch (error) {
     console.error('Daily Challenge Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch daily challenge' });

@@ -51,6 +51,32 @@ export function useCoursesQuery() {
   });
 }
 
+export interface DailyChallenge {
+  id: string | number;
+  title: string;
+  difficulty: string;
+  tags: string[];
+  solved: boolean;
+}
+
+/**
+ * Today's problem, chosen by the backend.
+ *
+ * The page used to fetch the first 50 problems plus the solved list and pick in
+ * the browser, which meant the "daily" problem could only ever come from that
+ * first page. The server picks deterministically across the whole catalogue in
+ * one request.
+ */
+export function useDailyChallengeQuery() {
+  return useQuery<DailyChallenge | null>({
+    queryKey: ["student", "daily-challenge"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: DailyChallenge | null }>("/api/student/daily-challenge");
+      return res.data?.data ?? null;
+    },
+  });
+}
+
 export interface SkillTopic {
   topic: string;
   solvedCount: number;
