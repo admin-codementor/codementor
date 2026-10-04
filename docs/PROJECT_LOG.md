@@ -5,6 +5,28 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 11
+**Area:** Student persona — S8 sweep (partial)
+**Did:**
+- **Contests are gone from the student experience.** `/app/contests` now redirects to the dashboard; the menu
+  entry, dashboard rating card and leaderboard tab went in S1.
+- **Three more pages stopped swallowing failures.** Placement and Classes used `.catch(() => {})`, so a failed
+  request rendered as "No track data available" / "No classes yet" — a student would read that as *they* have
+  nothing, not that the page broke. Both now show the S0 error state with Retry.
+**Deliberately NOT done, and why:**
+- **Deep contest removal.** Contests touch 15 backend and 12 frontend files, and the Elo rating they feed also
+  drives the badge on student profiles, the faculty views and `judgeService`. Ripping that out safely is its own
+  piece of work with its own verification, not a footnote at the end of a long session. The student-facing
+  removal the user asked for is complete; the machinery is dormant and documented.
+- **Flipping the design lint rules from warning to error.** 99 warnings remain across faculty and IDE pages that
+  no phase has touched yet. Flipping now would turn a clean build red for files nobody has swept.
+- **Moving the remaining `useEffect`+axios pages onto React Query**, and **auto-enrolment for classes** (D5).
+  Both are real work still outstanding.
+**Verified:** production build passes, `tsc` clean, no lint errors.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 10
 **Area:** Student persona — S7 results panel
 **Did:**

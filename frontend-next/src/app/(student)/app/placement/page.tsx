@@ -17,7 +17,7 @@ import { TrackChangesOutlinedIcon, BusinessOutlinedIcon, AutoAwesomeOutlinedIcon
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
-import { EmptyState } from "@/components/ui/States";
+import { EmptyState, ErrorState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
 
@@ -82,8 +82,11 @@ export default function PlacementPage() {
   const [recommended, setRecommended] = React.useState<RecProblem[]>([]);
   const [selected, setSelected] = React.useState("");
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<unknown>(undefined);
 
-  React.useEffect(() => {
+  const load = React.useCallback(() => {
+    setLoading(true);
+    setError(undefined);
     api
       .get("/api/student/placement")
       .then((r) => {
@@ -92,11 +95,17 @@ export default function PlacementPage() {
           setTracks(t);
           setRecommended(r.data.data.recommended || []);
           if (t.length) setSelected(t[0].key);
+        } else {
+          setError(new Error("Failed to load placement readiness"));
         }
       })
-      .catch(() => {})
+      // A swallowed failure here showed "No track data available", which reads
+      // as "you have no tracks" rather than "we couldn't load them".
+      .catch((err) => setError(err))
       .finally(() => setLoading(false));
   }, []);
+
+  React.useEffect(() => { load(); }, [load]);
 
   const track = tracks.find((t) => t.key === selected);
 
@@ -121,9 +130,17 @@ export default function PlacementPage() {
             </Card>
           ))}
         </Box>
+      ) : error != null ? (
+        <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
+          <ErrorState error={error} onRetry={load} />
+        </Card>
       ) : tracks.length === 0 ? (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-          <EmptyState icon={<TrackChangesOutlinedIcon />} title="No track data available" />
+          <EmptyState
+            icon={<TrackChangesOutlinedIcon />}
+            title="No tracks set up yet"
+            description="Recruitment tracks appear here once your college configures them."
+          />
         </Card>
       ) : (
         <Stack spacing={3}>
