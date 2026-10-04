@@ -5,6 +5,40 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 15
+**Area:** PR #38 merged to main · Home page (decision D1 reversed to D1b)
+**Shipped:** PR #38 merged at 16:56 — S0–S11 plus B0 and B3 are on `main` and live. The merge was blocked for a
+while by a required status check that could never report: B0 renamed the backend CI job to "Backend — lint &
+Docker build" while branch protection requires one called exactly "Backend — install & Docker build". Renaming a
+job does not rename the check it reports. Name restored, with a comment saying it is load-bearing.
+**Did — Home page:**
+- **Quick Access is its own page at `/app`**, and it is where a student lands after signing in. Six illustrated
+  tiles, each with its live line, and nothing else. The dashboard keeps the statistics.
+- The greeting band moved with it — a greeting belongs at the door, not one room further in. The dashboard now
+  opens with an ordinary `PageHeader` ("Dashboard · 9 problems solved · 5-day streak").
+- The collapse/"Hide" toggle is gone. It existed so the row could be folded away to reach the dashboard beneath
+  it; on a page of its own there is nothing to hide. That also removed a `set-state-in-effect` lint warning.
+- Nav gains **Home** above Dashboard; the logo, the IDE's home button and the sandbox's back button all point at
+  `/app`; `/app/contests` redirects there too.
+- Tiles stack one per row on a phone instead of scrolling sideways — reasonable for a strip above other content,
+  wrong for a whole page.
+**Two bugs found while building it:**
+- **`/app` is a prefix of every student route**, so the shell's first-match rule would have marked Home active on
+  every page and titled them all "Home" in the mobile header. The longest matching nav href now wins.
+- **The My Class tile showed the platform-wide rank next to the class name** — "CSE-A · rank #8" while the
+  dashboard said "#2 of 8". Exactly the bug S4 fixed on the dashboard, still alive in the tile. It now reads
+  "CSE-A · rank #2 of 8" and falls back to "Ranked #N overall" for a student with no class.
+**Verified:** Home and dashboard in a browser, dark and light, 1280px and 375px, no horizontal overflow, all six
+tiles real links with aria-labels, console clean, nav highlighting correct on both pages. `tsc` clean,
+production build passes, 0 lint errors (97 warnings, down from 98). Probe student deleted.
+**Decision recorded:** D1 → **D1b** in `STUDENT_PERSONA_PLAN.md`.
+**Next:** roadmap.sh-style visual roadmaps. Agreed approach: extend the content model from a milestone list to a
+graph (topics · checkpoints · notes), render with React Flow + dagre, colour nodes by *verified* progress rather
+than self-declaration, and offer a list view on mobile. Build the renderer and re-author **one** roadmap first,
+review it, then do the other three.
+
+---
+
 ## 2026-10-04 (Sun) — part 14
 **Area:** Pre-merge readiness audit of `feat/student-persona` (S0–S11 + B0 + B3)
 **Checked:** branch is 15 ahead / 0 behind `origin/main` (clean fast-forward, no conflicts); no secrets or `.env`

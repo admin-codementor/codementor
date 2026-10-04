@@ -119,8 +119,14 @@ export function AppShell({
   // Close the mobile drawer whenever the route changes.
   React.useEffect(() => setMobileOpen(false), [pathname]);
 
-  const isActive = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
-  const activeLabel = navItems.find((n) => isActive(n.href))?.label ?? "CodeMentor";
+  // The longest matching href wins, not the first. "/app" is a prefix of every
+  // student route, so a first-match rule would light up Home on every page and
+  // title them all "Home" — the mobile header reads this label.
+  const activeHref = navItems
+    .filter((n) => pathname === n.href || pathname.startsWith(`${n.href}/`))
+    .reduce<string | null>((best, n) => (best === null || n.href.length > best.length ? n.href : best), null);
+  const isActive = (href: string) => href === activeHref;
+  const activeLabel = navItems.find((n) => n.href === activeHref)?.label ?? "CodeMentor";
 
   const handleSignOut = () => {
     clearSession();

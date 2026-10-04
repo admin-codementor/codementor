@@ -29,7 +29,8 @@ of every student page done on 2026-10-03 (findings quoted inline below with file
 
 | # | Topic | Decision |
 |---|---|---|
-| D1 | Illustrated home | Illustrated **Quick Access** tiles sit **at the top of the existing dashboard** (not a separate page). |
+| D1 | Illustrated home | ~~Tiles at the top of the dashboard~~ → **revised 2026-10-04 (D1b)**. |
+| D1b | Illustrated home | Illustrated **Quick Access** tiles are their own **Home page at `/app`**, which is where a student lands after signing in. The dashboard keeps the statistics and nothing else. Reversed after seeing D1 built: the tiles competed with the numbers below them and made one page do two jobs. |
 | D2 | Illustrations | unDraw, recoloured to our brand primary. Stored locally as SVGs. |
 | D3 | Style guidance | Use official MUI agent skills + Material 3 spacing rules + our own project skill (see S0). |
 | D4 | Submissions | Students see **only accepted, final** submissions. No wrong / error submissions anywhere on the student side. |
@@ -69,7 +70,8 @@ Dashboard · *Practice:* Sandbox, Courses, Contests, Assignments, Aptitude, Exam
 ```
 Logo → /app/dashboard (everywhere, including the problem page)
 
-Dashboard            ← Quick Access tiles on top, analytics below
+Home                 ← the six Quick Access tiles, the landing page (D1b)
+Dashboard            ← statistics, deadlines, rank
 Learn
   Courses            ← course → module progress, due dates
   Practice           ← problem catalogue (today /app/problems, currently not in the menu)
@@ -175,10 +177,11 @@ from `frontend-next/CLAUDE.md`.
 
 ## Phase S1 — Quick Access tiles + navigation
 
-**Goal:** the CodeTantra-style illustrated entry point the HOD asked for, on top of the dashboard, with
+**Goal:** the CodeTantra-style illustrated entry point the HOD asked for — built on the dashboard first, moved
+to its own page at `/app` by D1b. Still with
 **live information** on each tile (CodeTantra's tiles only say "Click here").
 
-**Quick Access row (top of `/app/dashboard`)** — 6 tiles, unDraw illustration (recoloured), title, one live line,
+**Quick Access tiles (now the Home page, `/app`)** — 6 tiles, unDraw illustration (recoloured), title, one live line,
 whole tile clickable (`Card variant="interactive"`):
 
 | Tile | Live line example | Goes to |
@@ -192,7 +195,9 @@ whole tile clickable (`Card variant="interactive"`):
 
 - Desktop: 3×2 grid, tiles ~180px tall. Tablet: 2 columns. Mobile: horizontal scroll row.
 - Each tile has loading (skeleton line), error (tile still clickable, live line hidden), and empty copy.
-- "Collapse quick access" toggle remembered per user (localStorage, safe-wrapped) for students who prefer the
+- ~~"Collapse quick access" toggle~~ — removed with D1b. It existed so the row could be hidden to reach the
+  dashboard beneath it; on a page of its own there is nothing to hide, and the dashboard is one click away.
+- *(superseded)* The toggle was remembered per user (localStorage, safe-wrapped) for students who preferred the
   analytics view.
 - Illustrations: 6 SVGs in `public/illustrations/`, colour set by CSS variable so dark mode works.
 

@@ -2,12 +2,10 @@
 
 import * as React from "react";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { InteractiveCard } from "@/components/ui/InteractiveCard";
-import { ExpandLessIcon, ExpandMoreIcon } from "@/components/ui/icons";
 import { layout } from "@/theme/tokens";
 import type { Assignment, CourseSummary, DashboardStats } from "@/lib/types";
 import { examStatus, type ExamCardData } from "@/lib/queries/student";
@@ -22,14 +20,17 @@ import {
 } from "./illustrations";
 
 /**
- * The six big entry points, shown above the dashboard's detail.
+ * The six big entry points — the whole of the Home screen.
  *
  * Modelled on the illustrated home screen the HOD liked, with one difference:
- * every tile carries a live line, so the row answers "what should I do now?"
- * rather than just repeating the menu.
+ * every tile carries a live line, so it answers "what should I do now?" rather
+ * than just repeating the menu.
+ *
+ * This used to sit as a row on top of the dashboard and it was wrong there: it
+ * competed with the statistics below it and made one page do two jobs. It is
+ * its own page now, which is also what makes the tiles worth looking at — they
+ * can be large enough to read at a glance from across a lab.
  */
-
-const COLLAPSE_KEY = "cm:quickAccess:collapsed";
 
 export interface QuickAccessProps {
   stats?: DashboardStats;
@@ -140,13 +141,19 @@ function buildTiles({
       : `${activeRoadmap.role} · start step 1`
     : "Pick a path for the job you want";
 
-  const rank = stats?.rank ?? 0;
+  // Next to a class name, "rank #8" can only mean rank within that class, so it
+  // has to be the class rank — this tile was pairing "CSE-A" with the
+  // platform-wide rank and reading #8 of 8 while the dashboard said #2 of 8.
+  // Same mistake S4 fixed on the dashboard, still alive here.
+  const classRank = stats?.classRank ?? 0;
+  const classSize = stats?.classSize ?? 0;
+  const overallRank = stats?.rank ?? 0;
   const classLine = className
-    ? rank > 0
-      ? `${className} · rank #${rank}`
+    ? classRank > 0 && classSize > 0
+      ? `${className} · rank #${classRank} of ${classSize}`
       : className
-    : rank > 0
-      ? `Ranked #${rank}`
+    : overallRank > 0
+      ? `Ranked #${overallRank} overall`
       : "Join your class";
 
   return [
@@ -165,100 +172,52 @@ function buildTiles({
   ];
 }
 
-export function QuickAccess(props: QuickAccessProps) {
-  const [collapsed, setCollapsed] = React.useState(false);
-  // Read once on mount: localStorage isn't available during server rendering,
-  // and can throw outright in a private window or with site data blocked.
-  React.useEffect(() => {
-    try {
-      setCollapsed(window.localStorage.getItem(COLLAPSE_KEY) === "1");
-    } catch {
-      /* storage unavailable — the row just stays open */
-    }
-  }, []);
-
-  const toggle = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        window.localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0");
-      } catch {
-        /* preference simply isn't remembered */
-      }
-      return next;
-    });
-  };
-
+export function QuickAccessGrid(props: QuickAccessProps) {
   // Fixed per mount so deadline wording can't shift between renders.
   const [now] = React.useState(() => Date.now());
-  const tiles = React.useMemo(
-    () => buildTiles({ ...props, now }),
-    [props, now],
-  );
+  const tiles = React.useMemo(() => buildTiles({ ...props, now }), [props, now]);
 
   return (
-    <Box component="section" aria-labelledby="quick-access-heading" sx={{ mb: layout.sectionGap }}>
-      <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1.5 }}>
-        <Typography id="quick-access-heading" variant="subtitle2" fontWeight={600} color="text.secondary">
-          Quick access
-        </Typography>
-        <Button
-          size="small"
-          onClick={toggle}
-          endIcon={collapsed ? <ExpandMoreIcon fontSize="small" /> : <ExpandLessIcon fontSize="small" />}
-          aria-expanded={!collapsed}
-          aria-controls="quick-access-tiles"
+    <Box
+      component="nav"
+      aria-label="Quick access"
+      sx={{
+        display: "grid",
+        gap: 2,
+        // One per row on a phone: this is the whole page now, so there is no
+        // reason to squeeze six tiles into a sideways-scrolling strip the way
+        // the dashboard row had to.
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" },
+      }}
+    >
+      {tiles.map((tile) => (
+        <InteractiveCard
+          key={tile.key}
+          href={tile.href}
+          ariaLabel={`${tile.title}. ${tile.line}`}
         >
-          {collapsed ? "Show" : "Hide"}
-        </Button>
-      </Stack>
-
-      {/* Rendered conditionally rather than with <Collapse>: the collapse
-          wrapper kept its height here, so hiding left an empty gap. Showing and
-          hiding is a rare preference action that doesn't need an animation. */}
-      {!collapsed && (
-        <Box
-          id="quick-access-tiles"
-          sx={{
-            display: "grid",
-            gap: 2,
-            // Phones scroll the row sideways rather than stacking six tall tiles.
-            gridAutoFlow: { xs: "column", sm: "row" },
-            gridAutoColumns: { xs: "78%", sm: "auto" },
-            gridTemplateColumns: { xs: "none", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" },
-            overflowX: { xs: "auto", sm: "visible" },
-            scrollSnapType: { xs: "x mandatory", sm: "none" },
-            pb: { xs: 1, sm: 0 },
-            mx: { xs: -2, sm: 0 },
-            px: { xs: 2, sm: 0 },
-          }}
-        >
-          {tiles.map((tile) => (
-            <InteractiveCard
-              key={tile.key}
-              href={tile.href}
-              ariaLabel={`${tile.title}. ${tile.line}`}
-              sx={{ scrollSnapAlign: "start" }}
-            >
-              <Stack direction="row" alignItems="center" spacing={2} sx={{ p: layout.cardPadding }}>
-                <Box sx={{ width: 84, height: 63, flexShrink: 0 }}>{tile.art}</Box>
-                <Box sx={{ minWidth: 0 }}>
-                  <Typography variant="subtitle1" fontWeight={600}>
-                    {tile.title}
-                  </Typography>
-                  {props.loading ? (
-                    <Skeleton variant="text" width="80%" />
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">
-                      {tile.line}
-                    </Typography>
-                  )}
-                </Box>
-              </Stack>
-            </InteractiveCard>
-          ))}
-        </Box>
-      )}
+          <Stack
+            direction="row"
+            alignItems="center"
+            spacing={2.5}
+            sx={{ p: layout.cardPadding, minHeight: 128 }}
+          >
+            <Box sx={{ width: 104, height: 78, flexShrink: 0 }}>{tile.art}</Box>
+            <Box sx={{ minWidth: 0 }}>
+              <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.25 }}>
+                {tile.title}
+              </Typography>
+              {props.loading ? (
+                <Skeleton variant="text" width="80%" sx={{ mt: 0.5 }} />
+              ) : (
+                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                  {tile.line}
+                </Typography>
+              )}
+            </Box>
+          </Stack>
+        </InteractiveCard>
+      ))}
     </Box>
   );
 }

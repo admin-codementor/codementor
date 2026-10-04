@@ -570,7 +570,7 @@ function IDEHeader({
       {/* Logo — goes home, the way a logo is expected to. Hidden during a live
           exam so a student can't browse away mid-sitting. */}
       {!examId && (
-        <IconButton component={NextLink} href="/app/dashboard" aria-label="CodeMentor home" size="small" sx={{ flexShrink: 0 }}>
+        <IconButton component={NextLink} href="/app" aria-label="CodeMentor home" size="small" sx={{ flexShrink: 0 }}>
           <CodeIcon fontSize="small" />
         </IconButton>
       )}
