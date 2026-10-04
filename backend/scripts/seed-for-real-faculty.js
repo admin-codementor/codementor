@@ -12,7 +12,6 @@ const problemRepo = require('../src/repositories/problemRepository');
 
 const REAL_FACULTY_ID = '3e3a6937-ab9d-4047-966d-8809ec37366d';
 
-const rand = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const randInt = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
 const shuffle = (arr) => [...arr].sort(() => Math.random() - 0.5);
 const daysAgo = (n) => new Date(Date.now() - n * 86400000);

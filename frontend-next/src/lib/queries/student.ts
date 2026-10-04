@@ -51,6 +51,101 @@ export function useCoursesQuery() {
   });
 }
 
+export interface CourseTotals {
+  problems: number;
+  solved: number;
+  courses: number;
+}
+
+/**
+ * Catalogue-wide totals, deduplicated server-side.
+ *
+ * Adding the per-course counts up in the browser counts a problem twice when
+ * two courses share it, which had the header reading "81 problems, 24 solved"
+ * next to a dashboard saying 22.
+ */
+export function useCourseTotalsQuery() {
+  return useQuery<CourseTotals>({
+    queryKey: ["courses", "totals"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; totals?: CourseTotals }>("/api/courses");
+      return res.data?.totals ?? { problems: 0, solved: 0, courses: 0 };
+    },
+  });
+}
+
+export interface SolvedProblem {
+  submission_id: string;
+  problem_id: string | number;
+  problem_title: string;
+  difficulty: string | null;
+  tags: string[];
+  language: string;
+  runtime: number | null;
+  memory: number | null;
+  solved_at: string;
+}
+
+/** Every problem the student has solved — the accepted attempt only. */
+export function useSolvedHistoryQuery() {
+  return useQuery<SolvedProblem[]>({
+    queryKey: ["student", "solved"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: SolvedProblem[] }>("/api/student/solved");
+      return res.data?.data ?? [];
+    },
+  });
+}
+
+export interface MistakeEntry {
+  problem_id: string | number;
+  problem_title: string;
+  difficulty: string | null;
+  tags: string[];
+  attempts: number;
+  last_verdict: string | null;
+  last_verdict_summary: string;
+  last_attempt_at: string;
+  note: string | null;
+}
+
+/** Problems attempted but not yet solved — the retry list. */
+export function useMistakesQuery() {
+  return useQuery<MistakeEntry[]>({
+    queryKey: ["student", "mistakes"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: MistakeEntry[] }>("/api/student/mistakes");
+      return res.data?.data ?? [];
+    },
+  });
+}
+
+export interface DailyChallenge {
+  id: string | number;
+  title: string;
+  difficulty: string;
+  tags: string[];
+  solved: boolean;
+}
+
+/**
+ * Today's problem, chosen by the backend.
+ *
+ * The page used to fetch the first 50 problems plus the solved list and pick in
+ * the browser, which meant the "daily" problem could only ever come from that
+ * first page. The server picks deterministically across the whole catalogue in
+ * one request.
+ */
+export function useDailyChallengeQuery() {
+  return useQuery<DailyChallenge | null>({
+    queryKey: ["student", "daily-challenge"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: DailyChallenge | null }>("/api/student/daily-challenge");
+      return res.data?.data ?? null;
+    },
+  });
+}
+
 export interface SkillTopic {
   topic: string;
   solvedCount: number;

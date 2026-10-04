@@ -161,6 +161,9 @@ export default function AssignmentBuilderPage() {
         problem_ids: selectedIds,
         classroom_ids: classIds,
         allowed_cidrs: [],
+        // `proctored` is the current field name; `is_exam` is sent too so an
+        // older backend keeps behaving the same way.
+        proctored: isExam,
         is_exam: isExam,
       };
       if (isNew) await api.post("/api/faculty/assignments", payload);
@@ -211,7 +214,7 @@ export default function AssignmentBuilderPage() {
             <Box>
               <Stack direction="row" spacing={0.75} alignItems="center">
                 <ShieldOutlinedIcon fontSize="small" sx={{ color: isExam ? "warning.main" : "text.disabled" }} />
-                <Typography variant="body2" fontWeight={500}>Proctored exam</Typography>
+                <Typography variant="body2" fontWeight={500}>Require proctoring</Typography>
               </Stack>
               <Typography variant="caption" color="text.secondary">
                 Enforces fullscreen and logs tab switches, copies and pastes. It also disables the AI
@@ -401,7 +404,7 @@ export default function AssignmentBuilderPage() {
     <AuthoringShell
       title={title || "Untitled assignment"}
       subtitle={`${selectedIds.length} problem${selectedIds.length === 1 ? "" : "s"} · ${classIds.length === 0 ? "all students" : `${classIds.length} class${classIds.length === 1 ? "" : "es"}`}`}
-      statusChip={isExam ? <Chip size="small" label="Exam" sx={{ height: 22, fontWeight: 600, bgcolor: "warningContainer", color: "onWarningContainer" }} /> : undefined}
+      statusChip={isExam ? <Chip size="small" label="Proctored" sx={{ height: 22, fontWeight: 600, bgcolor: "warningContainer", color: "onWarningContainer" }} /> : undefined}
       steps={steps}
       step={step}
       onStepChange={(n) => setStep(Math.max(0, Math.min(steps.length - 1, n)))}

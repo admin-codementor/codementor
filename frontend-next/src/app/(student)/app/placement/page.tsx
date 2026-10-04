@@ -4,289 +4,321 @@ import * as React from "react";
 import NextLink from "next/link";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
-import CardContent from "@mui/material/CardContent";
-import CardActionArea from "@mui/material/CardActionArea";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
-import Link from "@mui/material/Link";
 import LinearProgress from "@mui/material/LinearProgress";
-import CircularProgress from "@mui/material/CircularProgress";
-import Skeleton from "@mui/material/Skeleton";
-import { TrackChangesOutlinedIcon, BusinessOutlinedIcon, AutoAwesomeOutlinedIcon, CheckCircleIcon, ArrowForwardIcon } from "@/components/ui/icons";
-import api from "@/lib/api";
+import Collapse from "@mui/material/Collapse";
+import ButtonBase from "@mui/material/ButtonBase";
+import {
+  TrendingUpIcon,
+  TrendingDownIcon,
+  ArrowForwardIcon,
+  ExpandMoreIcon,
+  CheckCircleIcon,
+} from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { DifficultyChip } from "@/components/ui/DifficultyChip";
-import { EmptyState } from "@/components/ui/States";
-import { interactiveSurfaceSx } from "@/components/ui/interactive";
+import { DataState } from "@/components/ui/DataState";
+import { CardGridSkeleton } from "@/components/ui/Skeletons";
+import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { Reveal } from "@/components/ui/motion";
+import { radius, layout } from "@/theme/tokens";
+import { useJobReadyQuery, type ScoreTarget, type ScoreComponent } from "@/lib/queries/jobReady";
 
-interface TrackTopic {
-  topic: string;
-  label: string;
-  target: number;
-  solved: number;
-  pct: number;
-}
-interface TrackGap {
-  label: string;
-  need: number;
-}
-interface Track {
-  key: string;
-  label: string;
-  color: string;
-  companies: string[];
-  focus: string;
-  readiness: number;
-  topics: TrackTopic[];
-  gaps: TrackGap[];
-}
-interface RecProblem {
-  id: string;
-  title: string;
-  difficulty: string;
-  tags: string[];
-}
+/**
+ * The Job-Ready Score.
+ *
+ * The rule this page is built around: a student must be able to work out why
+ * the number is what it is. So every component shows its own score, what it is
+ * worth, and the raw figures behind it — and the three actions underneath are
+ * the ones that would move it most, not a generic list.
+ */
 
-// ── Readiness ring ────────────────────────────────────────────────────────────
+const scoreColor = (score: number) => (score >= 70 ? "success" : score >= 40 ? "warning" : "error");
 
-function ReadinessRing({ pct, color }: { pct: number; color: string }) {
+function ScoreDial({ score, size = 132 }: { score: number; size?: number }) {
+  const stroke = 10;
+  const r = (size - stroke) / 2;
+  const circumference = 2 * Math.PI * r;
+  const tone = scoreColor(score);
+
   return (
-    <Box sx={{ position: "relative", display: "inline-flex", flexShrink: 0 }}>
-      <CircularProgress
-        variant="determinate"
-        value={100}
-        size={64}
-        thickness={5}
-        sx={{ color: "surfaceContainerHighest" }}
-      />
-      <CircularProgress
-        variant="determinate"
-        value={Math.min(100, pct)}
-        size={64}
-        thickness={5}
-        sx={{ color, position: "absolute", left: 0, "& .MuiCircularProgress-circle": { strokeLinecap: "round" } }}
-      />
-      <Box sx={{ position: "absolute", inset: 0, display: "grid", placeItems: "center" }}>
-        <Typography variant="subtitle1" fontWeight={700}>
-          {pct}%
-        </Typography>
+    <Box sx={{ position: "relative", width: size, height: size, flexShrink: 0 }}>
+      <Box
+        component="svg"
+        aria-hidden
+        viewBox={`0 0 ${size} ${size}`}
+        sx={{ width: size, height: size, transform: "rotate(-90deg)" }}
+      >
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke}
+          stroke="var(--mui-palette-outlineVariant)"
+        />
+        <circle
+          cx={size / 2} cy={size / 2} r={r} fill="none" strokeWidth={stroke} strokeLinecap="round"
+          stroke={`var(--mui-palette-${tone}-main)`}
+          strokeDasharray={circumference}
+          strokeDashoffset={circumference * (1 - score / 100)}
+          style={{ transition: "stroke-dashoffset 600ms ease" }}
+        />
       </Box>
+      <Stack
+        sx={{ position: "absolute", inset: 0 }}
+        alignItems="center"
+        justifyContent="center"
+        spacing={0}
+      >
+        <Typography variant="h3" fontWeight={700} sx={{ lineHeight: 1 }}>
+          {score}
+        </Typography>
+        <Typography variant="caption" color="text.secondary">
+          out of 100
+        </Typography>
+      </Stack>
     </Box>
   );
 }
 
+function WeekChange({ change }: { change: number }) {
+  if (change === 0) {
+    return (
+      <Typography variant="caption" color="text.secondary">
+        No change this week
+      </Typography>
+    );
+  }
+  const up = change > 0;
+  return (
+    <Stack direction="row" spacing={0.5} alignItems="center">
+      {up ? (
+        <TrendingUpIcon fontSize="small" sx={{ color: "success.main" }} />
+      ) : (
+        <TrendingDownIcon fontSize="small" sx={{ color: "warning.main" }} />
+      )}
+      <Typography variant="caption" fontWeight={600} color={up ? "success.main" : "warning.main"}>
+        {up ? "+" : ""}{change} this week
+      </Typography>
+    </Stack>
+  );
+}
+
+/** The one line of raw numbers that explains a component's own score. */
+function componentEvidence(c: ScoreComponent): string {
+  const d = c.data as Record<string, never> & Record<string, number | string | unknown[]>;
+  switch (c.key) {
+    case "coverage":
+      return `${d.got} of ${d.target} problems across ${(d.topics as unknown[])?.length ?? 0} topics`;
+    case "difficulty":
+      return `${d.share}% of your solves are medium or harder — this target wants about ${d.shareTarget}%`;
+    case "consistency":
+      return `Active on ${d.activeDays} of the last 30 days — ${d.targetDays} days is full marks`;
+    case "aptitude":
+      return d.taken ? `${d.averagePercent}% average across ${d.taken} test${d.taken === 1 ? "" : "s"}` : "No tests sat yet";
+    case "roadmap":
+      return d.following ? `${c.score}% along your roadmap` : "Not following a roadmap yet";
+    case "courses":
+      return `${d.done} of ${d.assigned} course problems solved — ${d.target} is full marks`;
+    case "external":
+      return (d.verified as unknown[])?.length ? `${(d.verified as unknown[]).length} verified account` : "No verified account linked";
+    default:
+      return "";
+  }
+}
+
+function ComponentRow({ component }: { component: ScoreComponent }) {
+  return (
+    <Box sx={{ py: 1.25 }}>
+      <Stack direction="row" spacing={1} alignItems="baseline" justifyContent="space-between">
+        <Typography variant="body2" fontWeight={600}>
+          {component.label}
+        </Typography>
+        <Stack direction="row" spacing={1} alignItems="baseline">
+          <Typography variant="caption" color="text.secondary">
+            worth {component.weight}
+          </Typography>
+          <Typography variant="body2" fontWeight={700} sx={{ minWidth: 52, textAlign: "right" }}>
+            {component.contributes} / {component.weight}
+          </Typography>
+        </Stack>
+      </Stack>
+      <LinearProgress
+        variant="determinate"
+        value={component.score}
+        color={scoreColor(component.score)}
+        sx={{ height: 5, borderRadius: radius.full, mt: 0.75 }}
+      />
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.75 }}>
+        {componentEvidence(component)}
+      </Typography>
+    </Box>
+  );
+}
+
+function TargetCard({ target }: { target: ScoreTarget }) {
+  const [showWorkings, setShowWorkings] = React.useState(false);
+
+  return (
+    <Card variant="outlined" sx={{ borderColor: "outlineVariant", p: layout.cardPadding }}>
+      <Stack direction={{ xs: "column", sm: "row" }} spacing={3} alignItems={{ xs: "center", sm: "flex-start" }}>
+        <ScoreDial score={target.score} />
+
+        <Box sx={{ flex: 1, minWidth: 0, width: "100%" }}>
+          <Typography variant="h6" fontWeight={700}>
+            {target.label}
+          </Typography>
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
+            {target.blurb}
+          </Typography>
+          <Box sx={{ mt: 1 }}>
+            <WeekChange change={target.weekChange} />
+          </Box>
+
+          <Typography variant="overline" color="text.secondary" sx={{ display: "block", mt: 2.5 }}>
+            Your next three things
+          </Typography>
+          <Stack spacing={1} sx={{ mt: 0.5 }}>
+            {target.nextActions.length === 0 ? (
+              <Stack direction="row" spacing={0.75} alignItems="center">
+                <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
+                <Typography variant="body2" color="success.main">
+                  Nothing outstanding for this target.
+                </Typography>
+              </Stack>
+            ) : (
+              target.nextActions.map((a) => (
+                <Card
+                  key={a.label}
+                  variant="outlined"
+                  sx={{ borderColor: "outlineVariant", borderRadius: radius.sm }}
+                >
+                  <ButtonBase
+                    component={NextLink}
+                    href={a.href}
+                    sx={{ width: "100%", px: 1.5, py: 1.25, justifyContent: "space-between", borderRadius: "inherit", textAlign: "left" }}
+                  >
+                    <Box sx={{ minWidth: 0 }}>
+                      <Typography variant="body2" fontWeight={600}>
+                        {a.label}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {a.why}
+                      </Typography>
+                    </Box>
+                    <ArrowForwardIcon fontSize="small" sx={{ color: "text.secondary", ml: 1, flexShrink: 0 }} />
+                  </ButtonBase>
+                </Card>
+              ))
+            )}
+          </Stack>
+        </Box>
+      </Stack>
+
+      <Box sx={{ mt: 2.5, borderTop: "1px solid", borderColor: "outlineVariant", pt: 1 }}>
+        <Button
+          size="small"
+          onClick={() => setShowWorkings((v) => !v)}
+          endIcon={
+            <ExpandMoreIcon
+              fontSize="small"
+              sx={{ transition: "transform 150ms", transform: showWorkings ? "rotate(180deg)" : "none" }}
+            />
+          }
+          aria-expanded={showWorkings}
+        >
+          {showWorkings ? "Hide the workings" : "How is this calculated?"}
+        </Button>
+        <Collapse in={showWorkings} unmountOnExit>
+          <Box sx={{ pt: 1 }}>
+            <Typography variant="body2" color="text.secondary" sx={{ maxWidth: layout.proseMaxWidth, mb: 1 }}>
+              Each part is scored out of 100 and counts for the share shown. Add the contributions
+              together and you get {target.score}.
+            </Typography>
+            <Stack divider={<Box sx={{ borderTop: "1px solid", borderColor: "outlineVariant" }} />}>
+              {target.components.map((c) => (
+                <ComponentRow key={c.key} component={c} />
+              ))}
+            </Stack>
+          </Box>
+        </Collapse>
+      </Box>
+    </Card>
+  );
+}
+
 export default function PlacementPage() {
-  const [tracks, setTracks] = React.useState<Track[]>([]);
-  const [recommended, setRecommended] = React.useState<RecProblem[]>([]);
-  const [selected, setSelected] = React.useState("");
-  const [loading, setLoading] = React.useState(true);
+  const query = useJobReadyQuery();
+  const targets = query.data?.targets ?? [];
+  const [selected, setSelected] = React.useState<string | null>(null);
 
-  React.useEffect(() => {
-    api
-      .get("/api/student/placement")
-      .then((r) => {
-        if (r.data?.success) {
-          const t: Track[] = r.data.data.tracks || [];
-          setTracks(t);
-          setRecommended(r.data.data.recommended || []);
-          if (t.length) setSelected(t[0].key);
-        }
-      })
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, []);
-
-  const track = tracks.find((t) => t.key === selected);
+  const current = targets.find((t) => t.key === selected) ?? targets[0];
 
   return (
     <Box>
       <PageHeader
-        title="Placement Track"
-        subtitle="Your readiness is computed from the problems you've actually solved, mapped to each recruitment track."
+        title="Job-Ready Score"
+        subtitle="How ready you are for each kind of recruiter, and the three things that would move it most."
       />
 
-      {loading ? (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2 }}>
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Card key={i} variant="outlined" sx={{ p: 2.5, borderColor: "outlineVariant" }}>
-              <Stack direction="row" spacing={2} alignItems="center">
-                <Skeleton variant="circular" width={64} height={64} />
-                <Box sx={{ flex: 1 }}>
-                  <Skeleton width="70%" />
-                  <Skeleton width="50%" />
-                </Box>
-              </Stack>
-            </Card>
-          ))}
-        </Box>
-      ) : tracks.length === 0 ? (
-        <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-          <EmptyState icon={<TrackChangesOutlinedIcon />} title="No track data available" />
-        </Card>
-      ) : (
-        <Stack spacing={3}>
-          {/* Track readiness cards */}
+      <DataState
+        loading={query.isLoading}
+        fetching={query.isFetching && !query.isLoading}
+        error={query.isError ? query.error : undefined}
+        empty={targets.length === 0}
+        onRetry={query.refetch}
+        skeleton={<CardGridSkeleton count={1} height={320} minWidth={320} />}
+        emptyTitle="No targets to score against"
+        emptyDescription="This appears once your college has published problems to practise."
+      >
+        {current && (
           <Reveal>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2 }}>
-            {tracks.map((t) => {
-              const active = selected === t.key;
-              return (
-                <Card
-                  key={t.key}
-                  variant="outlined"
-                  sx={{
-                    borderColor: active ? "primary.main" : "outlineVariant",
-                    bgcolor: active ? "primaryContainer" : undefined,
-                    ...interactiveSurfaceSx,
-                    ...(active ? { "&:hover": { borderColor: "primary.main", transform: "translateY(-2px)", boxShadow: 3 } } : {}),
-                  }}
-                >
-                  <CardActionArea onClick={() => setSelected(t.key)} aria-pressed={active} sx={{ p: 2, borderRadius: "inherit" }}>
-                    <Stack direction="row" spacing={2} alignItems="center" sx={{ mb: 1.5 }}>
-                      <ReadinessRing pct={t.readiness} color={t.color} />
-                      <Box sx={{ minWidth: 0 }}>
-                        <Typography variant="subtitle2" fontWeight={600}>
-                          {t.label}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary">
-                          {t.focus}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                    <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
-                      {t.companies.slice(0, 4).map((co) => (
-                        <Chip key={co} label={co} size="small" sx={{ height: 20, fontSize: 10, bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }} />
-                      ))}
-                    </Stack>
-                  </CardActionArea>
+            <Stack spacing={layout.sectionGap}>
+              {targets.length > 1 && (
+                <SegmentedButtons<string>
+                  value={current.key}
+                  onChange={setSelected}
+                  segments={targets.map((t) => ({ value: t.key, label: t.label }))}
+                  ariaLabel="Which kind of company to score against"
+                />
+              )}
+
+              <TargetCard target={current} />
+
+              {!query.data?.roleTargetAvailable && (
+                <Card variant="outlined" sx={{ borderColor: "outlineVariant", p: layout.cardPadding }}>
+                  <Typography variant="subtitle2" fontWeight={700}>
+                    Scoring against your own role
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5, maxWidth: layout.proseMaxWidth }}>
+                    Follow a roadmap and a third score appears here, measured against that role rather
+                    than against a company type.
+                  </Typography>
+                  <Button
+                    component={NextLink}
+                    href="/app/roadmaps"
+                    size="small"
+                    variant="outlined"
+                    endIcon={<ArrowForwardIcon />}
+                    sx={{ mt: 1.5 }}
+                  >
+                    Browse roadmaps
+                  </Button>
                 </Card>
-              );
-            })}
-          </Box>
-          </Reveal>
+              )}
 
-          {/* Selected track breakdown */}
-          {track && (
-            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "2fr 1fr" }, gap: 3 }}>
-              <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-                <CardContent>
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                    <TrackChangesOutlinedIcon sx={{ color: track.color, fontSize: 20 }} />
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      {track.label} — Topic Coverage
-                    </Typography>
-                  </Stack>
-                  <Stack spacing={2}>
-                    {track.topics.map((tp) => (
-                      <Box key={tp.topic}>
-                        <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
-                          <Typography variant="body2" fontWeight={500} sx={{ textTransform: "capitalize" }}>
-                            {tp.label}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace" }}>
-                            {tp.solved}/{tp.target}
-                          </Typography>
-                        </Stack>
-                        <LinearProgress
-                          variant="determinate"
-                          value={Math.min(100, tp.pct)}
-                          sx={{
-                            height: 8,
-                            borderRadius: 4,
-                            "& .MuiLinearProgress-bar": { bgcolor: tp.pct >= 100 ? "success.main" : track.color },
-                          }}
-                        />
-                      </Box>
-                    ))}
-                  </Stack>
-                </CardContent>
-              </Card>
-
-              <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-                <CardContent>
-                  <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                    <BusinessOutlinedIcon sx={{ color: "warning.main", fontSize: 20 }} />
-                    <Typography variant="subtitle2" fontWeight={600}>
-                      What&apos;s Missing
-                    </Typography>
-                  </Stack>
-                  {track.gaps.length === 0 ? (
-                    <Stack alignItems="center" spacing={1} sx={{ py: 3, color: "success.main" }}>
-                      <CheckCircleIcon sx={{ fontSize: 32 }} />
-                      <Typography variant="body2" fontWeight={600}>
-                        You&apos;re track-ready!
-                      </Typography>
-                    </Stack>
-                  ) : (
-                    <Stack spacing={1}>
-                      {track.gaps.map((g) => (
-                        <Stack
-                          key={g.label}
-                          direction="row"
-                          justifyContent="space-between"
-                          alignItems="center"
-                          sx={{ px: 1.5, py: 1, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant" }}
-                        >
-                          <Typography variant="body2" sx={{ textTransform: "capitalize" }}>
-                            {g.label}
-                          </Typography>
-                          <Typography variant="caption" fontWeight={600} color="warning.main">
-                            +{g.need} to go
-                          </Typography>
-                        </Stack>
-                      ))}
-                    </Stack>
-                  )}
-                </CardContent>
-              </Card>
-            </Box>
-          )}
-
-          {/* Recommended next problems */}
-          {recommended.length > 0 && (
-            <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-              <CardContent>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2 }}>
-                  <AutoAwesomeOutlinedIcon sx={{ color: "info.main", fontSize: 20 }} />
-                  <Typography variant="subtitle2" fontWeight={600}>
-                    Recommended next — close your biggest gaps
+              <Card variant="outlined" sx={{ borderColor: "outlineVariant", p: layout.cardPadding }}>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Chip size="small" label="Verified by our judge" color="primary" variant="outlined" />
+                  <Typography variant="body2" color="text.secondary">
+                    Every figure here comes from problems you actually passed, tests you actually sat,
+                    and accounts you have proved are yours.
                   </Typography>
                 </Stack>
-                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 1 }}>
-                  {recommended.map((p) => (
-                    <Stack
-                      key={p.id}
-                      component={NextLink}
-                      href={`/app/problems/${p.id}`}
-                      direction="row"
-                      spacing={1.5}
-                      alignItems="center"
-                      sx={{
-                        textDecoration: "none",
-                        color: "inherit",
-                        px: 1.5,
-                        py: 1.25,
-                        borderRadius: 2,
-                        border: "1px solid",
-                        borderColor: "outlineVariant",
-                        "&:hover": { borderColor: "primary.main", bgcolor: "surfaceContainerHigh" },
-                      }}
-                    >
-                      <Link component="span" color="text.primary" sx={{ flex: 1, minWidth: 0, fontWeight: 500 }} noWrap>
-                        {p.title}
-                      </Link>
-                      <DifficultyChip difficulty={p.difficulty} />
-                      <ArrowForwardIcon sx={{ fontSize: 16, color: "text.secondary" }} />
-                    </Stack>
-                  ))}
-                </Box>
-              </CardContent>
-            </Card>
-          )}
-        </Stack>
-      )}
+              </Card>
+            </Stack>
+          </Reveal>
+        )}
+      </DataState>
     </Box>
   );
 }

@@ -13,7 +13,7 @@ import Avatar from "@mui/material/Avatar";
 import { LoginIcon, SchoolOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { EmptyState } from "@/components/ui/States";
+import { EmptyState, ErrorState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 
@@ -38,18 +38,23 @@ function classInitials(name: string) {
 export default function ClassesPage() {
   const [classes, setClasses] = React.useState<JoinedClass[]>([]);
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<unknown>(undefined);
   const [code, setCode] = React.useState("");
   const [joining, setJoining] = React.useState(false);
   const showToast = useToast();
 
   const load = React.useCallback(() => {
     setLoading(true);
+    setError(undefined);
     api
       .get<{ success: boolean; data: JoinedClass[] }>("/api/classrooms")
       .then((r) => {
         if (r.data?.success) setClasses(r.data.data ?? []);
+        else setError(new Error("Failed to load your classes"));
       })
-      .catch(() => {})
+      // Swallowing this showed "no classes", which a student would read as
+      // "I'm not in a class" rather than "this didn't load".
+      .catch((err) => setError(err))
       .finally(() => setLoading(false));
   }, []);
 
@@ -132,6 +137,10 @@ export default function ClassesPage() {
             </Card>
           ))}
         </Box>
+      ) : error != null ? (
+        <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
+          <ErrorState error={error} onRetry={load} />
+        </Card>
       ) : classes.length === 0 ? (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
           <EmptyState

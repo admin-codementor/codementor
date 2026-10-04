@@ -9,9 +9,10 @@
 //
 // Every suite cleans up after itself; the runner reports what teardown removed so a
 // leak is visible rather than silently accumulating in the database.
-const { capabilities, BASE } = require('./harness');
+const { capabilities, BASE, sweepTestArtifacts } = require('./harness');
 
 const SUITES = {
+  routeAuth: require('./suites/routeAuthorization'),
   roles: require('./suites/roles'),
   authoring: require('./suites/authoring'),
   mcqImport: require('./suites/mcqAndImport'),
@@ -19,6 +20,10 @@ const SUITES = {
   examsCore: require('./suites/examsCore'),
   examCodingProctor: require('./suites/examCodingAndProctor'),
   codingRunSubmit: require('./suites/codingRunAndSubmit'),
+  studentDashboard: require('./suites/studentDashboard'),
+  progressLeaderboard: require('./suites/progressAndLeaderboard'),
+  roadmaps: require('./suites/roadmaps'),
+  jobReadyProfile: require('./suites/jobReadyAndProfile'),
   analyticsAi: require('./suites/analyticsAndAi'),
 };
 
@@ -85,6 +90,16 @@ const C = {
     }
     suites.push(suite);
     console.log('');
+  }
+
+  // Anything the suites caused but do not own. Runs once, after everything.
+  try {
+    const swept = await sweepTestArtifacts();
+    if (swept > 0) console.log(`${C.dim}swept ${swept} audit/mastery/proctor rows left by this run${C.reset}
+`);
+  } catch (err) {
+    console.log(`${C.yellow}artifact sweep failed: ${err.message}${C.reset}
+`);
   }
 
   const passed = suites.reduce((a, s) => a + s.passed, 0);

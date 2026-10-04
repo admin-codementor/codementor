@@ -1,22 +1,32 @@
 "use client";
 
 import * as React from "react";
-import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, EmojiEventsOutlinedIcon, AssignmentOutlinedIcon, TimerOutlinedIcon, PsychologyOutlinedIcon, SchoolOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon } from "@/components/ui/icons";
+import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, AssignmentOutlinedIcon, TimerOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon, FormatListBulletedOutlinedIcon, HistoryOutlinedIcon, WaypointsIcon } from "@/components/ui/icons";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 
-// Submissions & Coding Profiles now live as tabs on the Profile page (reached via the avatar menu).
+// Grouped by what the student is doing — learning, graded work, then progress —
+// rather than by which feature built it.
+//
+// Not here on purpose:
+//   Contests    — removed from the student experience (nobody used them).
+//   My Classes  — reached from the My Class quick-access tile instead; joining a
+//                 class is a once-ever action that doesn't deserve a permanent slot.
+//   Submissions, Coding Profiles — tabs on Profile, via the avatar menu.
+// Exams and Aptitude merge into a single "Tests" hub in a later phase.
 const NAV_ITEMS: NavItem[] = [
   { label: "Dashboard", href: "/app/dashboard", icon: <SpaceDashboardOutlinedIcon /> },
-  { label: "Sandbox", href: "/app/sandbox", icon: <CodeOutlinedIcon />, section: "Practice" },
-  { label: "Courses", href: "/app/courses", icon: <MenuBookOutlinedIcon />, section: "Practice" },
-  { label: "Contests", href: "/app/contests", icon: <EmojiEventsOutlinedIcon />, section: "Practice" },
-  { label: "Assignments", href: "/app/assignments", icon: <AssignmentOutlinedIcon />, section: "Practice" },
-  { label: "Aptitude", href: "/app/aptitude", icon: <PsychologyOutlinedIcon />, section: "Practice" },
-  { label: "Exams", href: "/app/exams", icon: <TimerOutlinedIcon />, section: "Practice" },
+  { label: "Courses", href: "/app/courses", icon: <MenuBookOutlinedIcon />, section: "Learn" },
+  { label: "Practice", href: "/app/problems", icon: <FormatListBulletedOutlinedIcon />, section: "Learn" },
+  { label: "Roadmaps", href: "/app/roadmaps", icon: <WaypointsIcon />, section: "Learn" },
+  { label: "Sandbox", href: "/app/sandbox", icon: <CodeOutlinedIcon />, section: "Learn" },
+  { label: "Assignments", href: "/app/assignments", icon: <AssignmentOutlinedIcon />, section: "Work" },
+  { label: "Tests", href: "/app/tests", icon: <TimerOutlinedIcon />, section: "Work" },
+  { label: "Mistakes", href: "/app/mistakes", icon: <HistoryOutlinedIcon />, section: "Progress" },
   { label: "Leaderboard", href: "/app/leaderboard", icon: <LeaderboardOutlinedIcon />, section: "Progress" },
-  { label: "My Classes", href: "/app/classes", icon: <SchoolOutlinedIcon />, section: "Progress" },
-  { label: "Placement", href: "/app/placement", icon: <WorkOutlineOutlinedIcon />, section: "Career" },
+  // The route keeps its old path so existing links still work; the label
+  // matches what the page is now called.
+  { label: "Job-Ready", href: "/app/placement", icon: <WorkOutlineOutlinedIcon />, section: "Progress" },
   { label: "AI Tutor", href: "/app/ai-tutor", icon: <SmartToyOutlinedIcon />, section: "Assistant" },
 ];
 

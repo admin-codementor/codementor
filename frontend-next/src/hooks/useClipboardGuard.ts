@@ -40,7 +40,6 @@ export function useClipboardGuard({
   problemId?: string | null;
 }) {
   const [blocked, setBlocked] = React.useState(0);
-  const [notice, setNotice] = React.useState<string | null>(null);
   // Logging every keystroke-fast repeat would flood the events collection; one
   // event per action per second is enough to show a pattern.
   const lastLogged = React.useRef(0);
@@ -67,20 +66,20 @@ export function useClipboardGuard({
     if (!active || !container) return;
     const el = container;
 
-    const block = (e: Event, kind: "paste" | "copy", message: string) => {
+    // Blocked silently, by decision: the student gets no banner. Telling someone
+    // "pasting is turned off" three times while they work is nagging, and the
+    // keystroke simply doing nothing already communicates it. The attempt is
+    // still logged, so faculty and above keep the full record.
+    const block = (e: Event, kind: "paste" | "copy") => {
       e.preventDefault();
       e.stopPropagation();
       setBlocked((n) => n + 1);
-      setNotice(message);
       log(kind, "blocked");
     };
 
-    const onPaste = (e: ClipboardEvent) => {
-      const chars = String(e.clipboardData?.getData("text") || "").length;
-      block(e, "paste", `Pasting is turned off here. ${chars > 0 ? "Type your solution instead." : ""}`.trim());
-    };
-    const onCopy = (e: ClipboardEvent) => block(e, "copy", "Copying is turned off during assessed work.");
-    const onCut = (e: ClipboardEvent) => block(e, "copy", "Cutting is turned off during assessed work.");
+    const onPaste = (e: ClipboardEvent) => block(e, "paste");
+    const onCopy = (e: ClipboardEvent) => block(e, "copy");
+    const onCut = (e: ClipboardEvent) => block(e, "copy");
     // Right-click would otherwise offer Paste straight from the context menu.
     const onContextMenu = (e: MouseEvent) => e.preventDefault();
 
@@ -96,12 +95,8 @@ export function useClipboardGuard({
     };
   }, [active, container, log]);
 
-  // Clear the banner a few seconds after the last blocked attempt.
-  React.useEffect(() => {
-    if (!notice) return;
-    const t = setTimeout(() => setNotice(null), 4000);
-    return () => clearTimeout(t);
-  }, [notice, blocked]);
 
-  return { blocked, notice, dismissNotice: () => setNotice(null) };
+  // `blocked` is the count of blocked attempts, kept for callers that want to
+  // react to repeated tries. Nothing is surfaced to the student.
+  return { blocked };
 }

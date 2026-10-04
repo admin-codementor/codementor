@@ -149,8 +149,40 @@ async function purge(collection, field, values) {
   return n;
 }
 
+/**
+ * Removes rows written as a side effect of a suite's actions rather than by the
+ * suite itself — audit entries, topic mastery, proctor events. No suite owns
+ * these: they are written deep inside controllers and the judge, for whichever
+ * identity happened to make the call, so expecting every suite to remember them
+ * is how 1,372 smoke-test entries ended up in a 1,471-row audit log.
+ *
+ * Matches on the `smoketest-` prefix, so it can only ever delete rows belonging
+ * to a test identity.
+ */
+async function sweepTestArtifacts() {
+  let removed = 0;
+  for (const [collection, field] of [['auditLogs', 'userId'], ['proctorEvents', 'userId']]) {
+    const snap = await db().collection(collection).get();
+    for (const doc of snap.docs) {
+      if (String(doc.data()?.[field] || '').startsWith(TEST_PREFIX)) {
+        await doc.ref.delete();
+        removed += 1;
+      }
+    }
+  }
+  // topicMastery keys its documents `${userId}_${topic}`.
+  const mastery = await db().collection('topicMastery').get();
+  for (const doc of mastery.docs) {
+    if (doc.id.startsWith(TEST_PREFIX) || String(doc.data()?.userId || '').startsWith(TEST_PREFIX)) {
+      await doc.ref.delete();
+      removed += 1;
+    }
+  }
+  return removed;
+}
+
 module.exports = {
-  BASE, TEST_PREFIX, tokenFor, userId,
+  BASE, TEST_PREFIX, tokenFor, userId, sweepTestArtifacts,
   request, get, post, put, patch, del,
   Suite, capabilities, db, purge,
 };

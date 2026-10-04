@@ -8,7 +8,20 @@ const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 
+const { publicRoute } = require('../middleware/routeGuard');
+
 const router = express.Router();
+
+// These routes take an OPTIONAL token: `extractUserId` below reads one when it
+// is there and returns null when it is not, so an anonymous caller can run code
+// and gets an empty history rather than somebody else's. Declared rather than
+// guarded because that is the existing, deliberate design and changing it moves
+// every submission path at once.
+//
+// It does mean an anonymous caller can spend Judge0 capacity. The burst and
+// sustained limiters below are what stands in the way, and they key on IP when
+// there is no user. Worth a decision of its own — see the route audit.
+router.use(publicRoute('optional auth: anonymous runs are allowed, rate-limited by IP'));
 
 // Helper: extract user_id from JWT (optional auth)
 const extractUserId = (req) => {

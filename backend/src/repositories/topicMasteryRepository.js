@@ -1,7 +1,6 @@
 // Per-student topic mastery (solved/failed/hint counts) — Firestore only.
 // Doc ID is `${userId}_${topic}` (mirrors the old (user_id, topic) PK).
 const { db } = require('../config/firestore');
-const { FieldValue } = require('firebase-admin/firestore');
 
 const col = () => db.collection('topicMastery');
 const docId = (userId, topic) => `${userId}_${topic}`;

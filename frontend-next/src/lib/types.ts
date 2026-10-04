@@ -80,7 +80,12 @@ export interface DashboardStats {
   acRate: number;
   problemsSolved: number;
   streak: number;
+  /** Position across every student on the platform. */
   rank: number;
+  totalStudents: number;
+  /** Position within the student's own department+section; 0 when they have none. */
+  classRank: number;
+  classSize: number;
   rating: number;
 }
 
@@ -94,12 +99,20 @@ export interface TopicMastery {
   mastery: number;  // 0–100
 }
 
-export interface DashboardRecentSubmission {
-  verdict: string;
+/**
+ * One problem the student has solved — the accepted submission only.
+ *
+ * Replaces the old recent-submissions list: wrong answers and errors are not a
+ * history worth scrolling. Unsolved attempts live in the retry list instead,
+ * and faculty still see every attempt in their own views.
+ */
+export interface DashboardSolvedProblem {
   language: string;
-  created_at: string;
+  runtime: number | null;
+  solved_at: string;
   problem_title: string;
   problem_id: string | number;
+  difficulty: string | null;
 }
 
 export interface DashboardData {
@@ -107,7 +120,7 @@ export interface DashboardData {
   languages: Array<{ language: string; count: number }>;
   heatmap: HeatmapDay[];
   topics: TopicMastery[];
-  recentSubmissions: DashboardRecentSubmission[];
+  recentSolved: DashboardSolvedProblem[];
 }
 
 // ── Assignments ───────────────────────────────────────────────────────────────
@@ -157,6 +170,8 @@ export interface AdjacentProblems {
   next: string | number | null;
   position: number;
   total: number;
+  /** The module or assignment being walked, or null for the whole catalogue. */
+  context?: string | null;
 }
 
 // ── Verdict / submissions ─────────────────────────────────────────────────────
@@ -186,9 +201,37 @@ export interface VerdictResult {
   scoring_mode: "acm" | "oi";
   passed_count: number;
   total_count: number;
+  /**
+   * Shown/hidden splits counted before judging. The results array stops at the
+   * first failure under ACM scoring, so it cannot be used to count cases that
+   * never ran.
+   */
+  public_total?: number;
+  public_passed?: number;
+  hidden_total?: number;
+  hidden_passed?: number;
+  /** Mean runtime in seconds across the cases that ran. */
+  avg_time?: number | null;
+  /** The first real failure, already parsed, or null when nothing failed. */
+  error?: JudgeError | null;
   custom_run?: boolean;
   sample_only?: boolean;
   test_case_results: TestCaseResult[];
+}
+
+export type JudgeErrorKind =
+  | "compile_error"
+  | "runtime_error"
+  | "time_limit"
+  | "memory_limit"
+  | "wrong_answer";
+
+export interface JudgeError {
+  kind: JudgeErrorKind;
+  /** Line in the student's source, where the compiler or runtime named one. */
+  line: number | null;
+  /** The compiler's or runtime's own output, shown verbatim. */
+  text: string | null;
 }
 
 export interface VerdictPayload {
@@ -219,6 +262,19 @@ export interface RecommendedProblem {
 }
 
 // ── Courses / modules ──
+/** Where a module stands for this student. Computed server-side so every screen agrees. */
+export type ModuleStatus = "empty" | "not_started" | "in_progress" | "done" | "overdue";
+
+export interface ModuleProgress {
+  id: string;
+  title: string;
+  total: number;
+  solved: number;
+  percent: number;
+  dueAt: string | null;
+  status: ModuleStatus;
+}
+
 export interface CourseSummary {
   id: string;
   title: string;
@@ -226,6 +282,10 @@ export interface CourseSummary {
   moduleCount: number;
   problemCount: number;
   solvedCount: number;
+  modules: ModuleProgress[];
+  nextModule: { id: string; title: string } | null;
+  nextDue: { id: string; title: string; dueAt: string } | null;
+  overdueCount: number;
 }
 
 export interface CourseModuleProblem {
@@ -236,15 +296,19 @@ export interface CourseModuleProblem {
   is_solved: boolean;
 }
 
-export interface CourseModule {
-  id: string;
-  title: string;
+export interface CourseModule extends ModuleProgress {
+  description: string | null;
   problems: CourseModuleProblem[];
+  nextProblemId: string | null;
 }
 
 export interface CourseDetail {
   id: string;
   title: string;
   description: string | null;
+  problemCount: number;
+  solvedCount: number;
+  percent: number;
+  nextUp: { moduleId: string; moduleTitle: string; problemId: string | null } | null;
   modules: CourseModule[];
 }

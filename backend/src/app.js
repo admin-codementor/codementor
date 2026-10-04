@@ -12,15 +12,11 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 require('dotenv').config({ quiet: true });
 
-const { apiLimiter } = require('./middleware/rateLimiter');
+// Check configuration before anything else loads — a missing secret should stop
+// the boot here, not surface as a confusing failure on a student's first request.
+require('./config/env').validateEnvOrExit();
 
-// Validate required environment variables before starting
-const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
-const missing = REQUIRED_ENV.filter(k => !process.env[k]);
-if (missing.length > 0) {
-  console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
-  process.exit(1);
-}
+const { apiLimiter } = require('./middleware/rateLimiter');
 
 const authRoutes = require('./routes/auth.routes');
 const submissionRoutes = require('./routes/submissions.routes');
@@ -40,6 +36,9 @@ const mcqRoutes = require('./routes/mcq.routes');
 const examRoutes = require('./routes/exam.routes');
 const profilesRoutes = require('./routes/profiles.routes');
 const courseRoutes = require('./routes/courses.routes');
+const roadmapRoutes = require('./routes/roadmaps.routes');
+const publicRoutes = require('./routes/public.routes');
+const { publicRoute } = require('./middleware/routeGuard');
 
 const { validateSubmission } = require('./middleware/security');
 
@@ -72,7 +71,7 @@ app.use('/api', apiLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/faculty', facultyRoutes);
-app.post('/api/submit', validateSubmission);
+app.post('/api/submit', publicRoute('request validation only — the handler lives in submissions.routes'), validateSubmission);
 app.use('/api', submissionRoutes);
 app.use('/api/problems', problemRoutes);
 app.use('/api/ai', aiRoutes);
@@ -88,9 +87,11 @@ app.use('/api/mcq', mcqRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/profiles', profilesRoutes);
 app.use('/api/courses', courseRoutes);
+app.use('/api/roadmaps', roadmapRoutes);
+app.use('/api/public', publicRoutes);
 
 // ── Health check ────────────────────────────────────────────────────────────
-app.get('/health', (req, res) => {
+app.get('/health', publicRoute('liveness probe for the host, no data'), (req, res) => {
   res.json({ status: 'ok', message: 'CodeMentor API is running', timestamp: new Date().toISOString() });
 });
 
@@ -100,7 +101,8 @@ app.use((req, res) => {
 });
 
 // ── Global error handler ─────────────────────────────────────────────────────
-// eslint-disable-next-line no-unused-vars
+// Express identifies an error handler by its four-argument shape, so `next` must
+// stay even though it is unused.
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   const status = err.status || err.statusCode || 500;

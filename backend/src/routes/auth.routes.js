@@ -1,5 +1,6 @@
 const express = require('express');
 const { createLimiter } = require('../middleware/rateLimiter');
+const { publicRoute } = require('../middleware/routeGuard');
 const { refresh } = require('../controllers/auth.controller');
 const { firebaseLogin } = require('../controllers/firebaseAuth.controller');
 
@@ -19,7 +20,7 @@ const refreshLimiter = createLimiter({
   message: 'Too many refresh attempts.',
 });
 
-router.post('/refresh', refreshLimiter, refresh);
-router.post('/firebase', authLimiter, firebaseLogin);
+router.post('/refresh', publicRoute('exchanges a refresh token for an access token — the caller has no access token yet'), refreshLimiter, refresh);
+router.post('/firebase', publicRoute('sign-in: trades a Firebase ID token for ours'), authLimiter, firebaseLogin);
 
 module.exports = router;

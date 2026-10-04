@@ -302,9 +302,56 @@ async function updateTopicMastery(userId, problemId, isAccepted, hintUsed) {
 // Finalize a fully-scored submission: persist it, update mastery, record the
 // contest submission if applicable, mark the job doc done. Ported from the
 // tail of the old worker's runJob().
+// Compilers and runtimes announce the offending line in their own formats.
+// Parsing it once here means the problem page and the exam screen agree, and a
+// student can click "line 12" instead of counting rows in a stack trace.
+const LINE_PATTERNS = [
+  /(?:^|\n)[^\n:]*:(\d+):\d+/,        // gcc/clang, TypeScript:  file.c:12:5
+  /(?:^|\n)[^\n:]*:(\d+):/,           // javac, generic:          Main.java:12:
+  /line (\d+)/i,                      // Python, Ruby:            line 12
+  /:(\d+)\)/,                         // Java stack frame:        (Main.java:12)
+];
+
+function extractLine(text) {
+  if (!text) return null;
+  for (const re of LINE_PATTERNS) {
+    const m = String(text).match(re);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (Number.isFinite(n) && n > 0) return n;
+    }
+  }
+  return null;
+}
+
+/**
+ * The first real failure, in a shape the UI can render as terminal output:
+ * what kind it is, which line (where we can tell), and the compiler's own text.
+ * Returns null when nothing failed.
+ */
+function firstError(results) {
+  const failed = results.find((r) => !r.passed);
+  if (!failed) return null;
+
+  const raw = failed.compile_output || failed.stderr || null;
+  const status = failed.status?.description || '';
+
+  let kind = 'wrong_answer';
+  if (failed.compile_output) kind = 'compile_error';
+  else if (/^Runtime Error/i.test(status)) kind = 'runtime_error';
+  else if (/Time Limit/i.test(status)) kind = 'time_limit';
+  else if (/Memory Limit/i.test(status)) kind = 'memory_limit';
+
+  // A wrong answer has no compiler text to show; the expected/actual comparison
+  // on the failing case is the useful thing, and the UI already renders it.
+  if (kind === 'wrong_answer') return null;
+
+  return { kind, line: extractLine(raw), text: raw || status || null };
+}
+
 async function finalize(jobId, job, acc, testCasesLength) {
   const { problem_id, user_id, contest_id, assignment_id, exam_id, section_id, source_code, language_id, meta } = job;
-  const { isOI, maxScore, scoringMode, sampleOnly } = meta;
+  const { isOI, maxScore, scoringMode, sampleOnly, publicTotal, hiddenTotal } = meta;
 
   if (isOI) {
     if (acc.passedCount === testCasesLength) acc.finalVerdict = { id: 3, description: 'Accepted' };
@@ -384,6 +431,13 @@ async function finalize(jobId, job, acc, testCasesLength) {
     }
   }
 
+  // Shown/hidden splits come from the totals captured when the job was created,
+  // not from the results array, which stops at the first failure under ACM.
+  const ran = acc.results;
+  const publicRan = ran.filter((r) => r.is_public);
+  const hiddenRan = ran.filter((r) => !r.is_public);
+  const times = ran.map((r) => Number(r.time)).filter((t) => Number.isFinite(t));
+
   const result = {
     submission_id: submission?.id ?? null,
     verdict: acc.finalVerdict,
@@ -394,6 +448,12 @@ async function finalize(jobId, job, acc, testCasesLength) {
     scoring_mode: scoringMode,
     passed_count: acc.passedCount,
     total_count: testCasesLength,
+    public_total: sampleOnly ? ran.length : (publicTotal ?? publicRan.length),
+    public_passed: publicRan.filter((r) => r.passed).length,
+    hidden_total: sampleOnly ? 0 : (hiddenTotal ?? hiddenRan.length),
+    hidden_passed: hiddenRan.filter((r) => r.passed).length,
+    avg_time: times.length ? times.reduce((a, b) => a + b, 0) / times.length : null,
+    error: firstError(ran),
     test_case_results: acc.results,
     sample_only: !!sampleOnly,
   };
@@ -497,7 +557,16 @@ async function startJudging(jobId, jobData) {
     problem_id, source_code, language_id, user_id,
     contest_id: contest_id || null, assignment_id: assignment_id || null,
     exam_id: exam_id || null, section_id: section_id || null,
-    meta: { scoringMode, isOI, maxScore, usesChecker, checkerCode, checkerLanguageId, useEvenSplit, perTcScore, testCasesLength, sampleOnly: !!sample_only },
+    meta: {
+      scoringMode, isOI, maxScore, usesChecker, checkerCode, checkerLanguageId,
+      useEvenSplit, perTcScore, testCasesLength, sampleOnly: !!sample_only,
+      // Captured up front: ACM scoring stops at the first failure, so the
+      // results array only covers the cases that actually ran. Counting shown
+      // and hidden cases from it reported "2 of 2 hidden passed" when there
+      // were six hidden cases and four were never reached.
+      publicTotal: testCasesRaw.filter((tc) => tc.isPublic).length,
+      hiddenTotal: testCasesRaw.filter((tc) => !tc.isPublic).length,
+    },
   };
 
   const chunk = testCasesRaw.slice(0, BATCH_SIZE).map((tc) => ({

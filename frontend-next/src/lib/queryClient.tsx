@@ -17,8 +17,22 @@ function makeQueryClient() {
         staleTime: 30_000,
         // The axios client in `lib/api.ts` already retries the underlying
         // request once via its own 401-refresh flow — an additional retry
-        // layer on top just delays surfacing a real error.
-        retry: 1,
+        // layer on top just delays surfacing a real error. A 4xx is the
+        // server's considered answer, so retrying it only doubles the wait
+        // before the student sees what went wrong.
+        retry: (failureCount, error) => {
+          const status = (error as { response?: { status?: number } })?.response?.status;
+          if (status !== undefined && status >= 400 && status < 500) return false;
+          return failureCount < 1;
+        },
+        // Without this, a query that fails while React Query believes the
+        // browser is offline sits in `fetchStatus: "paused"` forever: no data,
+        // no error, and a page that renders nothing at all. It is not reliable
+        // either — we have seen it pause with `navigator.onLine === true`.
+        // We would rather run the request and report what actually happened;
+        // `classifyApiError` already tells a network failure apart from a
+        // server one and says so in the error state.
+        networkMode: "always",
         refetchOnWindowFocus: false,
       },
     },

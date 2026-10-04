@@ -27,7 +27,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, ContentPasteOffOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
+import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import Alert from "@mui/material/Alert";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
@@ -39,17 +39,18 @@ import { fireConfetti } from "@/components/feedback/confetti";
 import { clearSession, getUser } from "@/lib/auth";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { TagChip } from "@/components/ui/TagChip";
-import { VerdictChip } from "@/components/ui/VerdictChip";
 import { ErrorState } from "@/components/ui/States";
 import { AITutorSidebar, type FailingTest } from "@/components/problem/AITutorSidebar";
 import { TimerWidget } from "@/components/problem/TimerWidget";
-import { darkScheme, lightScheme } from "@/theme/tokens";
+import { darkScheme, lightScheme, radius } from "@/theme/tokens";
 import type {
   ProblemDetail,
   AdjacentProblems,
   VerdictPayload,
   VerdictResult,
   ProblemHistoryEntry,
+  JudgeError,
+  JudgeErrorKind,
 } from "@/lib/types";
 
 // ── Monaco editor (client-only) ───────────────────────────────────────────────
@@ -231,9 +232,12 @@ function ProblemMarkdown({ content }: { content: string }) {
 function TestCaseRow({
   index,
   result,
+  hideErrorText,
 }: {
   index: number;
   result: VerdictResult["test_case_results"][number];
+  /** The terminal panel above already shows this compiler output verbatim. */
+  hideErrorText?: boolean;
 }) {
   const [open, setOpen] = React.useState(index === 0);
   const passed = result.passed;
@@ -285,7 +289,7 @@ function TestCaseRow({
           {result.stdout && (
             <TestIOBlock label="Your output" value={result.stdout} highlight={!passed} />
           )}
-          {(result.stderr || result.compile_output || result.message) && (
+          {!hideErrorText && (result.stderr || result.compile_output || result.message) && (
             <TestIOBlock
               label="Error"
               value={result.compile_output || result.stderr || result.message}
@@ -322,12 +326,19 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
   const cases = result.test_case_results;
   if (cases.length === 0) return null;
   const timesMs = cases.map((c) => Math.max(0, Math.round(c.time * 1000)));
-  const avg = timesMs.length ? Math.round(timesMs.reduce((a, b) => a + b, 0) / timesMs.length) : 0;
   const max = timesMs.length ? Math.max(...timesMs) : 0;
-  const shown = cases.filter((c) => c.is_public);
-  const hidden = cases.filter((c) => !c.is_public);
-  const shownPassed = shown.filter((c) => c.passed).length;
-  const hiddenPassed = hidden.filter((c) => c.passed).length;
+  const avg = result.avg_time != null
+    ? Math.round(result.avg_time * 1000)
+    : (timesMs.length ? Math.round(timesMs.reduce((a, b) => a + b, 0) / timesMs.length) : 0);
+
+  // Totals come from the server, which counted the test cases before judging.
+  // Counting them from the results array undercounts: ACM scoring stops at the
+  // first failure, so cases that never ran aren't in it — which is how this
+  // reported "2 of 2 hidden passed" when four hidden cases were never reached.
+  const shownTotal = result.public_total ?? cases.filter((c) => c.is_public).length;
+  const hiddenTotal = result.hidden_total ?? cases.filter((c) => !c.is_public).length;
+  const shownPassed = result.public_passed ?? cases.filter((c) => c.is_public && c.passed).length;
+  const hiddenPassed = result.hidden_passed ?? cases.filter((c) => !c.is_public && c.passed).length;
 
   const countChip = (passed: number, total: number, label: string) => {
     const all = total > 0 && passed === total;
@@ -354,8 +365,8 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
 
   return (
     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-      {shown.length > 0 && countChip(shownPassed, shown.length, "shown")}
-      {hidden.length > 0 && countChip(hiddenPassed, hidden.length, "hidden")}
+      {shownTotal > 0 && countChip(shownPassed, shownTotal, "shown test case" + (shownTotal === 1 ? "" : "s"))}
+      {hiddenTotal > 0 && countChip(hiddenPassed, hiddenTotal, "hidden test case" + (hiddenTotal === 1 ? "" : "s"))}
       <SummaryCard label="Average time">
         <Typography variant="subtitle2" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace" }}>
           {avg} ms
@@ -374,6 +385,80 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
         </Stack>
       </SummaryCard>
     </Stack>
+  );
+}
+
+const ERROR_HEADING: Record<JudgeErrorKind, string> = {
+  compile_error: "Compilation error",
+  runtime_error: "Runtime error",
+  time_limit: "Time limit exceeded",
+  memory_limit: "Memory limit exceeded",
+  wrong_answer: "Wrong answer",
+};
+
+/**
+ * Compiler and runtime output, shown the way a terminal shows it: monospaced,
+ * on a dark surface, in the tool's own words. The previous presentation folded
+ * it into a collapsed test-case row, which buried the one thing a student needs
+ * when their code doesn't build.
+ */
+function ErrorTerminal({ error, onGoToLine }: { error: JudgeError; onGoToLine: (line: number) => void }) {
+  if (!error.text && error.line == null) return null;
+
+  return (
+    <Box
+      sx={{
+        mb: 1.5,
+        borderRadius: radius.sm,
+        overflow: "hidden",
+        border: "1px solid",
+        borderColor: "error.main",
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{ px: 1.5, py: 0.75, bgcolor: "errorContainer", color: "onErrorContainer" }}
+      >
+        <CancelOutlinedIcon fontSize="small" />
+        <Typography variant="caption" fontWeight={700}>
+          {ERROR_HEADING[error.kind]}
+        </Typography>
+        {error.line != null && (
+          <Button
+            size="small"
+            onClick={() => onGoToLine(error.line as number)}
+            sx={{ minHeight: 0, py: 0, color: "inherit", textDecoration: "underline" }}
+          >
+            line {error.line}
+          </Button>
+        )}
+      </Stack>
+      {error.text && (
+        <Box
+          component="pre"
+          sx={{
+            m: 0,
+            px: 1.5,
+            py: 1,
+            // Terminal output is dark in both themes on purpose: it is the
+            // compiler's console, not part of the page's surface.
+            bgcolor: "#1b1b1f",
+            color: "#ff9d9d",
+            fontFamily: "ui-monospace, monospace",
+            fontSize: "0.75rem",
+            lineHeight: 1.55,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxHeight: 180,
+            overflow: "auto",
+          }}
+        >
+          {error.text}
+        </Box>
+      )}
+    </Box>
   );
 }
 
@@ -429,6 +514,8 @@ function IDEHeader({
   showAI,
   onToggleAI,
   examId,
+  proctored,
+  navContext,
 }: {
   problem: ProblemDetail | null;
   problemId: string;
@@ -440,6 +527,10 @@ function IDEHeader({
   onSubmit: () => void;
   showAI: boolean;
   onToggleAI: () => void;
+  /** Exam or proctored assignment — gives the clock prominence. */
+  proctored: boolean;
+  /** Query string that keeps prev/next inside the current module or assignment. */
+  navContext: string;
   /** Present while solving a problem inside a live exam — hides catalog-wide
    * navigation (logo, prev/next) so a student can't browse away to the other
    * ~77 problems mid-exam. See exam.controller.js#markVisited, which already
@@ -476,10 +567,10 @@ function IDEHeader({
         overflowX: "auto",
       }}
     >
-      {/* Logo — hidden during a live exam: it links to the full public
-          catalog, which a student shouldn't be able to browse away to. */}
+      {/* Logo — goes home, the way a logo is expected to. Hidden during a live
+          exam so a student can't browse away mid-sitting. */}
       {!examId && (
-        <IconButton component={NextLink} href="/app/problems" aria-label="Back to problems" size="small" sx={{ flexShrink: 0 }}>
+        <IconButton component={NextLink} href="/app/dashboard" aria-label="CodeMentor home" size="small" sx={{ flexShrink: 0 }}>
           <CodeIcon fontSize="small" />
         </IconButton>
       )}
@@ -495,7 +586,7 @@ function IDEHeader({
             <span>
               <IconButton
                 component={NextLink}
-                href={adjacent?.prev ? `/app/problems/${adjacent.prev}` : "#"}
+                href={adjacent?.prev ? `/app/problems/${adjacent.prev}${navContext}` : "#"}
                 aria-label="Previous problem"
                 size="small"
                 disabled={!adjacent?.prev}
@@ -507,8 +598,22 @@ function IDEHeader({
           </Tooltip>
 
           {adjacent && (
-            <Typography variant="caption" color="text.secondary" sx={{ minWidth: 52, textAlign: "center", flexShrink: 0, display: { xs: "none", sm: "block" } }}>
+            // The count alone is ambiguous — "1/22" of what? Naming the module
+            // is the whole point of the context the API already returns, and
+            // without it a student cannot tell a module walk from a walk of the
+            // entire catalogue. Dropped first on narrow screens, then the count.
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              sx={{ minWidth: 52, textAlign: "center", flexShrink: 0, display: { xs: "none", sm: "block" } }}
+            >
               {adjacent.position}/{adjacent.total}
+              {adjacent.context && (
+                <Box component="span" sx={{ display: { xs: "none", md: "inline" } }}>
+                  {" "}in {adjacent.context}
+                </Box>
+              )}
             </Typography>
           )}
 
@@ -516,7 +621,7 @@ function IDEHeader({
             <span>
               <IconButton
                 component={NextLink}
-                href={adjacent?.next ? `/app/problems/${adjacent.next}` : "#"}
+                href={adjacent?.next ? `/app/problems/${adjacent.next}${navContext}` : "#"}
                 aria-label="Next problem"
                 size="small"
                 disabled={!adjacent?.next}
@@ -529,22 +634,30 @@ function IDEHeader({
         </>
       )}
 
-      {/* Problem title — minWidth:0 is required for a flex item to actually
-          shrink/ellipsis instead of forcing the row wider than the viewport
-          (a flex item's default min-width is `auto`, not 0). */}
-      <Typography
-        variant="body2"
-        fontWeight={600}
-        noWrap
-        sx={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", mx: 1 }}
-      >
-        {problem?.title ?? "Loading…"}
-      </Typography>
+      {/* Problem title and difficulty. minWidth:0 is required for a flex item
+          to actually shrink/ellipsis instead of forcing the row wider than the
+          viewport (a flex item's default min-width is `auto`, not 0). */}
+      <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: 1, minWidth: 0, mx: 1 }}>
+        <Typography
+          variant="body2"
+          fontWeight={600}
+          noWrap
+          sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
+        >
+          {problem?.title ?? "Loading…"}
+        </Typography>
+        {problem?.difficulty && (
+          <Box sx={{ flexShrink: 0, display: { xs: "none", md: "block" } }}>
+            <DifficultyChip difficulty={problem.difficulty} />
+          </Box>
+        )}
+      </Stack>
 
-      {/* Timer (session + Pomodoro) — hidden on phone widths, same reasoning
-          as the position counter above. */}
-      <Box sx={{ mr: 0.5, flexShrink: 0, display: { xs: "none", sm: "block" } }}>
-        <TimerWidget problemId={problemId} solved={solved} />
+      {/* Timer. Under proctoring it stays visible even on a phone and is given
+          real weight — the clock is the thing that matters in a sitting.
+          In ordinary practice it's a quiet chip and hides on narrow screens. */}
+      <Box sx={{ mr: 0.5, flexShrink: 0, display: proctored ? "block" : { xs: "none", sm: "block" } }}>
+        <TimerWidget problemId={problemId} solved={solved} prominent={proctored} />
       </Box>
 
       {/* Run */}
@@ -726,6 +839,15 @@ export default function ProblemSolvingPage() {
   const editorRef = React.useRef<MonacoEditorInstance | null>(null);
   const monacoRef = React.useRef<MonacoNamespace | null>(null);
 
+  // Jumps the editor to the line the compiler complained about.
+  const goToLine = React.useCallback((line: number) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.revealLineInCenter(line);
+    editor.setPosition({ lineNumber: line, column: 1 });
+    editor.focus();
+  }, []);
+
   // ── Submission state ──
   const [submitting,  setSubmitting]  = React.useState(false);
   const [running,     setRunning]     = React.useState(false);
@@ -749,6 +871,15 @@ export default function ProblemSolvingPage() {
 
   // Timer (session + Pomodoro) lives in <TimerWidget>, keyed by problemId + solved.
 
+  // Which list the arrows should walk, taken from the link that opened this page.
+  const navContext = React.useMemo(() => {
+    const course = searchParams.get("course");
+    const moduleId = searchParams.get("module");
+    if (course && moduleId) return `?course=${encodeURIComponent(course)}&module=${encodeURIComponent(moduleId)}`;
+    if (assignmentId) return `?assignment=${encodeURIComponent(assignmentId)}`;
+    return "";
+  }, [searchParams, assignmentId]);
+
   // ── Load problem + adjacent ──
   React.useEffect(() => {
     let active = true;
@@ -761,7 +892,11 @@ export default function ProblemSolvingPage() {
     setMobilePane("problem");
     Promise.allSettled([
       api.get<{ success: boolean; data: ProblemDetail }>(`/api/problems/${problemId}`),
-      api.get<{ success: boolean; data: AdjacentProblems }>(`/api/problems/${problemId}/adjacent`),
+      // Context (module or assignment) makes prev/next follow the list the
+      // student is actually working through, not the whole catalogue.
+      api.get<{ success: boolean; data: AdjacentProblems }>(
+        `/api/problems/${problemId}/adjacent${navContext}`,
+      ),
     ]).then(([probRes, adjRes]) => {
       if (!active) return;
       if (probRes.status === "rejected") { setError(true); setLoading(false); return; }
@@ -806,6 +941,12 @@ export default function ProblemSolvingPage() {
       setHistoryLoading(false);
     }
   }, [problemId]);
+
+  // Only accepted work is shown back to the student; see the panel below.
+  const acceptedHistory = React.useMemo(
+    () => history.filter((h) => h.verdict === "Accepted"),
+    [history],
+  );
 
   const handlePanelTab = (_: React.SyntheticEvent, val: PanelTab) => {
     setPanelTab(val);
@@ -970,7 +1111,7 @@ export default function ProblemSolvingPage() {
 
   // Clipboard lock on the editor itself. Always on here — this is assessed or
   // course practice; the sandbox is the place for pasting your own code.
-  const clipboard = useClipboardGuard({
+  useClipboardGuard({
     active: true,
     container: editorContainer,
     examId,
@@ -1075,22 +1216,8 @@ export default function ProblemSolvingPage() {
         overflow: "hidden",
       }}
     >
-      {/* ── Proctored exam banner ── */}
-      {clipboard.notice && (
-        <Box
-          role="status"
-          aria-live="polite"
-          sx={{
-            display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1,
-            bgcolor: "warningContainer", color: "onWarningContainer",
-            borderBottom: "1px solid", borderColor: "outlineVariant",
-          }}
-        >
-          <ContentPasteOffOutlinedIcon fontSize="small" />
-          <Typography variant="caption" fontWeight={600}>{clipboard.notice}</Typography>
-        </Box>
-      )}
-
+      {/* No clipboard banner: paste is blocked silently (see useClipboardGuard).
+          The attempt is still logged for faculty. */}
       {proctored && (
         <Box
           sx={{
@@ -1160,6 +1287,8 @@ export default function ProblemSolvingPage() {
         onRun={() => { setOutputTab("testcases"); setOutputOpen(true); execute("run"); }}
         onSubmit={() => execute("submit")}
         examId={examId}
+        proctored={proctored}
+        navContext={navContext}
         showAI={showAI}
         onToggleAI={() => setShowAI((v) => !v)}
       />
@@ -1207,7 +1336,7 @@ export default function ProblemSolvingPage() {
               sx={{ minHeight: 42, "& .MuiTab-root": { minHeight: 42, py: 1, fontSize: "0.8rem" } }}
             >
               <Tab label="Description" value="description" />
-              <Tab label="Submissions" value="submissions" />
+              <Tab label="My solution" value="submissions" />
             </Tabs>
           </Box>
 
@@ -1306,10 +1435,12 @@ export default function ProblemSolvingPage() {
                       <Skeleton key={i} height={56} sx={{ borderRadius: 2 }} />
                     ))}
                   </Stack>
-                ) : history.length === 0 ? (
+                ) : acceptedHistory.length === 0 ? (
                   <Box sx={{ py: 8, textAlign: "center" }}>
                     <Typography color="text.secondary" variant="body2">
-                      No submissions yet for this problem.
+                      {history.length === 0
+                        ? "You haven't submitted this problem yet."
+                        : "Not solved yet — your accepted solution will appear here."}
                     </Typography>
                     <Button variant="outlined" size="small" onClick={() => setPanelTab("description")} sx={{ mt: 2 }}>
                       Read the problem
@@ -1317,22 +1448,31 @@ export default function ProblemSolvingPage() {
                   </Box>
                 ) : (
                   <Stack spacing={1}>
-                    {history.map((h) => (
+                    {/* Accepted work only. A list of failed attempts is not a
+                        useful record; unsolved problems collect in the Mistakes
+                        notebook instead, where there is something to do. */}
+                    {acceptedHistory.map((h) => (
                       <Box
                         key={h.id}
                         sx={{
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "space-between",
+                          gap: 1,
                           px: 2,
                           py: 1.25,
                           bgcolor: "surfaceContainerLow",
-                          borderRadius: 2,
+                          borderRadius: radius.sm,
                           border: "1px solid",
                           borderColor: "outlineVariant",
                         }}
                       >
-                        <VerdictChip verdict={h.verdict} />
+                        <Stack direction="row" spacing={0.75} alignItems="center">
+                          <CheckCircleOutlineIcon fontSize="small" color="success" />
+                          <Typography variant="caption" fontWeight={600} color="success.main">
+                            Accepted
+                          </Typography>
+                        </Stack>
                         <Typography variant="caption" color="text.secondary">
                           {historyLangName(h.language)}
                         </Typography>
@@ -1530,9 +1670,19 @@ export default function ProblemSolvingPage() {
                     {!submitting && !running && verdictResult && !verdictResult.custom_run && (
                       <Box>
                         <ResultsSummary result={verdictResult} />
+                        {verdictResult.error && (
+                          <ErrorTerminal error={verdictResult.error} onGoToLine={goToLine} />
+                        )}
                         <Stack spacing={1}>
                           {verdictResult.test_case_results.map((r, i) => (
-                            <TestCaseRow key={i} index={i} result={r} />
+                            <TestCaseRow
+                              key={i}
+                              index={i}
+                              result={r}
+                              // Don't repeat the compiler output that the
+                              // terminal panel above is already showing.
+                              hideErrorText={!!verdictResult.error}
+                            />
                           ))}
                         </Stack>
                         {verdictResult.sample_only && (
@@ -1635,71 +1785,6 @@ export default function ProblemSolvingPage() {
             </Collapse>
           </Box>
 
-          {/* Bottom action bar (Prev · Reset · Submit · Next) */}
-          <Box
-            sx={{
-              flexShrink: 0,
-              display: "flex",
-              alignItems: "center",
-              gap: 1,
-              px: 1.5,
-              height: 48,
-              borderTop: "1px solid",
-              borderColor: "outlineVariant",
-              bgcolor: "surface",
-            }}
-          >
-            {/* Prev/next hidden during a live exam — see IDEHeader above for why. */}
-            {examId ? (
-              <Box sx={{ width: 0 }} />
-            ) : (
-              <Button
-                {...(adjacent?.prev
-                  ? { component: NextLink, href: `/app/problems/${adjacent.prev}` }
-                  : { disabled: true })}
-                size="small"
-                variant="text"
-                startIcon={<ChevronLeftIcon />}
-                sx={{ color: "text.secondary" }}
-              >
-                Prev
-              </Button>
-            )}
-            <Box sx={{ flex: 1 }} />
-            <Button
-              onClick={resetCode}
-              size="small"
-              variant="text"
-              startIcon={<RestartAltOutlinedIcon />}
-              sx={{ color: "text.secondary" }}
-            >
-              Reset
-            </Button>
-            <Button
-              onClick={() => execute("submit")}
-              disabled={submitting || running}
-              size="small"
-              variant="contained"
-              startIcon={submitting ? <CircularProgress size={14} sx={{ color: "inherit" }} /> : <UploadOutlinedIcon />}
-            >
-              {submitting ? "Judging…" : "Submit"}
-            </Button>
-            {examId ? (
-              <Box sx={{ width: 0 }} />
-            ) : (
-              <Button
-                {...(adjacent?.next
-                  ? { component: NextLink, href: `/app/problems/${adjacent.next}` }
-                  : { disabled: true })}
-                size="small"
-                variant="text"
-                endIcon={<ChevronRightIcon />}
-                sx={{ color: "text.secondary" }}
-              >
-                Next
-              </Button>
-            )}
-          </Box>
         </Box>
 
       </Box>

@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import NextLink from "next/link";
+import Link from "@mui/material/Link";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
@@ -22,16 +24,33 @@ import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchField } from "@/components/ui/SearchField";
-import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { RatingBadge } from "@/components/ui/RatingBadge";
-import { EmptyState } from "@/components/ui/States";
+import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
+import { EmptyState, ErrorState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
 import { medalColors } from "@/theme/tokens";
+
+type Scope = "class" | "department" | "college";
+
+const SCOPE_LABEL: Record<Scope, string> = {
+  class: "your class",
+  department: "your department",
+  college: "the college",
+};
+
+interface LeaderboardResponse {
+  scope: Scope;
+  total: number;
+  top: LeaderboardEntry[];
+  me: LeaderboardEntry | null;
+}
 
 interface LeaderboardEntry {
   id: string;
   rank: number;
   name: string;
+  /** Set only for students who have published a profile (D10). */
+  publicHandle?: string | null;
   rating: number;
   department?: string | null;
   section?: string | null;
@@ -39,16 +58,6 @@ interface LeaderboardEntry {
   solvedCount: number;
   totalSubmissions: number;
 }
-
-interface RatingEntry {
-  id: string;
-  rank: number;
-  name: string;
-  rating: number;
-  contestsParticipated: number;
-}
-
-type Board = "solved" | "rating";
 
 // Metallic medal accents for the top-3 podium. Gold maps to the theme's warning
 // role; silver/bronze are scheme-aware tokens from theme/tokens.ts (see
@@ -97,16 +106,13 @@ function YouChip() {
 
 export default function LeaderboardPage() {
   const medal = medalColors[useTheme().palette.mode];
-  const [board, setBoard] = React.useState<Board>("solved");
   const [search, setSearch] = React.useState("");
   const [dept, setDept] = React.useState("all");
 
-  const [data, setData] = React.useState<LeaderboardEntry[]>([]);
+  const [scope, setScope] = React.useState<Scope>("class");
+  const [board, setBoard] = React.useState<LeaderboardResponse>({ scope: "class", total: 0, top: [], me: null });
   const [loading, setLoading] = React.useState(true);
-
-  const [ratingData, setRatingData] = React.useState<RatingEntry[]>([]);
-  const [ratingLoading, setRatingLoading] = React.useState(false);
-  const [ratingLoaded, setRatingLoaded] = React.useState(false);
+  const [error, setError] = React.useState<unknown>(undefined);
 
   const [currentUserId, setCurrentUserId] = React.useState<string | undefined>();
 
@@ -115,67 +121,71 @@ export default function LeaderboardPage() {
     setCurrentUserId(u?.id != null ? String(u.id) : undefined);
   }, []);
 
-  React.useEffect(() => {
+  const load = React.useCallback(() => {
+    setLoading(true);
+    setError(undefined);
     api
-      .get<{ success: boolean; data: LeaderboardEntry[] }>("/api/student/leaderboard")
+      .get<{ success: boolean; data: LeaderboardResponse }>(`/api/student/leaderboard?scope=${scope}`)
       .then((r) => {
-        if (r.data?.success) setData(r.data.data ?? []);
+        if (r.data?.success) setBoard(r.data.data);
+        else setError(new Error("Failed to load leaderboard"));
       })
-      .catch(() => {})
+      .catch((err) => setError(err))
       .finally(() => setLoading(false));
-  }, []);
+  }, [scope]);
 
-  React.useEffect(() => {
-    if (board === "rating" && !ratingLoaded) {
-      setRatingLoading(true);
-      api
-        .get<{ success: boolean; data: RatingEntry[] }>("/api/rating/leaderboard")
-        .then((r) => {
-          if (r.data?.success) setRatingData(r.data.data ?? []);
-        })
-        .catch(() => {})
-        .finally(() => {
-          setRatingLoading(false);
-          setRatingLoaded(true);
-        });
-    }
-  }, [board, ratingLoaded]);
+  React.useEffect(() => { load(); }, [load]);
 
+  const data = board.top;
   const departments = Array.from(
     new Set(data.map((u) => u.department).filter(Boolean)),
   ) as string[];
 
-  const me = data.find((u) => String(u.id) === currentUserId);
+  const me = board.me;
   const visible = data.filter(
     (u) =>
       u.name.toLowerCase().includes(search.toLowerCase()) &&
       (dept === "all" || u.department === dept),
   );
 
-  const subtitle =
-    board === "solved"
-      ? `Top ${data.length} students ranked by problems solved.`
-      : `Top ${ratingData.length} ranked by contest rating.`;
-
   return (
     <Box>
       <PageHeader
         title="Leaderboard"
-        subtitle={subtitle}
+        subtitle={
+          board.total > 0
+            ? `${board.total} student${board.total === 1 ? "" : "s"} in ${SCOPE_LABEL[scope]}, ranked by problems solved.`
+            : "Ranked by problems solved."
+        }
         actions={
-          <SegmentedButtons<Board>
-            value={board}
-            onChange={setBoard}
+          <SegmentedButtons<Scope>
+            value={scope}
+            onChange={setScope}
             segments={[
-              { value: "solved", label: "By Problems" },
-              { value: "rating", label: "By Rating" },
+              { value: "class", label: "My class" },
+              { value: "department", label: "Department" },
+              { value: "college", label: "College" },
             ]}
-            ariaLabel="Leaderboard type"
+            ariaLabel="Leaderboard scope"
           />
         }
       />
 
-      {board === "solved" && (
+      {!loading && !error && board.total === 0 && (
+        <EmptyState
+          variant="unassigned"
+          title={scope === "class" ? "No class to compare with yet" : "Nobody to rank yet"}
+          description={
+            scope === "class"
+              ? "Your department and section aren't set, so there's no class board. Try Department or College."
+              : "Rankings appear once students start solving problems."
+          }
+        />
+      )}
+
+      {error != null && <ErrorState error={error} onRetry={load} />}
+
+      {error == null && (
         <>
           {/* Podium */}
           {!loading && data.length >= 3 && (
@@ -385,9 +395,26 @@ export default function LeaderboardPage() {
                               </Avatar>
                               <Box sx={{ minWidth: 0 }}>
                                 <Stack direction="row" spacing={1} alignItems="center">
-                                  <Typography variant="body2" fontWeight={500} noWrap>
-                                    {u.name}
-                                  </Typography>
+                                  {/* A name links to its profile only when that
+                                      student chose to publish one; everyone else
+                                      stays plain text rather than a dead link. */}
+                                  {u.publicHandle ? (
+                                    <Link
+                                      component={NextLink}
+                                      href={`/u/${u.publicHandle}`}
+                                      variant="body2"
+                                      fontWeight={500}
+                                      noWrap
+                                      underline="hover"
+                                      color="inherit"
+                                    >
+                                      {u.name}
+                                    </Link>
+                                  ) : (
+                                    <Typography variant="body2" fontWeight={500} noWrap>
+                                      {u.name}
+                                    </Typography>
+                                  )}
                                   {isMe && <YouChip />}
                                 </Stack>
                                 {tier && (
@@ -426,97 +453,10 @@ export default function LeaderboardPage() {
 
           {data.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", mt: 2 }}>
-              Score = problems solved × 10 pts · Showing top {data.length} students
+              Score = problems solved × 10 pts · Showing {data.length} of {board.total} in {SCOPE_LABEL[scope]}
             </Typography>
           )}
         </>
-      )}
-
-      {board === "rating" && (
-        <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
-          {ratingLoading ? (
-            <Box sx={{ p: 2 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} height={48} sx={{ mb: 1 }} />
-              ))}
-            </Box>
-          ) : ratingData.length === 0 ? (
-            <EmptyState
-              icon={<EmojiEventsOutlinedIcon />}
-              title="No rated users yet"
-              description="Finalize a contest's ratings first to populate this board."
-            />
-          ) : (
-            <TableContainer sx={{ overflowX: "auto" }}>
-              <Table aria-label="Leaderboard by contest rating" sx={{ minWidth: 520 }}>
-                <TableHead>
-                  <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600, borderColor: "outlineVariant" } }}>
-                    <TableCell align="center" sx={{ width: 64 }}>Rank</TableCell>
-                    <TableCell>User</TableCell>
-                    <TableCell align="right" sx={{ width: 120 }}>Rating</TableCell>
-                    <TableCell align="right" sx={{ width: 120, display: { xs: "none", md: "table-cell" } }}>Contests</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {ratingData
-                    .filter((u) => u.name.toLowerCase().includes(search.toLowerCase()))
-                    .map((u) => {
-                      const isMe = String(u.id) === currentUserId;
-                      return (
-                        <TableRow
-                          key={u.id}
-                          hover
-                          sx={{
-                            bgcolor: isMe ? "primaryContainer" : undefined,
-                            borderLeft: isMe ? "2px solid" : "2px solid transparent",
-                            borderLeftColor: isMe ? "primary.main" : "transparent",
-                            "& td": { borderColor: "outlineVariant" },
-                            "&:last-child td": { border: 0 },
-                          }}
-                        >
-                          <TableCell align="center">
-                            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-                              <RankCell rank={u.rank} />
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Stack direction="row" spacing={1.5} alignItems="center">
-                              <Avatar
-                                sx={{
-                                  width: 32,
-                                  height: 32,
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  bgcolor: isMe ? "primary.main" : "surfaceContainerHighest",
-                                  color: isMe ? "primary.contrastText" : "text.primary",
-                                }}
-                              >
-                                {avatarInitials(u.name)}
-                              </Avatar>
-                              <Stack direction="row" spacing={1} alignItems="center">
-                                <Typography variant="body2" fontWeight={500} noWrap>
-                                  {u.name}
-                                </Typography>
-                                {isMe && <YouChip />}
-                              </Stack>
-                            </Stack>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-                              <RatingBadge rating={u.rating} />
-                            </Box>
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontFamily: "ui-monospace, monospace", color: "text.secondary", display: { xs: "none", md: "table-cell" } }}>
-                            {u.contestsParticipated}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Card>
       )}
     </Box>
   );

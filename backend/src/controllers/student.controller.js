@@ -5,6 +5,8 @@ const assignmentRepo = require('../repositories/assignmentRepository');
 const classroomRepo = require('../repositories/classroomRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const submissionRepo = require('../repositories/submissionRepository');
+const mistakeNoteRepo = require('../repositories/mistakeNoteRepository');
+const publicHandleRepo = require('../repositories/publicHandleRepository');
 
 // Assignments a given student is actually assigned.
 //
@@ -97,19 +99,45 @@ exports.getDashboardData = async (req, res) => {
     // 5. Real streak calculation
     const streak = calculateStreak(heatmap);
 
-    // 6. Real rank from leaderboard — student roster comes from Firestore.
-    const studentIds = (await userRepo.listByRole('student')).map(u => u.id);
-    const allSubs = await submissionRepo.listAll();
+    // 6. Rank, both platform-wide and within the student's own class.
+    //
+    // Class rank is the one that means something day to day — "#340 of 2000"
+    // tells a student nothing they can act on, "#7 of 61" does. Both are
+    // returned so the UI can show the useful one and still explain the other.
+    //
+    // listAllForAnalytics() rather than listAll(): ranking only needs userId,
+    // problemId and verdict, while listAll() also downloads every student's
+    // source code on every dashboard load. Same numbers, a fraction of the read.
+    const studentsMap = await userRepo.getMapByRole('student');
+    const allSubs = await submissionRepo.listAllForAnalytics();
     const solvedCountByUser = {};
     for (const s of allSubs) {
       if (s.verdict !== 'Accepted') continue;
       if (!solvedCountByUser[s.userId]) solvedCountByUser[s.userId] = new Set();
       solvedCountByUser[s.userId].add(s.problemId);
     }
-    const ranked = studentIds
-      .map(id => ({ id, solved: solvedCountByUser[id]?.size || 0 }))
-      .sort((a, b) => b.solved - a.solved);
-    const rank = ranked.findIndex(r => r.id === userId) + 1;
+
+    const rankWithin = (ids) => {
+      const ordered = ids
+        .map((id) => ({ id, solved: solvedCountByUser[id]?.size || 0 }))
+        .sort((a, b) => b.solved - a.solved);
+      const position = ordered.findIndex((r) => r.id === userId) + 1;
+      return { rank: position, outOf: ordered.length };
+    };
+
+    const allIds = [...studentsMap.keys()];
+    const myProfileForRank = studentsMap.get(userId) || {};
+    const classIds = myProfileForRank.department && myProfileForRank.section
+      ? allIds.filter((id) => {
+        const p = studentsMap.get(id) || {};
+        return p.department === myProfileForRank.department && p.section === myProfileForRank.section;
+      })
+      : [];
+
+    const overall = rankWithin(allIds);
+    const rank = overall.rank;
+    const totalStudents = overall.outOf;
+    const classRanking = classIds.length > 0 ? rankWithin(classIds) : { rank: 0, outOf: 0 };
 
     // 6b. Contest rating (Elo)
     const myProfile = await userRepo.getById(userId, req.user.role);
@@ -137,22 +165,44 @@ exports.getDashboardData = async (req, res) => {
       }));
     }
 
-    // Recent submissions for the dashboard widget
-    const recentRows = [...mySubs].sort((a, b) => subMillis(b) - subMillis(a)).slice(0, 5);
-    const recentProblemsMap = await problemRepo.getMapByIds(recentRows.map(r => r.problemId));
-    const recentSubmissions = recentRows.map(r => ({
-      verdict: r.verdict, language: r.language, created_at: subDate(r),
-      problem_id: r.problemId, problem_title: recentProblemsMap.get(r.problemId)?.title || 'Unknown',
+    // Recently solved — one row per problem, the accepted submission only.
+    //
+    // This replaces the old "recent submissions" list, which showed wrong
+    // answers and errors back to the student. Failed attempts are not a useful
+    // history to scroll; they belong in the retry list (Mistakes notebook), and
+    // faculty still see every attempt in their own views.
+    const latestAcceptedByProblem = new Map();
+    for (const s of mySubs) {
+      if (s.verdict !== 'Accepted') continue;
+      const existing = latestAcceptedByProblem.get(s.problemId);
+      if (!existing || subMillis(s) > subMillis(existing)) latestAcceptedByProblem.set(s.problemId, s);
+    }
+    const solvedRows = [...latestAcceptedByProblem.values()]
+      .sort((a, b) => subMillis(b) - subMillis(a))
+      .slice(0, 5);
+    const solvedProblemsMap = await problemRepo.getMapByIds(solvedRows.map(r => r.problemId));
+    const recentSolved = solvedRows.map(r => ({
+      language: r.language,
+      runtime: r.runtime ?? null,
+      solved_at: toISO(r.submittedAt),
+      problem_id: r.problemId,
+      problem_title: solvedProblemsMap.get(r.problemId)?.title || 'Unknown',
+      difficulty: solvedProblemsMap.get(r.problemId)?.difficulty || null,
     }));
 
     res.json({
       success: true,
       data: {
-        stats: { totalSubs, acRate, problemsSolved, streak, rank, rating },
+        stats: {
+          totalSubs, acRate, problemsSolved, streak, rank, rating,
+          totalStudents,
+          classRank: classRanking.rank,
+          classSize: classRanking.outOf,
+        },
         languages,
         heatmap,
         topics: masteredTopics,
-        recentSubmissions
+        recentSolved,
       }
     });
 
@@ -182,7 +232,13 @@ exports.getAssignments = async (req, res) => {
           return { id: pid, title: p?.title || 'Unknown', difficulty: p?.difficulty || null, is_solved: solvedSet.has(pid) };
         });
         return {
-          id: a.id, title: a.title, deadline: toISO(a.deadline), isExam: a.isExam === true,
+          id: a.id,
+          title: a.title,
+          deadline: toISO(a.deadline),
+          // Students see "Proctored", not "Exam": an assignment is coursework
+          // whether or not it is watched.
+          proctored: (a.proctored ?? a.isExam) === true,
+          isExam: (a.proctored ?? a.isExam) === true,
           problems, total: problems.length, solved: problems.filter(p => p.is_solved).length,
         };
       });
@@ -292,30 +348,58 @@ exports.getRecommendations = async (req, res) => {
   }
 };
 
+// GET /api/student/leaderboard?scope=class|department|college
+//
+// Scoped deliberately: a single platform-wide board told a student in a class of
+// 60 that they were 400th, which says nothing they can act on. "Class" means the
+// caller's own department and section.
+//
+// The response carries `me` separately from `top`, so the caller's own row can
+// be pinned even when they fall outside the visible page.
 exports.getLeaderboard = async (req, res) => {
   try {
+    const scope = ['class', 'department', 'college'].includes(req.query.scope) ? req.query.scope : 'college';
     const studentsMap = await userRepo.getMapByRole('student');
-    const studentIds = [...studentsMap.keys()];
-    if (studentIds.length === 0) {
-      return res.json({ success: true, data: [] });
+    const me = studentsMap.get(req.user.id) || {};
+
+    const inScope = (profile) => {
+      if (scope === 'college') return true;
+      if (!me.department || profile.department !== me.department) return false;
+      if (scope === 'department') return true;
+      // class: same department AND same section.
+      return !!me.section && profile.section === me.section;
+    };
+
+    const scopedIds = [...studentsMap.keys()].filter((id) => inScope(studentsMap.get(id) || {}));
+    if (scopedIds.length === 0) {
+      return res.json({ success: true, data: { scope, total: 0, top: [], me: null } });
     }
 
-    const allSubs = await submissionRepo.listAll();
-    const statsByUser = new Map(studentIds.map(id => [id, { solved: new Set(), total: 0 }]));
+    // Field-masked: ranking needs userId/problemId/verdict, never source code.
+    const allSubs = await submissionRepo.listAllForAnalytics();
+    const idSet = new Set(scopedIds);
+    const statsByUser = new Map(scopedIds.map((id) => [id, { solved: new Set(), total: 0 }]));
     for (const s of allSubs) {
+      if (!idSet.has(s.userId)) continue;
       const stat = statsByUser.get(s.userId);
-      if (!stat) continue;
       stat.total += 1;
       if (s.verdict === 'Accepted') stat.solved.add(s.problemId);
     }
 
-    const leaderboard = studentIds
-      .map(id => {
+    // Public handles for the students on this board who have published one, so a
+    // name can link to its profile (D10). One query rather than one per row, and
+    // a student who has not published simply has no link.
+    const handleByUser = await publicHandleRepo.mapByUser();
+
+    const ranked = scopedIds
+      .map((id) => {
         const profile = studentsMap.get(id) || {};
         const stat = statsByUser.get(id);
+        const handle = profile.publicProfile?.published ? handleByUser.get(id) ?? null : null;
         return {
           id,
           name: profile.name || 'Unknown',
+          publicHandle: handle,
           rating: profile.rating != null ? parseInt(profile.rating, 10) : 1200,
           department: profile.department || null,
           section: profile.section || null,
@@ -324,10 +408,14 @@ exports.getLeaderboard = async (req, res) => {
         };
       })
       .sort((a, b) => b.solvedCount - a.solvedCount || a.name.localeCompare(b.name))
-      .slice(0, 100)
       .map((r, index) => ({ ...r, rank: index + 1, score: r.solvedCount * 10 }));
 
-    res.json({ success: true, data: leaderboard });
+    const myRow = ranked.find((r) => r.id === req.user.id) || null;
+
+    res.json({
+      success: true,
+      data: { scope, total: ranked.length, top: ranked.slice(0, 100), me: myRow },
+    });
   } catch (error) {
     console.error('Leaderboard Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch leaderboard' });
@@ -348,10 +436,150 @@ exports.getDailyChallenge = async (req, res) => {
     }
 
     const p = problems[dateHash % problems.length];
-    res.json({ success: true, data: { id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [] } });
+    // Whether this student has already solved it, so the card can say so rather
+    // than inviting them to redo it.
+    const mine = await submissionRepo.listByUserAndProblem(req.user.id, p.id);
+    const solved = mine.some((s) => s.verdict === 'Accepted');
+
+    res.json({
+      success: true,
+      data: { id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [], solved },
+    });
   } catch (error) {
     console.error('Daily Challenge Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch daily challenge' });
+  }
+};
+
+// GET /api/student/solved — every problem this student has solved, newest first.
+//
+// One row per problem, carrying the accepted submission only. This is what
+// replaced the old submission history: a student's own record is the work they
+// finished, not a log of everything that failed on the way.
+exports.getSolvedHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 200);
+
+    const mySubs = await submissionRepo.listByUser(userId);
+
+    const latestByProblem = new Map();
+    for (const s of mySubs) {
+      if (s.verdict !== 'Accepted') continue;
+      const seen = latestByProblem.get(s.problemId);
+      if (!seen || subMillis(s) > subMillis(seen)) latestByProblem.set(s.problemId, s);
+    }
+
+    const rows = [...latestByProblem.values()].sort((a, b) => subMillis(b) - subMillis(a)).slice(0, limit);
+    const problemsMap = await problemRepo.getMapByIds(rows.map((r) => r.problemId));
+
+    const data = rows.map((r) => {
+      const p = problemsMap.get(r.problemId);
+      return {
+        submission_id: r.id,
+        problem_id: r.problemId,
+        problem_title: p?.title || 'Unknown',
+        difficulty: p?.difficulty || null,
+        tags: p?.tags || [],
+        language: r.language,
+        runtime: r.runtime ?? null,
+        memory: r.memory ?? null,
+        solved_at: toISO(r.submittedAt),
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Solved history error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// Judge verdicts, said plainly. A student shouldn't have to decode "TLE" or be
+// shown a raw status string to know what to fix.
+const VERDICT_SUMMARY = {
+  'Wrong Answer': 'Wrong answer on a test case',
+  'Time Limit Exceeded': 'Too slow — hit the time limit',
+  'Memory Limit Exceeded': 'Used too much memory',
+  'Compilation Error': "Didn't compile",
+  'Runtime Error': 'Crashed while running',
+};
+
+const plainVerdict = (verdict) => {
+  if (!verdict) return 'Not solved yet';
+  if (VERDICT_SUMMARY[verdict]) return VERDICT_SUMMARY[verdict];
+  if (verdict.startsWith('Runtime Error')) return 'Crashed while running';
+  return verdict;
+};
+
+// GET /api/student/mistakes — problems attempted but never solved.
+//
+// The useful half of the failed attempts we stopped listing on the dashboard:
+// a revision list the student can work through, rather than a feed of failures.
+// A problem leaves this list automatically once it is accepted.
+exports.getMistakes = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mySubs = await submissionRepo.listByUser(userId);
+
+    const solvedIds = new Set(mySubs.filter((s) => s.verdict === 'Accepted').map((s) => s.problemId));
+
+    const byProblem = new Map();
+    for (const s of mySubs) {
+      if (solvedIds.has(s.problemId)) continue;
+      const entry = byProblem.get(s.problemId) || { attempts: 0, last: null };
+      entry.attempts += 1;
+      if (!entry.last || subMillis(s) > subMillis(entry.last)) entry.last = s;
+      byProblem.set(s.problemId, entry);
+    }
+
+    const problemIds = [...byProblem.keys()];
+    const [problemsMap, notes] = await Promise.all([
+      problemRepo.getMapByIds(problemIds),
+      mistakeNoteRepo.listByUser(userId),
+    ]);
+    const noteByProblem = new Map(notes.map((n) => [String(n.problemId), n.note]));
+
+    const data = problemIds
+      .map((pid) => {
+        const { attempts, last } = byProblem.get(pid);
+        const p = problemsMap.get(pid);
+        return {
+          problem_id: pid,
+          problem_title: p?.title || 'Unknown',
+          difficulty: p?.difficulty || null,
+          tags: p?.tags || [],
+          attempts,
+          last_verdict: last?.verdict || null,
+          last_verdict_summary: plainVerdict(last?.verdict),
+          last_attempt_at: toISO(last?.submittedAt),
+          note: noteByProblem.get(String(pid)) || null,
+        };
+      })
+      // A problem whose record has been deleted would otherwise show as "Unknown".
+      .filter((row) => problemsMap.has(row.problem_id))
+      .sort((a, b) => new Date(b.last_attempt_at).getTime() - new Date(a.last_attempt_at).getTime());
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Mistakes error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// PUT /api/student/mistakes/:problemId/note — the student's own reminder.
+exports.saveMistakeNote = async (req, res) => {
+  try {
+    const { problemId } = req.params;
+    const raw = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    if (raw.length > 500) {
+      return res.status(400).json({ success: false, error: 'A note can be at most 500 characters.' });
+    }
+    const saved = await mistakeNoteRepo.set(req.user.id, problemId, raw);
+    res.json({ success: true, data: { problem_id: problemId, note: saved?.note ?? null } });
+  } catch (error) {
+    console.error('Save mistake note error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 };
 
@@ -408,6 +636,7 @@ exports.getPlacementReadiness = async (req, res) => {
   const userId = req.user.id;
   try {
     const { TRACKS } = require('../config/placementTracks');
+    const { tagMatches } = require('../services/roadmapService');
 
     // Distinct accepted problems per topic for this student.
     const mySubs = await submissionRepo.listByUser(userId);
@@ -421,13 +650,21 @@ exports.getPlacementReadiness = async (req, res) => {
       }
     }
     const tagRows = Object.entries(solvedByTopic).map(([topic, solved]) => ({ topic, solved }));
+    const solvedProblems = [...acceptedProblemsMap.values()];
 
     // Build each track's readiness from real solved counts.
     const deficitByTopic = {};
     const tracks = TRACKS.map(t => {
       let targetSum = 0, gotSum = 0;
       const topics = t.topics.map(tp => {
-        const solved = solvedByTopic[tp.topic] || 0;
+        // Was `solvedByTopic[tp.topic]`, a literal lookup of "array" against a
+        // tag spelled "arrays" — it matched almost nothing, so this page told
+        // students they had solved none of the topics they had just solved.
+        // Counts distinct problems, so a problem tagged both "graphs" and "bfs"
+        // is one solve for the Graphs topic, not two.
+        const terms = tp.aliases?.length ? tp.aliases : [tp.topic];
+        const solved = solvedProblems.filter(
+          p => (p.tags || []).some(tag => terms.some(term => tagMatches(tag, term)))).length;
         const counted = Math.min(solved, tp.target);
         targetSum += tp.target;
         gotSum += counted;

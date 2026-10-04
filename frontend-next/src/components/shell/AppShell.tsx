@@ -27,7 +27,7 @@ import { MenuIcon, CodeIcon, LogoutIcon, PersonOutlineIcon } from "@/components/
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { clearSession, getUser, ROLE_LABEL } from "@/lib/auth";
 import { NavigationProgress } from "@/components/ui/motion";
-import { hoverTransition } from "@/theme/tokens";
+import { hoverTransition, layout, radius } from "@/theme/tokens";
 import type { User } from "@/lib/types";
 
 /**
@@ -97,10 +97,13 @@ function initials(name?: string) {
 export function AppShell({
   navItems,
   profileHref = "/app/profile",
+  homeHref,
   children,
 }: {
   navItems: NavItem[];
   profileHref?: string;
+  /** Where the logo goes. Defaults to the first nav item, which is each role's home. */
+  homeHref?: string;
   children: React.ReactNode;
 }) {
   const theme = useTheme();
@@ -127,13 +130,28 @@ export function AppShell({
   const drawerContent = (
     <Box sx={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <Toolbar sx={{ px: 3 }}>
-        <Stack direction="row" spacing={1.5} alignItems="center">
+        {/* The logo is the expected way back to the start — it was inert before. */}
+        <Stack
+          component={NextLink}
+          href={homeHref ?? navItems[0]?.href ?? "/"}
+          direction="row"
+          spacing={1.5}
+          alignItems="center"
+          aria-label="CodeMentor home"
+          sx={{
+            textDecoration: "none",
+            color: "inherit",
+            borderRadius: radius.sm,
+            transition: hoverTransition("opacity"),
+            "&:hover": { opacity: 0.8 },
+          }}
+        >
           <Box
             aria-hidden
             sx={{
               width: 36,
               height: 36,
-              borderRadius: 2,
+              borderRadius: radius.sm,
               display: "grid",
               placeItems: "center",
               bgcolor: "primary.main",
@@ -316,7 +334,7 @@ export function AppShell({
         sx={{ flexGrow: 1, width: { lg: `calc(100% - ${DRAWER_WIDTH}px)` }, minWidth: 0 }}
       >
         <Toolbar aria-hidden />
-        <Box sx={{ p: { xs: 2, sm: 3, md: 4 }, maxWidth: 1400, mx: "auto" }}>
+        <Box sx={{ p: layout.pageGutter, maxWidth: layout.contentMaxWidth, mx: "auto" }}>
           {children}
         </Box>
       </Box>

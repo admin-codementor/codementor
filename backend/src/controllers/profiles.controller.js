@@ -1,6 +1,10 @@
-const { ALL_PLATFORMS, LIVE_PLATFORMS, fetchPlatform } = require('../utils/codingPlatforms');
+const crypto = require('crypto');
+const { ALL_PLATFORMS, LIVE_PLATFORMS, fetchPlatform, fetchProfileText, VERIFY_FIELD } = require('../utils/codingPlatforms');
 const userRepo = require('../repositories/userRepository');
 const codingProfileRepo = require('../repositories/codingProfileRepository');
+
+/** Platforms whose profile text we can read back, so ownership can be proved. */
+const VERIFIABLE_PLATFORMS = ['codeforces', 'leetcode'];
 
 // ── List the current user's saved profiles ──────────────────────────────────────
 exports.getMine = async (req, res) => {
@@ -10,8 +14,14 @@ exports.getMine = async (req, res) => {
       platform: p.platform, handle: p.handle, solved: p.solved || 0,
       rating: p.rating ?? null, max_rating: p.maxRating ?? null, extra: p.extra || {},
       sync_status: p.syncStatus || 'pending', last_synced: p.lastSynced || null,
+      verified: !!p.verified, verified_at: p.verifiedAt || null,
+      verifiable: VERIFIABLE_PLATFORMS.includes(p.platform),
     }));
-    res.json({ success: true, data, livePlatforms: LIVE_PLATFORMS, allPlatforms: ALL_PLATFORMS });
+    res.json({
+      success: true, data,
+      livePlatforms: LIVE_PLATFORMS, allPlatforms: ALL_PLATFORMS,
+      verifiablePlatforms: VERIFIABLE_PLATFORMS,
+    });
   } catch (e) {
     console.error('Profiles getMine error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -33,7 +43,12 @@ exports.setHandle = async (req, res) => {
       return res.json({ success: true, data: { platform, removed: true } });
     }
 
-    await codingProfileRepo.upsert(req.user.id, platform, { handle, syncStatus: 'pending' });
+    // A verification proves one account, not the student. Pointing the entry at
+    // a different handle has to clear it, or somebody could verify an account
+    // they own and then swap in one they do not.
+    await codingProfileRepo.upsert(req.user.id, platform, {
+      handle, syncStatus: 'pending', verified: false, verifiedAt: null, verifyCode: null,
+    });
     res.json({ success: true, data: { platform, handle } });
   } catch (e) {
     console.error('Profiles setHandle error:', e.message);
@@ -110,6 +125,84 @@ exports.getLeaderboard = async (req, res) => {
     res.json({ success: true, data });
   } catch (e) {
     console.error('Profiles leaderboard error:', e.message);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+
+// ── Proving an external account belongs to the student ──────────────────────────
+// The student puts a one-time code somewhere on the platform profile that only
+// its owner can edit, and we read it back. Nothing else can be verified: we have
+// no relationship with these sites and no way to ask them who a user is.
+
+const CODE_TTL_MS = 60 * 60 * 1000;
+const newCode = () => `CM-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
+
+// @route POST /api/profiles/me/:platform/verify-code
+exports.startVerification = async (req, res) => {
+  try {
+    const { platform } = req.params;
+    if (!VERIFIABLE_PLATFORMS.includes(platform)) {
+      return res.status(400).json({ success: false, error: 'This platform cannot be verified automatically' });
+    }
+    const profiles = await codingProfileRepo.listByUser(req.user.id);
+    const existing = profiles.find((p) => p.platform === platform);
+    if (!existing?.handle) {
+      return res.status(400).json({ success: false, error: 'Add your handle for this platform first' });
+    }
+
+    const code = newCode();
+    await codingProfileRepo.upsert(req.user.id, platform, {
+      verifyCode: code, verifyCodeExpiresAt: new Date(Date.now() + CODE_TTL_MS),
+    });
+
+    res.json({
+      success: true,
+      data: { platform, handle: existing.handle, code, where: VERIFY_FIELD[platform], expiresInMinutes: CODE_TTL_MS / 60000 },
+    });
+  } catch (e) {
+    console.error('Profiles startVerification error:', e.message);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// @route POST /api/profiles/me/:platform/verify
+exports.confirmVerification = async (req, res) => {
+  try {
+    const { platform } = req.params;
+    if (!VERIFIABLE_PLATFORMS.includes(platform)) {
+      return res.status(400).json({ success: false, error: 'This platform cannot be verified automatically' });
+    }
+    const profiles = await codingProfileRepo.listByUser(req.user.id);
+    const existing = profiles.find((p) => p.platform === platform);
+    if (!existing?.verifyCode) {
+      return res.status(400).json({ success: false, error: 'Ask for a code first' });
+    }
+    const expires = existing.verifyCodeExpiresAt?.toMillis?.() ?? new Date(existing.verifyCodeExpiresAt).getTime();
+    if (!expires || expires < Date.now()) {
+      return res.status(400).json({ success: false, error: 'That code has expired — ask for a new one' });
+    }
+
+    let text;
+    try {
+      text = await fetchProfileText(platform, existing.handle);
+    } catch (err) {
+      return res.status(502).json({ success: false, error: `Could not read your ${platform} profile: ${err.message}` });
+    }
+
+    if (!String(text || '').toUpperCase().includes(existing.verifyCode)) {
+      return res.status(400).json({
+        success: false,
+        error: 'The code is not on your profile yet. Save it there, give the site a moment, then try again.',
+      });
+    }
+
+    await codingProfileRepo.upsert(req.user.id, platform, {
+      verified: true, verifiedAt: new Date(), verifyCode: null, verifyCodeExpiresAt: null,
+    });
+    res.json({ success: true, data: { platform, handle: existing.handle, verified: true } });
+  } catch (e) {
+    console.error('Profiles confirmVerification error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };

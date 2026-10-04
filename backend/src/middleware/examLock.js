@@ -32,7 +32,10 @@ const toMillis = (value) => {
 // An exam assignment still inside its window. A past deadline means the exam is
 // over and there is nothing left to protect.
 const isLiveExamAssignment = (assignment) => {
-  if (!assignment || assignment.isExam !== true) return false;
+  // `proctored` is the current field; `isExam` is its original name, still
+  // present on assignments created before the rename.
+  const watched = assignment && (assignment.proctored ?? assignment.isExam) === true;
+  if (!watched) return false;
   const deadline = toMillis(assignment.deadline);
   return deadline == null || deadline > Date.now();
 };

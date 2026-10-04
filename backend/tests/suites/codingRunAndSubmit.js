@@ -4,7 +4,7 @@
 // covers the split at the API level: a sample-only Run must never touch the
 // hidden test cases, never create a submission record, and must give a clear
 // error when a problem has hidden cases but no public ones to Run against.
-const { tokenFor, get, post, del, Suite, capabilities } = require('../harness');
+const { tokenFor, get, post, del, Suite, capabilities, purge, userId } = require('../harness');
 
 async function submitAndWait(token, body, timeoutMs = 25000) {
   const start = await post('/api/submit', token, body);
@@ -33,6 +33,13 @@ module.exports = async function codingRunAndSubmitSuite() {
   s.onCleanup(async () => {
     for (const id of problems) await del(`/api/faculty/problems/${id}`, F);
   }, 'probe problems');
+  // Submit creates a real submission row. Deleting the probe problem does not
+  // take it with it, so without this the suite left graded submissions behind on
+  // every run — they reference a problem that no longer exists and still count
+  // towards the platform-wide submission totals faculty are shown.
+  s.onCleanup(() => purge('submissions', 'userId', [
+    userId('codingrun-student'), userId('codingrun-student-nopublic'), userId('codingrun-student-submit'),
+  ]), 'probe submissions');
 
   const caps = await capabilities();
   if (!caps.judge0Executes) {

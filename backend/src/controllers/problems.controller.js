@@ -1,4 +1,6 @@
 const problemRepo = require('../repositories/problemRepository');
+const courseRepo = require('../repositories/courseRepository');
+const assignmentRepo = require('../repositories/assignmentRepository');
 const { getProblemStats } = require('../services/problemStatsService');
 
 const ALLOWED_DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
@@ -57,18 +59,50 @@ exports.getProblems = async (req, res) => {
 };
 
 // @desc    Get prev/next problem IDs for navigation
-// @route   GET /api/problems/:id/adjacent
+// @route   GET /api/problems/:id/adjacent?course=&module=&assignment=
+//
+// Navigation follows the list the student is actually working through. Without
+// a context it walked every published problem in creation order, so "next" from
+// problem 3 of a Java module could land on an unrelated graph problem — which is
+// what made the arrows feel random.
 exports.getAdjacentProblems = async (req, res) => {
   try {
     const { id } = req.params;
+    const { course, module: moduleId, assignment } = req.query;
+
+    let orderedIds = null;
+    let contextLabel = null;
+
+    if (course && moduleId) {
+      const modules = await courseRepo.getModules(course);
+      const mod = modules.find((m) => m.id === moduleId);
+      if (mod) {
+        orderedIds = mod.problemIds || [];
+        contextLabel = mod.title || null;
+      }
+    } else if (assignment) {
+      const a = await assignmentRepo.getById(assignment);
+      if (a) {
+        orderedIds = a.problemIds || [];
+        contextLabel = a.title || null;
+      }
+    }
 
     // Drafts are excluded so prev/next never lands on an unpublished problem and
     // the "position of total" counter matches what the student can actually see.
-    const problems = (await problemRepo.getAll())
-      .filter(isPublished)
-      .sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
+    const published = (await problemRepo.getAll()).filter(isPublished);
 
-    const idx = problems.findIndex(r => r.id === id);
+    let sequence;
+    if (orderedIds && orderedIds.includes(id)) {
+      const byId = new Map(published.map((p) => [p.id, p]));
+      sequence = orderedIds.filter((pid) => byId.has(pid)).map((pid) => byId.get(pid));
+    } else {
+      // No usable context — fall back to the whole catalogue, as before.
+      sequence = published.sort((a, b) => (a.createdAt?.toMillis?.() ?? 0) - (b.createdAt?.toMillis?.() ?? 0));
+      contextLabel = null;
+    }
+
+    const idx = sequence.findIndex((r) => r.id === id);
     if (idx === -1) {
       return res.status(404).json({ success: false, error: 'Problem not found' });
     }
@@ -76,10 +110,11 @@ exports.getAdjacentProblems = async (req, res) => {
     res.json({
       success: true,
       data: {
-        prev: idx > 0 ? problems[idx - 1].id : null,
-        next: idx < problems.length - 1 ? problems[idx + 1].id : null,
+        prev: idx > 0 ? sequence[idx - 1].id : null,
+        next: idx < sequence.length - 1 ? sequence[idx + 1].id : null,
         position: idx + 1,
-        total: problems.length
+        total: sequence.length,
+        context: contextLabel,
       }
     });
   } catch (error) {
