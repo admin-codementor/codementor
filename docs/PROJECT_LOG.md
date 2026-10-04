@@ -5,6 +5,37 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 6
+**Area:** Verifying S0–S3 in a real browser, and fixing what it found
+**How:** signed in with a throwaway dev token (the same mechanism `tests/harness.js` uses) against the running
+dev server, seeded three submissions, checked every page, then deleted the seeded data and the session. No real
+account was touched.
+**Five real bugs found — none of which the tests or the build caught:**
+1. **UTF-8 corruption I had introduced.** Two PowerShell file-splices rewrote `dashboard/page.tsx` and
+   `leaderboard/page.tsx` as ANSI, mangling every em dash, middle dot, `×` and `…` — including text students see
+   ("Search students…", the `·` separators, the rank placeholder) — and adding a byte-order mark. Repaired both
+   files and confirmed no mojibake remains anywhere under `src/`.
+2. **Overdue work counted as "due this week."** The Quick Access tile used `deadline - now <= 7 days`, which is
+   also true for *past* deadlines, so six overdue assignments read "6 due this week · next overdue". Overdue and
+   upcoming are now counted separately, and the wording says "6 assignments overdue".
+3. **A live exam was labelled "Overdue."** Due Soon used the exam's *start* time with assignment deadline wording,
+   so an exam you could still sit said you'd missed it. It now reads "Live now".
+4. **A live exam was buried** beneath five long-overdue assignments, because the list sorted purely by date. Work
+   you can still make now sorts ahead of work already missed.
+5. **The new-user dashboard still said "Upcoming Assignments"** and used the old assignments-only list, so new
+   students saw different wording from everyone else. It now uses the same Due Soon data.
+**Verified working end to end:** Quick Access tiles with live data; nav (Contests and My Classes gone, Mistakes
+added, Practice reachable); logo → dashboard; Recently Solved showing only the accepted problem; the retry teaser;
+Due Soon; Profile "Solved" tab excluding failures; the Mistakes notebook with plain-language verdicts
+("Too slow — hit the time limit"), topic chips, Try again, and a note that saves and survives a reload. Dark mode
+and 375px both clean, no console errors.
+**Lesson:** verification found five user-visible bugs after four phases where `tsc`, lint, a passing build and 254
+API checks had all gone green. Browser checks belong in every phase, not at the end.
+**Next:** S4 — course → module progress with due dates, and the scoped leaderboard.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 5
 **Area:** Student persona — S3 solved-only everywhere + Mistakes notebook
 **Did:**

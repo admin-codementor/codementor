@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import NextLink from "next/link";
@@ -37,13 +37,15 @@ interface DueItem {
   kind: "assignment" | "exam";
   title: string;
   due: string;
+  /** An exam whose window is already open. Such an item is live, never overdue. */
+  liveNow?: boolean;
   detail: string;
   /** Percent complete, or null when the item has no partial progress (an exam). */
   progress: number | null;
   href: string;
 }
 
-// â”€â”€ Utilities â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Utilities ─────────────────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -83,7 +85,7 @@ function deadlineLabel(deadlineStr: string): {
   };
 }
 
-// â”€â”€ Section card wrapper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Section card wrapper ──────────────────────────────────────────────────────
 
 function SectionCard({
   title,
@@ -125,7 +127,7 @@ function SectionCard({
   );
 }
 
-// â”€â”€ Loading skeleton â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Loading skeleton ──────────────────────────────────────────────────────────
 
 function DashboardSkeleton() {
   return (
@@ -212,7 +214,7 @@ function DashboardSkeleton() {
   );
 }
 
-// â”€â”€ Main page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
   const [name, setName] = React.useState("");
@@ -242,15 +244,6 @@ export default function DashboardPage() {
   const { stats, topics, recentSolved, heatmap } = dashboard;
   const isNewUser = stats.totalSubs === 0;
 
-  // Sort assignments by deadline, only show ones with a deadline
-  const upcomingAssignments = assignments
-    .filter((a) => a.deadline)
-    .sort(
-      (a, b) =>
-        new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
-    )
-    .slice(0, 5);
-
   const mistakeCount = mistakes?.length ?? 0;
 
   const coursesCompleted = courses.filter(
@@ -267,6 +260,7 @@ export default function DashboardPage() {
         kind: "assignment" as const,
         title: a.title,
         due: a.deadline,
+        liveNow: false,
         detail: `${a.solved}/${a.total} solved`,
         progress: a.total > 0 ? Math.round((a.solved / a.total) * 100) : 0,
         href: "/app/assignments",
@@ -278,12 +272,26 @@ export default function DashboardPage() {
         kind: "exam" as const,
         title: e.title,
         due: e.window_start,
-        detail: `${e.duration_minutes} min Â· ${e.section_count} section${e.section_count === 1 ? "" : "s"}`,
+        // An exam whose window has opened is live, not late. Only its start time
+        // is in the past, and the generic deadline wording called that "Overdue".
+        liveNow: new Date(e.window_start).getTime() <= renderedAt,
+        detail: `${e.duration_minutes} min · ${e.section_count} section${e.section_count === 1 ? "" : "s"}`,
         progress: null,
         href: "/app/exams",
       })),
   ]
-    .sort((a, b) => new Date(a.due).getTime() - new Date(b.due).getTime())
+    // Work you can still make comes before work you've already missed. Sorting
+    // purely by date buried a live exam behind five long-overdue assignments.
+    .sort((a, b) => {
+      const aDue = new Date(a.due).getTime();
+      const bDue = new Date(b.due).getTime();
+      // A live exam is not missed, even though its start time has passed.
+      const aMissed = aDue < renderedAt && !a.liveNow;
+      const bMissed = bDue < renderedAt && !b.liveNow;
+      if (aMissed !== bMissed) return aMissed ? 1 : -1;
+      // Still open: soonest first. Already missed: most recent first.
+      return aMissed ? bDue - aDue : aDue - bDue;
+    })
     .slice(0, 5);
 
   const topTopics = topics.slice(0, 6);
@@ -310,9 +318,9 @@ export default function DashboardPage() {
 
   return (
     <Box>
-      {/* â”€â”€ Hero greeting â€” dashboard-only, not the shared PageHeader, so no
+      {/* ── Hero greeting — dashboard-only, not the shared PageHeader, so no
           other page inherits this treatment. Same tonal-gradient + colored-
-          shadow technique as StatCard's icon tile, scaled up into a band. â”€â”€ */}
+          shadow technique as StatCard's icon tile, scaled up into a band. ── */}
       <Box
         sx={{
           mb: 3,
@@ -341,7 +349,7 @@ export default function DashboardPage() {
         className={className}
       />
 
-      {/* â”€â”€ Stats row â”€â”€ */}
+      {/* ── Stats row ── */}
       <Reveal>
       <Box
         sx={{
@@ -370,7 +378,7 @@ export default function DashboardPage() {
         <StatCard
           icon={<LeaderboardOutlinedIcon />}
           label="Overall Rank"
-          value={stats.rank > 0 ? `#${stats.rank}` : "â€”"}
+          value={stats.rank > 0 ? `#${stats.rank}` : "—"}
           helper="Across all students"
           href="/app/leaderboard"
           accent="secondary"
@@ -391,7 +399,7 @@ export default function DashboardPage() {
 
       <ExamPerformance />
 
-      {/* â”€â”€ New-user empty state â”€â”€ */}
+      {/* ── New-user empty state ── */}
       {isNewUser && (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant", mb: 3 }}>
           <EmptyState
@@ -412,7 +420,7 @@ export default function DashboardPage() {
         </Card>
       )}
 
-      {/* â”€â”€ Content grid â”€â”€ */}
+      {/* ── Content grid ── */}
       {!isNewUser && (
         <Box
           sx={{
@@ -425,9 +433,9 @@ export default function DashboardPage() {
             alignItems: "start",
           }}
         >
-          {/* â”€â”€ Left column â”€â”€ */}
+          {/* ── Left column ── */}
           <Stack spacing={3}>
-            {/* Recently solved â€” accepted work only; failed attempts are not a
+            {/* Recently solved — accepted work only; failed attempts are not a
                 history worth scrolling. */}
             <SectionCard
               title="Recently Solved"
@@ -482,7 +490,7 @@ export default function DashboardPage() {
                           <CheckCircleOutlinedIcon fontSize="small" color="success" sx={{ mr: 1.25 }} />
                           <ListItemText
                             primary={item.problem_title}
-                            secondary={`${languageName(item.language)} Â· ${timeAgo(item.solved_at)}`}
+                            secondary={`${languageName(item.language)} · ${timeAgo(item.solved_at)}`}
                             sx={{ minWidth: 0, mr: 1 }}
                             slotProps={{
                               primary: { variant: "body2", fontWeight: 500, noWrap: true },
@@ -502,7 +510,7 @@ export default function DashboardPage() {
               )}
             </SectionCard>
 
-            {/* Continue Learning â€” modules/courses already in progress surface first. */}
+            {/* Continue Learning — modules/courses already in progress surface first. */}
             {courseRows.length > 0 && (
               <SectionCard
                 title="Continue Learning"
@@ -607,7 +615,7 @@ export default function DashboardPage() {
             )}
           </Stack>
 
-          {/* â”€â”€ Right column â”€â”€ */}
+          {/* ── Right column ── */}
           <Stack spacing={3}>
             {/* Activity heatmap */}
             <SectionCard title="Last 28 Days" aria-label="Activity heatmap">
@@ -636,7 +644,7 @@ export default function DashboardPage() {
               </Stack>
             </SectionCard>
 
-            {/* Due Soon â€” assignments and exams in one list, so "what's next"
+            {/* Due Soon — assignments and exams in one list, so "what's next"
                 doesn't mean checking two separate screens. */}
             <SectionCard
               title="Due Soon"
@@ -662,7 +670,9 @@ export default function DashboardPage() {
               ) : (
                 <Stack spacing={1.5}>
                   {dueSoon.map((item) => {
-                    const { text, urgent } = deadlineLabel(item.due);
+                    const deadline = deadlineLabel(item.due);
+                    const text = item.liveNow ? "Live now" : deadline.text;
+                    const urgent = item.liveNow || deadline.urgent;
                     return (
                       <Box
                         key={item.id}
@@ -714,7 +724,7 @@ export default function DashboardPage() {
                         </Stack>
                         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mt: 0.75 }}>
                           <Typography variant="caption" color={urgent ? "onWarningContainer" : "text.secondary"}>
-                            {text} Â· {item.detail}
+                            {text} · {item.detail}
                           </Typography>
                           {item.kind === "exam" && (
                             <Chip
@@ -798,25 +808,24 @@ export default function DashboardPage() {
         </Box>
       )}
 
-      {/* Sidebar for new users: quick assignment preview */}
-      {isNewUser && upcomingAssignments.length > 0 && (
+      {/* A student with no submissions still has deadlines, and they are the
+          most useful thing to show. Same "Due Soon" wording as the full
+          dashboard, so the two views don't name the same thing differently. */}
+      {isNewUser && dueSoon.length > 0 && (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
           <CardContent>
             <Typography variant="subtitle2" sx={{ mb: 2 }}>
-              Upcoming Assignments
+              Due Soon
             </Typography>
             <Stack spacing={1}>
-              {upcomingAssignments.slice(0, 3).map((a) => {
-                const { text, urgent } = deadlineLabel(a.deadline);
+              {dueSoon.slice(0, 3).map((item) => {
+                const deadline = deadlineLabel(item.due);
+                const text = item.liveNow ? "Live now" : deadline.text;
+                const urgent = item.liveNow || deadline.urgent;
                 return (
-                  <Stack
-                    key={a.id}
-                    direction="row"
-                    alignItems="center"
-                    justifyContent="space-between"
-                  >
+                  <Stack key={item.id} direction="row" alignItems="center" justifyContent="space-between">
                     <Typography variant="body2" noWrap sx={{ flex: 1 }}>
-                      {a.title}
+                      {item.title}
                     </Typography>
                     <Typography
                       variant="caption"

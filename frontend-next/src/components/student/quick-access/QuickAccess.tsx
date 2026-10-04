@@ -82,18 +82,33 @@ function buildTiles({
       : "Start your first course";
 
   const openAssignments = assignments.filter((a) => a.solved < a.total && a.deadline);
-  const nextAssignment = [...openAssignments].sort(
+  // Overdue and upcoming are counted apart: a past deadline is also "within the
+  // next 7 days" arithmetically, so lumping them together reported overdue work
+  // as due this week.
+  const overdue = openAssignments.filter((a) => new Date(a.deadline).getTime() < now);
+  const dueThisWeek = openAssignments.filter((a) => {
+    const diff = new Date(a.deadline).getTime() - now;
+    return diff >= 0 && diff <= 7 * DAY_MS;
+  });
+  const nextUp = [...dueThisWeek].sort(
     (a, b) => new Date(a.deadline).getTime() - new Date(b.deadline).getTime(),
   )[0];
-  const dueThisWeek = openAssignments.filter(
-    (a) => new Date(a.deadline).getTime() - now <= 7 * DAY_MS,
-  ).length;
 
-  const assignmentsLine = nextAssignment
-    ? dueThisWeek > 1
-      ? `${dueThisWeek} due this week · next ${relativeDay(nextAssignment.deadline, now)}`
-      : `${nextAssignment.title} · ${relativeDay(nextAssignment.deadline, now)}`
-    : "Nothing due — you're clear";
+  let assignmentsLine: string;
+  if (overdue.length > 0) {
+    assignmentsLine =
+      overdue.length === 1
+        ? `${overdue[0].title} is overdue`
+        : `${overdue.length} assignments overdue`;
+  } else if (dueThisWeek.length > 1) {
+    assignmentsLine = `${dueThisWeek.length} due this week · next ${relativeDay(nextUp.deadline, now)}`;
+  } else if (nextUp) {
+    assignmentsLine = `${nextUp.title} · ${relativeDay(nextUp.deadline, now)}`;
+  } else if (openAssignments.length > 0) {
+    assignmentsLine = `${openAssignments.length} open · none due this week`;
+  } else {
+    assignmentsLine = "Nothing due — you're clear";
+  }
 
   const liveExam = exams.find((e) => examStatus(e, now) === "live");
   const nextExam = exams

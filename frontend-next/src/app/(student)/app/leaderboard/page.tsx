@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import * as React from "react";
 import Box from "@mui/material/Box";
@@ -163,8 +163,8 @@ export default function LeaderboardPage() {
                       {avatarInitials(entry.name)}
                     </Avatar>
                     {/* The name only needs to truncate against the podium
-                        column's real width, not an arbitrary fixed cap â€” a
-                        90px max-width was clipping names ("Aarav Chatterâ€¦")
+                        column's real width, not an arbitrary fixed cap — a
+                        90px max-width was clipping names ("Aarav Chatter…")
                         that had plenty of visible room to spare. */}
                     <Typography variant="caption" fontWeight={600} noWrap sx={{ maxWidth: "100%", textAlign: "center" }}>
                       {entry.name}
@@ -221,7 +221,7 @@ export default function LeaderboardPage() {
                     <YouChip />
                   </Stack>
                   <Typography variant="caption" color="onPrimaryContainer" sx={{ fontFamily: "ui-monospace, monospace", opacity: 0.85 }}>
-                    {me.solvedCount} solved Â· {me.totalSubmissions} submissions
+                    {me.solvedCount} solved · {me.totalSubmissions} submissions
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "right" }}>
@@ -242,7 +242,7 @@ export default function LeaderboardPage() {
               <SearchField
                 value={search}
                 onChange={setSearch}
-                placeholder="Search studentsâ€¦"
+                placeholder="Search students…"
                 label="Search students"
                 sx={{ flex: 1, minWidth: 200, maxWidth: { sm: 360 } }}
               />
@@ -378,7 +378,7 @@ export default function LeaderboardPage() {
 
           {data.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", mt: 2 }}>
-              Score = problems solved Ã— 10 pts Â· Showing top {data.length} students
+              Score = problems solved × 10 pts · Showing top {data.length} students
             </Typography>
           )}
         </>
