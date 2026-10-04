@@ -80,7 +80,12 @@ export interface DashboardStats {
   acRate: number;
   problemsSolved: number;
   streak: number;
+  /** Position across every student on the platform. */
   rank: number;
+  totalStudents: number;
+  /** Position within the student's own department+section; 0 when they have none. */
+  classRank: number;
+  classSize: number;
   rating: number;
 }
 
@@ -227,6 +232,19 @@ export interface RecommendedProblem {
 }
 
 // ── Courses / modules ──
+/** Where a module stands for this student. Computed server-side so every screen agrees. */
+export type ModuleStatus = "empty" | "not_started" | "in_progress" | "done" | "overdue";
+
+export interface ModuleProgress {
+  id: string;
+  title: string;
+  total: number;
+  solved: number;
+  percent: number;
+  dueAt: string | null;
+  status: ModuleStatus;
+}
+
 export interface CourseSummary {
   id: string;
   title: string;
@@ -234,6 +252,10 @@ export interface CourseSummary {
   moduleCount: number;
   problemCount: number;
   solvedCount: number;
+  modules: ModuleProgress[];
+  nextModule: { id: string; title: string } | null;
+  nextDue: { id: string; title: string; dueAt: string } | null;
+  overdueCount: number;
 }
 
 export interface CourseModuleProblem {
@@ -244,15 +266,19 @@ export interface CourseModuleProblem {
   is_solved: boolean;
 }
 
-export interface CourseModule {
-  id: string;
-  title: string;
+export interface CourseModule extends ModuleProgress {
+  description: string | null;
   problems: CourseModuleProblem[];
+  nextProblemId: string | null;
 }
 
 export interface CourseDetail {
   id: string;
   title: string;
   description: string | null;
+  problemCount: number;
+  solvedCount: number;
+  percent: number;
+  nextUp: { moduleId: string; moduleTitle: string; problemId: string | null } | null;
   modules: CourseModule[];
 }

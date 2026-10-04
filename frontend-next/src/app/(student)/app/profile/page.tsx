@@ -78,6 +78,9 @@ const DEFAULT_STATS: DashboardStats = {
   problemsSolved: 0,
   streak: 0,
   rank: 0,
+  totalStudents: 0,
+  classRank: 0,
+  classSize: 0,
   rating: 1200,
 };
 

@@ -5,6 +5,37 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 7
+**Area:** Student persona — S4 course/module progress + scoped leaderboard
+**Did:**
+- **Leaderboard is now scoped**: My class / Department / College. A single platform-wide board told a student in a
+  class of 60 they were 400th, which is nothing they can act on. "Class" = their own department **and** section.
+  The caller's own row is returned separately so it stays pinned even when they're outside the visible page —
+  verified with a student ranked last (#8 of 8) still seeing themselves.
+- **Dashboard rank follows suit**: shows **Class Rank "#8 of 8 in your class"**, falling back to the overall rank
+  when a student has no department/section.
+- **Module progress is computed server-side** and returned by both `/api/courses` and `/api/courses/:id`, so the
+  list, the course page and the dashboard can't disagree. Each module carries solved/total/percent, due date and a
+  status (not started / in progress / done / overdue). The course page's client-side total calculation is gone.
+- **Per-module due dates**: faculty can set one via `PATCH /api/faculty/courses/:id/modules/:moduleId`
+  (`due_at`, null clears it). The course list shows "1 module overdue" or the next due module; the course page
+  shows "Overdue — was due 3 days ago" per module.
+- **"Next up"** on the course page jumps to the first unsolved problem, and that module opens by default rather
+  than always the first.
+- Leaderboard ranking also moved off `listAll()` onto the field-masked read, so it no longer downloads every
+  student's source code.
+**Test coverage:** new suite (22 checks) that seeds four students across two sections and two departments and
+asserts the scoping is real — class 2 ⊂ department 3 ⊂ college 50, ordering by solves, the pinned row, an unknown
+scope falling back to college, and that module percent/status agree with their own counts.
+**Verified in the browser** (temporary student row + due dates, both removed afterwards): scope switching
+(8 in class → 47 in college), the pinned "You" row at #8, "Next up: Basics", "1 module overdue" on the list,
+"Overdue — was due 3 days ago" on the module, and "CLASS RANK #8 of 8".
+**Full suite: 285 passed, 0 skipped** (was 254).
+**Next:** S5 — Tests hub (Exams | Aptitude | MCQ) and assignment proctoring as a faculty switch.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 6
 **Area:** Verifying S0–S3 in a real browser, and fixing what it found
 **How:** signed in with a throwaway dev token (the same mechanism `tests/harness.js` uses) against the running

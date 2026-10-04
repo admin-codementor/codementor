@@ -2193,6 +2193,19 @@ exports.updateModule = async (req, res) => {
     }
     if (req.body.description !== undefined) patch.description = String(req.body.description).trim();
     if (Array.isArray(req.body.problem_ids)) patch.problemIds = [...new Set(req.body.problem_ids.filter(Boolean))];
+    // Optional per-module deadline. Sending null or '' clears it, so a module can
+    // go back to having no due date.
+    if (req.body.due_at !== undefined) {
+      if (!req.body.due_at) {
+        patch.dueAt = null;
+      } else {
+        const due = new Date(req.body.due_at);
+        if (Number.isNaN(due.getTime())) {
+          return res.status(400).json({ success: false, error: 'Due date is not a valid date.' });
+        }
+        patch.dueAt = due;
+      }
+    }
 
     const updated = await courseRepo.updateModule(id, moduleId, patch);
     if (!updated) return res.status(404).json({ success: false, error: 'Module not found' });

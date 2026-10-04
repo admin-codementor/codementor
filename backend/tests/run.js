@@ -20,6 +20,7 @@ const SUITES = {
   examCodingProctor: require('./suites/examCodingAndProctor'),
   codingRunSubmit: require('./suites/codingRunAndSubmit'),
   studentDashboard: require('./suites/studentDashboard'),
+  progressLeaderboard: require('./suites/progressAndLeaderboard'),
   analyticsAi: require('./suites/analyticsAndAi'),
 };
 

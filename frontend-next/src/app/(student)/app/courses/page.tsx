@@ -19,12 +19,24 @@ import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
-import { shape } from "@/theme/tokens";
+import Chip from "@mui/material/Chip";
+import { shape, radius } from "@/theme/tokens";
 import { useCoursesQuery } from "@/lib/queries/student";
 import type { CourseSummary } from "@/lib/types";
 
 const SORTS = ["Progress", "Title (A–Z)", "Most problems"] as const;
 type Sort = (typeof SORTS)[number];
+
+/** Short, human deadline wording for a chip. */
+function dueLabel(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  const days = Math.ceil(diff / 86_400_000);
+  if (days < 0) return "overdue";
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days <= 14) return `in ${days} days`;
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
+}
 
 function CourseCard({ course }: { course: CourseSummary }) {
   const pct = course.problemCount > 0 ? Math.round((course.solvedCount / course.problemCount) * 100) : 0;
@@ -70,6 +82,30 @@ function CourseCard({ course }: { course: CourseSummary }) {
               <Typography variant="caption">{course.problemCount} problems</Typography>
             </Stack>
           </Stack>
+          {/* What's next and what's late — the two things worth knowing from a list. */}
+          {(course.nextDue || course.overdueCount > 0 || course.nextModule) && (
+            <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+              {course.overdueCount > 0 ? (
+                <Chip
+                  size="small"
+                  label={`${course.overdueCount} module${course.overdueCount === 1 ? "" : "s"} overdue`}
+                  sx={{ bgcolor: "errorContainer", color: "onErrorContainer" }}
+                />
+              ) : course.nextDue ? (
+                <Chip
+                  size="small"
+                  label={`${course.nextDue.title} due ${dueLabel(course.nextDue.dueAt)}`}
+                  sx={{ bgcolor: "warningContainer", color: "onWarningContainer", maxWidth: "100%" }}
+                />
+              ) : null}
+              {course.nextModule && (
+                <Typography variant="caption" color="text.secondary" noWrap>
+                  Next: {course.nextModule.title}
+                </Typography>
+              )}
+            </Stack>
+          )}
+
           <Box>
             <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
               <Typography variant="caption" color="text.secondary">Progress</Typography>
@@ -77,7 +113,32 @@ function CourseCard({ course }: { course: CourseSummary }) {
                 {course.solvedCount}/{course.problemCount} · {pct}%
               </Typography>
             </Stack>
-            <LinearProgress variant="determinate" value={pct} sx={{ height: 6, borderRadius: 3 }} />
+            <LinearProgress variant="determinate" value={pct} sx={{ height: 6, borderRadius: radius.xs }} />
+            {/* One segment per module, so the shape of progress is visible at a
+                glance rather than flattened into a single course percentage. */}
+            {course.modules.length > 1 && (
+              <Stack direction="row" spacing={0.5} sx={{ mt: 0.75 }} aria-hidden>
+                {course.modules.map((m) => (
+                  <Box
+                    key={m.id}
+                    title={`${m.title}: ${m.percent}%`}
+                    sx={{
+                      flex: 1,
+                      height: 4,
+                      borderRadius: radius.xs,
+                      bgcolor:
+                        m.status === "done"
+                          ? "success.main"
+                          : m.status === "overdue"
+                            ? "error.main"
+                            : m.status === "in_progress"
+                              ? "warning.main"
+                              : "surfaceContainerHighest",
+                    }}
+                  />
+                ))}
+              </Stack>
+            )}
           </Box>
         </Stack>
       </CardActionArea>

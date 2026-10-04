@@ -372,14 +372,26 @@ export default function DashboardPage() {
           helper={`Goal: ${Math.min(stats.streak, 30)} / 30 days`}
           accent="warning"
         />
-        {/* Labelled "Overall" deliberately: the backend ranks this student
-            against every student on the platform, not their class. Class and
-            department scoping arrives with the scoped leaderboard. */}
+        {/* Class rank where the student has a class — "#7 of 61" is something
+            they can act on, where "#340 of 2000" is not. Falls back to the
+            platform-wide rank when no department/section is set. */}
         <StatCard
           icon={<LeaderboardOutlinedIcon />}
-          label="Overall Rank"
-          value={stats.rank > 0 ? `#${stats.rank}` : "—"}
-          helper="Across all students"
+          label={stats.classRank > 0 ? "Class Rank" : "Overall Rank"}
+          value={
+            stats.classRank > 0
+              ? `#${stats.classRank}`
+              : stats.rank > 0
+                ? `#${stats.rank}`
+                : "—"
+          }
+          helper={
+            stats.classRank > 0
+              ? `of ${stats.classSize} in your class`
+              : stats.totalStudents > 0
+                ? `of ${stats.totalStudents} students`
+                : undefined
+          }
           href="/app/leaderboard"
           accent="secondary"
         />

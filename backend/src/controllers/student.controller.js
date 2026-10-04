@@ -98,13 +98,16 @@ exports.getDashboardData = async (req, res) => {
     // 5. Real streak calculation
     const streak = calculateStreak(heatmap);
 
-    // 6. Rank across all students. NOTE: this is a platform-wide rank, not a
-    // class rank — the UI must label it as such.
+    // 6. Rank, both platform-wide and within the student's own class.
+    //
+    // Class rank is the one that means something day to day — "#340 of 2000"
+    // tells a student nothing they can act on, "#7 of 61" does. Both are
+    // returned so the UI can show the useful one and still explain the other.
     //
     // listAllForAnalytics() rather than listAll(): ranking only needs userId,
     // problemId and verdict, while listAll() also downloads every student's
     // source code on every dashboard load. Same numbers, a fraction of the read.
-    const studentIds = (await userRepo.listByRole('student')).map(u => u.id);
+    const studentsMap = await userRepo.getMapByRole('student');
     const allSubs = await submissionRepo.listAllForAnalytics();
     const solvedCountByUser = {};
     for (const s of allSubs) {
@@ -112,10 +115,28 @@ exports.getDashboardData = async (req, res) => {
       if (!solvedCountByUser[s.userId]) solvedCountByUser[s.userId] = new Set();
       solvedCountByUser[s.userId].add(s.problemId);
     }
-    const ranked = studentIds
-      .map(id => ({ id, solved: solvedCountByUser[id]?.size || 0 }))
-      .sort((a, b) => b.solved - a.solved);
-    const rank = ranked.findIndex(r => r.id === userId) + 1;
+
+    const rankWithin = (ids) => {
+      const ordered = ids
+        .map((id) => ({ id, solved: solvedCountByUser[id]?.size || 0 }))
+        .sort((a, b) => b.solved - a.solved);
+      const position = ordered.findIndex((r) => r.id === userId) + 1;
+      return { rank: position, outOf: ordered.length };
+    };
+
+    const allIds = [...studentsMap.keys()];
+    const myProfileForRank = studentsMap.get(userId) || {};
+    const classIds = myProfileForRank.department && myProfileForRank.section
+      ? allIds.filter((id) => {
+        const p = studentsMap.get(id) || {};
+        return p.department === myProfileForRank.department && p.section === myProfileForRank.section;
+      })
+      : [];
+
+    const overall = rankWithin(allIds);
+    const rank = overall.rank;
+    const totalStudents = overall.outOf;
+    const classRanking = classIds.length > 0 ? rankWithin(classIds) : { rank: 0, outOf: 0 };
 
     // 6b. Contest rating (Elo)
     const myProfile = await userRepo.getById(userId, req.user.role);
@@ -171,7 +192,12 @@ exports.getDashboardData = async (req, res) => {
     res.json({
       success: true,
       data: {
-        stats: { totalSubs, acRate, problemsSolved, streak, rank, rating },
+        stats: {
+          totalSubs, acRate, problemsSolved, streak, rank, rating,
+          totalStudents,
+          classRank: classRanking.rank,
+          classSize: classRanking.outOf,
+        },
         languages,
         heatmap,
         topics: masteredTopics,
@@ -315,25 +341,46 @@ exports.getRecommendations = async (req, res) => {
   }
 };
 
+// GET /api/student/leaderboard?scope=class|department|college
+//
+// Scoped deliberately: a single platform-wide board told a student in a class of
+// 60 that they were 400th, which says nothing they can act on. "Class" means the
+// caller's own department and section.
+//
+// The response carries `me` separately from `top`, so the caller's own row can
+// be pinned even when they fall outside the visible page.
 exports.getLeaderboard = async (req, res) => {
   try {
+    const scope = ['class', 'department', 'college'].includes(req.query.scope) ? req.query.scope : 'college';
     const studentsMap = await userRepo.getMapByRole('student');
-    const studentIds = [...studentsMap.keys()];
-    if (studentIds.length === 0) {
-      return res.json({ success: true, data: [] });
+    const me = studentsMap.get(req.user.id) || {};
+
+    const inScope = (profile) => {
+      if (scope === 'college') return true;
+      if (!me.department || profile.department !== me.department) return false;
+      if (scope === 'department') return true;
+      // class: same department AND same section.
+      return !!me.section && profile.section === me.section;
+    };
+
+    const scopedIds = [...studentsMap.keys()].filter((id) => inScope(studentsMap.get(id) || {}));
+    if (scopedIds.length === 0) {
+      return res.json({ success: true, data: { scope, total: 0, top: [], me: null } });
     }
 
-    const allSubs = await submissionRepo.listAll();
-    const statsByUser = new Map(studentIds.map(id => [id, { solved: new Set(), total: 0 }]));
+    // Field-masked: ranking needs userId/problemId/verdict, never source code.
+    const allSubs = await submissionRepo.listAllForAnalytics();
+    const idSet = new Set(scopedIds);
+    const statsByUser = new Map(scopedIds.map((id) => [id, { solved: new Set(), total: 0 }]));
     for (const s of allSubs) {
+      if (!idSet.has(s.userId)) continue;
       const stat = statsByUser.get(s.userId);
-      if (!stat) continue;
       stat.total += 1;
       if (s.verdict === 'Accepted') stat.solved.add(s.problemId);
     }
 
-    const leaderboard = studentIds
-      .map(id => {
+    const ranked = scopedIds
+      .map((id) => {
         const profile = studentsMap.get(id) || {};
         const stat = statsByUser.get(id);
         return {
@@ -347,10 +394,14 @@ exports.getLeaderboard = async (req, res) => {
         };
       })
       .sort((a, b) => b.solvedCount - a.solvedCount || a.name.localeCompare(b.name))
-      .slice(0, 100)
       .map((r, index) => ({ ...r, rank: index + 1, score: r.solvedCount * 10 }));
 
-    res.json({ success: true, data: leaderboard });
+    const myRow = ranked.find((r) => r.id === req.user.id) || null;
+
+    res.json({
+      success: true,
+      data: { scope, total: ranked.length, top: ranked.slice(0, 100), me: myRow },
+    });
   } catch (error) {
     console.error('Leaderboard Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch leaderboard' });

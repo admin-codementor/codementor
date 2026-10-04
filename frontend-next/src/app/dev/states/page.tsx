@@ -232,10 +232,10 @@ export default function StatesGallery() {
         {/* ── Quick Access tiles ───────────────────────────────────────── */}
         <SectionCard title="Quick access tiles — the dashboard entry row, with live lines">
           <QuickAccess
-            stats={{ totalSubs: 48, acRate: 62, problemsSolved: 31, streak: 5, rank: 7, rating: 1200 }}
+            stats={{ totalSubs: 48, acRate: 62, problemsSolved: 31, streak: 5, rank: 7, totalStudents: 180, classRank: 3, classSize: 61, rating: 1200 }}
             courses={[
-              { id: "java", title: "Java Fundamentals", description: null, moduleCount: 6, problemCount: 40, solvedCount: 25 },
-              { id: "dsa", title: "Data Structures", description: null, moduleCount: 8, problemCount: 60, solvedCount: 4 },
+              { id: "java", title: "Java Fundamentals", description: null, moduleCount: 6, problemCount: 40, solvedCount: 25, modules: [], nextModule: null, nextDue: null, overdueCount: 0 },
+              { id: "dsa", title: "Data Structures", description: null, moduleCount: 8, problemCount: 60, solvedCount: 4, modules: [], nextModule: null, nextDue: null, overdueCount: 0 },
             ]}
             assignments={[
               { id: "a1", title: "Arrays practice set", deadline: new Date(demoNow + 2 * 86400000).toISOString(), isExam: false, total: 5, solved: 2, problems: [] },

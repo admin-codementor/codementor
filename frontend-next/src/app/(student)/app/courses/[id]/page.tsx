@@ -19,8 +19,9 @@ import { visuallyHidden } from "@mui/utils";
 import {
   ArrowBackIcon, CheckCircleOutlineIcon, RadioButtonUncheckedIcon, ViewModuleOutlinedIcon, ExpandMoreIcon,
   TypeIcon, HashIcon, ArrowRightLeftIcon, ArrowDownUpIcon, GitForkIcon, WaypointsIcon, BoxesIcon, BinaryIcon,
-  PenToolIcon, LinkOutlinedIcon, LayersOutlinedIcon, AutoAwesomeOutlinedIcon,
+  PenToolIcon, LinkOutlinedIcon, LayersOutlinedIcon, AutoAwesomeOutlinedIcon, ArrowForwardIcon,
 } from "@/components/ui/icons";
+import Button from "@mui/material/Button";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
@@ -70,6 +71,18 @@ function hueOf(name: string): number {
   let h = 0;
   for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) % 360;
   return h;
+}
+
+/** Short deadline wording for a module heading. */
+function moduleDueLabel(iso: string): string {
+  const diff = new Date(iso).getTime() - Date.now();
+  const days = Math.ceil(diff / 86_400_000);
+  if (days === 0) return "today";
+  if (days === 1) return "tomorrow";
+  if (days === -1) return "yesterday";
+  if (days > 0 && days <= 14) return `in ${days} days`;
+  if (days < 0 && days >= -14) return `${Math.abs(days)} days ago`;
+  return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
 function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defaultExpanded?: boolean }) {
@@ -132,9 +145,24 @@ function ModuleSection({ module, defaultExpanded }: { module: CourseModule; defa
             {moduleIcon(module.title)}
           </Box>
         )}
-        <Typography variant="subtitle2" fontWeight={600} sx={{ flex: 1, minWidth: 0 }} noWrap>
-          {module.title}
-        </Typography>
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Typography variant="subtitle2" fontWeight={600} noWrap>
+            {module.title}
+          </Typography>
+          {module.dueAt && (
+            <Typography
+              variant="caption"
+              color={module.status === "overdue" ? "error.main" : "text.secondary"}
+              noWrap
+            >
+              {module.status === "done"
+                ? "Completed"
+                : module.status === "overdue"
+                  ? `Overdue — was due ${moduleDueLabel(module.dueAt)}`
+                  : `Due ${moduleDueLabel(module.dueAt)}`}
+            </Typography>
+          )}
+        </Box>
         {total > 0 && (
           <Box sx={{ width: 100, display: { xs: "none", sm: "block" }, flexShrink: 0 }}>
             <LinearProgress
@@ -243,20 +271,11 @@ export default function CourseDetailPage() {
     load();
   }, [load]);
 
-  const totals = React.useMemo(() => {
-    if (!course) return { solved: 0, total: 0, pct: 0 };
-    // Dedupe by problem id — the same problem can be listed in more than one
-    // module, and summing module lengths raw double-counts it, which is why
-    // this used to show a different (larger) total than the Courses landing
-    // page's count for the same course.
-    const seen = new Map<string, boolean>();
-    for (const m of course.modules) {
-      for (const p of m.problems) seen.set(p.id, seen.get(p.id) || p.is_solved);
-    }
-    const total = seen.size;
-    const solved = [...seen.values()].filter(Boolean).length;
-    return { solved, total, pct: total > 0 ? Math.round((solved / total) * 100) : 0 };
-  }, [course]);
+  // The server now deduplicates a problem shared by two modules and returns the
+  // course totals, so the list page, this page and the dashboard can't disagree.
+  const totals = course
+    ? { solved: course.solvedCount, total: course.problemCount, pct: course.percent }
+    : { solved: 0, total: 0, pct: 0 };
 
   return (
     <Box>
@@ -312,12 +331,25 @@ export default function CourseDetailPage() {
                 <Typography variant="h6" fontWeight={700}>{totals.pct}%</Typography>
               </Box>
             </Box>
-            <Box>
+            <Box sx={{ flex: 1, minWidth: 0 }}>
               <Typography variant="subtitle1" fontWeight={600}>Course progress</Typography>
               <Typography variant="body2" color="text.secondary" sx={{ fontFamily: "ui-monospace, monospace" }}>
                 {totals.solved}/{totals.total} problems solved across {course.modules.length} modules
               </Typography>
             </Box>
+            {/* One obvious action: the next unsolved problem, so nobody has to
+                hunt through the modules for where they left off. */}
+            {course.nextUp?.problemId && (
+              <Button
+                component={NextLink}
+                href={`/app/problems/${course.nextUp.problemId}`}
+                variant="contained"
+                endIcon={<ArrowForwardIcon fontSize="small" />}
+                sx={{ flexShrink: 0 }}
+              >
+                Next up: {course.nextUp.moduleTitle}
+              </Button>
+            )}
           </Card>
           {course.modules.length === 0 ? (
             <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
@@ -325,8 +357,13 @@ export default function CourseDetailPage() {
             </Card>
           ) : (
             <Stack spacing={2}>
-              {course.modules.map((m, idx) => (
-                <ModuleSection key={m.id} module={m} defaultExpanded={idx === 0} />
+              {course.modules.map((m) => (
+                <ModuleSection
+                  key={m.id}
+                  module={m}
+                  // Open where the work is, not simply the first module.
+                  defaultExpanded={m.id === course.nextUp?.moduleId}
+                />
               ))}
             </Stack>
           )}

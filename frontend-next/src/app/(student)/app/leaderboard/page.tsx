@@ -23,9 +23,25 @@ import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchField } from "@/components/ui/SearchField";
 import { RatingBadge } from "@/components/ui/RatingBadge";
-import { EmptyState } from "@/components/ui/States";
+import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
+import { EmptyState, ErrorState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
 import { medalColors } from "@/theme/tokens";
+
+type Scope = "class" | "department" | "college";
+
+const SCOPE_LABEL: Record<Scope, string> = {
+  class: "your class",
+  department: "your department",
+  college: "the college",
+};
+
+interface LeaderboardResponse {
+  scope: Scope;
+  total: number;
+  top: LeaderboardEntry[];
+  me: LeaderboardEntry | null;
+}
 
 interface LeaderboardEntry {
   id: string;
@@ -89,8 +105,10 @@ export default function LeaderboardPage() {
   const [search, setSearch] = React.useState("");
   const [dept, setDept] = React.useState("all");
 
-  const [data, setData] = React.useState<LeaderboardEntry[]>([]);
+  const [scope, setScope] = React.useState<Scope>("class");
+  const [board, setBoard] = React.useState<LeaderboardResponse>({ scope: "class", total: 0, top: [], me: null });
   const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<unknown>(undefined);
 
   const [currentUserId, setCurrentUserId] = React.useState<string | undefined>();
 
@@ -99,21 +117,27 @@ export default function LeaderboardPage() {
     setCurrentUserId(u?.id != null ? String(u.id) : undefined);
   }, []);
 
-  React.useEffect(() => {
+  const load = React.useCallback(() => {
+    setLoading(true);
+    setError(undefined);
     api
-      .get<{ success: boolean; data: LeaderboardEntry[] }>("/api/student/leaderboard")
+      .get<{ success: boolean; data: LeaderboardResponse }>(`/api/student/leaderboard?scope=${scope}`)
       .then((r) => {
-        if (r.data?.success) setData(r.data.data ?? []);
+        if (r.data?.success) setBoard(r.data.data);
+        else setError(new Error("Failed to load leaderboard"));
       })
-      .catch(() => {})
+      .catch((err) => setError(err))
       .finally(() => setLoading(false));
-  }, []);
+  }, [scope]);
 
+  React.useEffect(() => { load(); }, [load]);
+
+  const data = board.top;
   const departments = Array.from(
     new Set(data.map((u) => u.department).filter(Boolean)),
   ) as string[];
 
-  const me = data.find((u) => String(u.id) === currentUserId);
+  const me = board.me;
   const visible = data.filter(
     (u) =>
       u.name.toLowerCase().includes(search.toLowerCase()) &&
@@ -124,10 +148,40 @@ export default function LeaderboardPage() {
     <Box>
       <PageHeader
         title="Leaderboard"
-        subtitle={`Top ${data.length} students ranked by problems solved.`}
+        subtitle={
+          board.total > 0
+            ? `${board.total} student${board.total === 1 ? "" : "s"} in ${SCOPE_LABEL[scope]}, ranked by problems solved.`
+            : "Ranked by problems solved."
+        }
+        actions={
+          <SegmentedButtons<Scope>
+            value={scope}
+            onChange={setScope}
+            segments={[
+              { value: "class", label: "My class" },
+              { value: "department", label: "Department" },
+              { value: "college", label: "College" },
+            ]}
+            ariaLabel="Leaderboard scope"
+          />
+        }
       />
 
-      {(
+      {!loading && !error && board.total === 0 && (
+        <EmptyState
+          variant="unassigned"
+          title={scope === "class" ? "No class to compare with yet" : "Nobody to rank yet"}
+          description={
+            scope === "class"
+              ? "Your department and section aren't set, so there's no class board. Try Department or College."
+              : "Rankings appear once students start solving problems."
+          }
+        />
+      )}
+
+      {error != null && <ErrorState error={error} onRetry={load} />}
+
+      {error == null && (
         <>
           {/* Podium */}
           {!loading && data.length >= 3 && (
@@ -378,7 +432,7 @@ export default function LeaderboardPage() {
 
           {data.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", mt: 2 }}>
-              Score = problems solved × 10 pts · Showing top {data.length} students
+              Score = problems solved × 10 pts · Showing {data.length} of {board.total} in {SCOPE_LABEL[scope]}
             </Typography>
           )}
         </>
