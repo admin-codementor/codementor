@@ -199,9 +199,37 @@ export interface VerdictResult {
   scoring_mode: "acm" | "oi";
   passed_count: number;
   total_count: number;
+  /**
+   * Shown/hidden splits counted before judging. The results array stops at the
+   * first failure under ACM scoring, so it cannot be used to count cases that
+   * never ran.
+   */
+  public_total?: number;
+  public_passed?: number;
+  hidden_total?: number;
+  hidden_passed?: number;
+  /** Mean runtime in seconds across the cases that ran. */
+  avg_time?: number | null;
+  /** The first real failure, already parsed, or null when nothing failed. */
+  error?: JudgeError | null;
   custom_run?: boolean;
   sample_only?: boolean;
   test_case_results: TestCaseResult[];
+}
+
+export type JudgeErrorKind =
+  | "compile_error"
+  | "runtime_error"
+  | "time_limit"
+  | "memory_limit"
+  | "wrong_answer";
+
+export interface JudgeError {
+  kind: JudgeErrorKind;
+  /** Line in the student's source, where the compiler or runtime named one. */
+  line: number | null;
+  /** The compiler's or runtime's own output, shown verbatim. */
+  text: string | null;
 }
 
 export interface VerdictPayload {

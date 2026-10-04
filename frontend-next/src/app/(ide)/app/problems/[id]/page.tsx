@@ -49,6 +49,8 @@ import type {
   VerdictPayload,
   VerdictResult,
   ProblemHistoryEntry,
+  JudgeError,
+  JudgeErrorKind,
 } from "@/lib/types";
 
 // ── Monaco editor (client-only) ───────────────────────────────────────────────
@@ -230,9 +232,12 @@ function ProblemMarkdown({ content }: { content: string }) {
 function TestCaseRow({
   index,
   result,
+  hideErrorText,
 }: {
   index: number;
   result: VerdictResult["test_case_results"][number];
+  /** The terminal panel above already shows this compiler output verbatim. */
+  hideErrorText?: boolean;
 }) {
   const [open, setOpen] = React.useState(index === 0);
   const passed = result.passed;
@@ -284,7 +289,7 @@ function TestCaseRow({
           {result.stdout && (
             <TestIOBlock label="Your output" value={result.stdout} highlight={!passed} />
           )}
-          {(result.stderr || result.compile_output || result.message) && (
+          {!hideErrorText && (result.stderr || result.compile_output || result.message) && (
             <TestIOBlock
               label="Error"
               value={result.compile_output || result.stderr || result.message}
@@ -321,12 +326,19 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
   const cases = result.test_case_results;
   if (cases.length === 0) return null;
   const timesMs = cases.map((c) => Math.max(0, Math.round(c.time * 1000)));
-  const avg = timesMs.length ? Math.round(timesMs.reduce((a, b) => a + b, 0) / timesMs.length) : 0;
   const max = timesMs.length ? Math.max(...timesMs) : 0;
-  const shown = cases.filter((c) => c.is_public);
-  const hidden = cases.filter((c) => !c.is_public);
-  const shownPassed = shown.filter((c) => c.passed).length;
-  const hiddenPassed = hidden.filter((c) => c.passed).length;
+  const avg = result.avg_time != null
+    ? Math.round(result.avg_time * 1000)
+    : (timesMs.length ? Math.round(timesMs.reduce((a, b) => a + b, 0) / timesMs.length) : 0);
+
+  // Totals come from the server, which counted the test cases before judging.
+  // Counting them from the results array undercounts: ACM scoring stops at the
+  // first failure, so cases that never ran aren't in it — which is how this
+  // reported "2 of 2 hidden passed" when four hidden cases were never reached.
+  const shownTotal = result.public_total ?? cases.filter((c) => c.is_public).length;
+  const hiddenTotal = result.hidden_total ?? cases.filter((c) => !c.is_public).length;
+  const shownPassed = result.public_passed ?? cases.filter((c) => c.is_public && c.passed).length;
+  const hiddenPassed = result.hidden_passed ?? cases.filter((c) => !c.is_public && c.passed).length;
 
   const countChip = (passed: number, total: number, label: string) => {
     const all = total > 0 && passed === total;
@@ -353,8 +365,8 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
 
   return (
     <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap sx={{ mb: 1.5 }}>
-      {shown.length > 0 && countChip(shownPassed, shown.length, "shown")}
-      {hidden.length > 0 && countChip(hiddenPassed, hidden.length, "hidden")}
+      {shownTotal > 0 && countChip(shownPassed, shownTotal, "shown test case" + (shownTotal === 1 ? "" : "s"))}
+      {hiddenTotal > 0 && countChip(hiddenPassed, hiddenTotal, "hidden test case" + (hiddenTotal === 1 ? "" : "s"))}
       <SummaryCard label="Average time">
         <Typography variant="subtitle2" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace" }}>
           {avg} ms
@@ -373,6 +385,80 @@ function ResultsSummary({ result }: { result: VerdictResult }) {
         </Stack>
       </SummaryCard>
     </Stack>
+  );
+}
+
+const ERROR_HEADING: Record<JudgeErrorKind, string> = {
+  compile_error: "Compilation error",
+  runtime_error: "Runtime error",
+  time_limit: "Time limit exceeded",
+  memory_limit: "Memory limit exceeded",
+  wrong_answer: "Wrong answer",
+};
+
+/**
+ * Compiler and runtime output, shown the way a terminal shows it: monospaced,
+ * on a dark surface, in the tool's own words. The previous presentation folded
+ * it into a collapsed test-case row, which buried the one thing a student needs
+ * when their code doesn't build.
+ */
+function ErrorTerminal({ error, onGoToLine }: { error: JudgeError; onGoToLine: (line: number) => void }) {
+  if (!error.text && error.line == null) return null;
+
+  return (
+    <Box
+      sx={{
+        mb: 1.5,
+        borderRadius: radius.sm,
+        overflow: "hidden",
+        border: "1px solid",
+        borderColor: "error.main",
+      }}
+    >
+      <Stack
+        direction="row"
+        alignItems="center"
+        spacing={1}
+        sx={{ px: 1.5, py: 0.75, bgcolor: "errorContainer", color: "onErrorContainer" }}
+      >
+        <CancelOutlinedIcon fontSize="small" />
+        <Typography variant="caption" fontWeight={700}>
+          {ERROR_HEADING[error.kind]}
+        </Typography>
+        {error.line != null && (
+          <Button
+            size="small"
+            onClick={() => onGoToLine(error.line as number)}
+            sx={{ minHeight: 0, py: 0, color: "inherit", textDecoration: "underline" }}
+          >
+            line {error.line}
+          </Button>
+        )}
+      </Stack>
+      {error.text && (
+        <Box
+          component="pre"
+          sx={{
+            m: 0,
+            px: 1.5,
+            py: 1,
+            // Terminal output is dark in both themes on purpose: it is the
+            // compiler's console, not part of the page's surface.
+            bgcolor: "#1b1b1f",
+            color: "#ff9d9d",
+            fontFamily: "ui-monospace, monospace",
+            fontSize: "0.75rem",
+            lineHeight: 1.55,
+            whiteSpace: "pre-wrap",
+            wordBreak: "break-word",
+            maxHeight: 180,
+            overflow: "auto",
+          }}
+        >
+          {error.text}
+        </Box>
+      )}
+    </Box>
   );
 }
 
@@ -738,6 +824,15 @@ export default function ProblemSolvingPage() {
   const [fontSize, setFontSize] = React.useState(14);
   const editorRef = React.useRef<MonacoEditorInstance | null>(null);
   const monacoRef = React.useRef<MonacoNamespace | null>(null);
+
+  // Jumps the editor to the line the compiler complained about.
+  const goToLine = React.useCallback((line: number) => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.revealLineInCenter(line);
+    editor.setPosition({ lineNumber: line, column: 1 });
+    editor.focus();
+  }, []);
 
   // ── Submission state ──
   const [submitting,  setSubmitting]  = React.useState(false);
@@ -1561,9 +1656,19 @@ export default function ProblemSolvingPage() {
                     {!submitting && !running && verdictResult && !verdictResult.custom_run && (
                       <Box>
                         <ResultsSummary result={verdictResult} />
+                        {verdictResult.error && (
+                          <ErrorTerminal error={verdictResult.error} onGoToLine={goToLine} />
+                        )}
                         <Stack spacing={1}>
                           {verdictResult.test_case_results.map((r, i) => (
-                            <TestCaseRow key={i} index={i} result={r} />
+                            <TestCaseRow
+                              key={i}
+                              index={i}
+                              result={r}
+                              // Don't repeat the compiler output that the
+                              // terminal panel above is already showing.
+                              hideErrorText={!!verdictResult.error}
+                            />
                           ))}
                         </Stack>
                         {verdictResult.sample_only && (

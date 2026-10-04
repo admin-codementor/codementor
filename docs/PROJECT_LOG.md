@@ -5,6 +5,28 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 10
+**Area:** Student persona — S7 results panel
+**Did:**
+- **Fixed a wrong number students were being shown.** "X of Y hidden test cases passed" counted Y from the
+  results that came back, but ACM scoring stops at the first failure — so a problem with 3 hidden cases that
+  failed early reported "0 of 0". The judge now counts shown/hidden **before** judging and returns
+  `public_total`/`hidden_total`. Verified live: a failing submission correctly reads **"0 of 3 hidden test cases
+  passed"** when only one case ever ran.
+- **Errors look like a terminal.** Compile and runtime output was buried inside a collapsed test-case row. It now
+  has its own panel: monospaced, dark in both themes, the compiler's own text verbatim, with a heading that says
+  what kind of failure it is and a **clickable "line 1"** that jumps the editor to that line. Line numbers are
+  parsed server-side (gcc/clang, javac, Python, Java stack frames) so the problem page and exam screen agree.
+- Suppressed the duplicate copy of that same output in the test-case row below (verified: the text appears once).
+- Success summary now shows the server's average time alongside the maximum.
+**Verified live** against the real judge with deliberately broken Python: the backend returned
+`{kind: "runtime_error", line: 1, text: "…SyntaxError: invalid syntax"}`, `public_total: 2`, `hidden_total: 3`,
+and the page rendered the terminal, the clickable line, and the corrected counts.
+**Next:** S8 — sweep, and remove contests.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 9
 **Area:** Student persona — S6 problem page
 **Did:**
