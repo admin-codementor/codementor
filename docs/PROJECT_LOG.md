@@ -5,6 +5,37 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 3
+**Area:** Student persona — S1 Quick Access tiles + navigation
+**Did:**
+- **Quick Access row on top of the dashboard** — six illustrated tiles (My Learning, Assignments, Tests, Practice,
+  My Class, Roadmaps), each with a **live line** rather than CodeTantra's static "Click here": current course and
+  percent, what's due this week, the next exam, streak, class and rank. Built from endpoints we already call, so
+  no backend work. Collapsible, remembered per browser.
+- **Navigation reshuffled** by what the student is doing: Learn (Courses · Practice · Sandbox) / Work (Assignments ·
+  Exams · Aptitude) / Progress (Leaderboard · Placement) / AI Tutor. **Practice (`/app/problems`) was previously
+  unreachable from the menu** — now it isn't.
+- **The logo now links home.** It was inert. Also fixed its own 24px radius bug (`borderRadius: 2` on a 36px tile).
+- **Contests removed from the student experience:** menu entry, the dashboard "Contest Rating" card (replaced with
+  Courses Completed) and the "By Rating" leaderboard board are gone. The page and backend stay until S8 does a
+  dependency check, so no staff tooling breaks today.
+- **My Classes** left the menu; the My Class tile links there instead. The join-by-code page deliberately still
+  works, because auto-enrolment (D5) isn't built yet — removing it now would strand students who need to join.
+- Dashboard failures now use the S0 error classification instead of a hardcoded "check your connection".
+**Illustrations — changed from the agreed plan:** unDraw turned out not to fit. There's no reliable way to fetch
+them programmatically, and it only recolours **one** accent, leaving dark navy figures that read as a smudge on our
+dark theme. Drew six flat SVGs in one visual language using palette variables instead, so they follow light and
+dark properly. Swapping in unDraw files later is a drop-in change if preferred.
+**Bug found and fixed while verifying:** MUI's `Collapse` kept its height here, so hiding the row left an empty
+gap. Replaced with a plain conditional render.
+**Verified:** tiles show correct live lines and links; toggle collapses and persists; light and dark both correct;
+no horizontal page scroll at 375px (the row scrolls sideways instead); `tsc`, lint and production build clean.
+**Not yet verified:** the dashboard and sidebar with a real logged-in student — needs a sign-in.
+**Next:** S2 — dashboard body (Recently Solved, real class rank, due-soon). First phase needing backend work.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 2
 **Area:** Student persona — S0 design foundations
 **Did:**

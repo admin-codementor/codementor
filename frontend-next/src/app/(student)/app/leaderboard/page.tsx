@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import * as React from "react";
 import Box from "@mui/material/Box";
@@ -22,7 +22,6 @@ import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchField } from "@/components/ui/SearchField";
-import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { RatingBadge } from "@/components/ui/RatingBadge";
 import { EmptyState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
@@ -39,16 +38,6 @@ interface LeaderboardEntry {
   solvedCount: number;
   totalSubmissions: number;
 }
-
-interface RatingEntry {
-  id: string;
-  rank: number;
-  name: string;
-  rating: number;
-  contestsParticipated: number;
-}
-
-type Board = "solved" | "rating";
 
 // Metallic medal accents for the top-3 podium. Gold maps to the theme's warning
 // role; silver/bronze are scheme-aware tokens from theme/tokens.ts (see
@@ -97,16 +86,11 @@ function YouChip() {
 
 export default function LeaderboardPage() {
   const medal = medalColors[useTheme().palette.mode];
-  const [board, setBoard] = React.useState<Board>("solved");
   const [search, setSearch] = React.useState("");
   const [dept, setDept] = React.useState("all");
 
   const [data, setData] = React.useState<LeaderboardEntry[]>([]);
   const [loading, setLoading] = React.useState(true);
-
-  const [ratingData, setRatingData] = React.useState<RatingEntry[]>([]);
-  const [ratingLoading, setRatingLoading] = React.useState(false);
-  const [ratingLoaded, setRatingLoaded] = React.useState(false);
 
   const [currentUserId, setCurrentUserId] = React.useState<string | undefined>();
 
@@ -125,22 +109,6 @@ export default function LeaderboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  React.useEffect(() => {
-    if (board === "rating" && !ratingLoaded) {
-      setRatingLoading(true);
-      api
-        .get<{ success: boolean; data: RatingEntry[] }>("/api/rating/leaderboard")
-        .then((r) => {
-          if (r.data?.success) setRatingData(r.data.data ?? []);
-        })
-        .catch(() => {})
-        .finally(() => {
-          setRatingLoading(false);
-          setRatingLoaded(true);
-        });
-    }
-  }, [board, ratingLoaded]);
-
   const departments = Array.from(
     new Set(data.map((u) => u.department).filter(Boolean)),
   ) as string[];
@@ -152,30 +120,14 @@ export default function LeaderboardPage() {
       (dept === "all" || u.department === dept),
   );
 
-  const subtitle =
-    board === "solved"
-      ? `Top ${data.length} students ranked by problems solved.`
-      : `Top ${ratingData.length} ranked by contest rating.`;
-
   return (
     <Box>
       <PageHeader
         title="Leaderboard"
-        subtitle={subtitle}
-        actions={
-          <SegmentedButtons<Board>
-            value={board}
-            onChange={setBoard}
-            segments={[
-              { value: "solved", label: "By Problems" },
-              { value: "rating", label: "By Rating" },
-            ]}
-            ariaLabel="Leaderboard type"
-          />
-        }
+        subtitle={`Top ${data.length} students ranked by problems solved.`}
       />
 
-      {board === "solved" && (
+      {(
         <>
           {/* Podium */}
           {!loading && data.length >= 3 && (
@@ -211,8 +163,8 @@ export default function LeaderboardPage() {
                       {avatarInitials(entry.name)}
                     </Avatar>
                     {/* The name only needs to truncate against the podium
-                        column's real width, not an arbitrary fixed cap — a
-                        90px max-width was clipping names ("Aarav Chatter…")
+                        column's real width, not an arbitrary fixed cap â€” a
+                        90px max-width was clipping names ("Aarav Chatterâ€¦")
                         that had plenty of visible room to spare. */}
                     <Typography variant="caption" fontWeight={600} noWrap sx={{ maxWidth: "100%", textAlign: "center" }}>
                       {entry.name}
@@ -269,7 +221,7 @@ export default function LeaderboardPage() {
                     <YouChip />
                   </Stack>
                   <Typography variant="caption" color="onPrimaryContainer" sx={{ fontFamily: "ui-monospace, monospace", opacity: 0.85 }}>
-                    {me.solvedCount} solved · {me.totalSubmissions} submissions
+                    {me.solvedCount} solved Â· {me.totalSubmissions} submissions
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "right" }}>
@@ -290,7 +242,7 @@ export default function LeaderboardPage() {
               <SearchField
                 value={search}
                 onChange={setSearch}
-                placeholder="Search students…"
+                placeholder="Search studentsâ€¦"
                 label="Search students"
                 sx={{ flex: 1, minWidth: 200, maxWidth: { sm: 360 } }}
               />
@@ -426,97 +378,10 @@ export default function LeaderboardPage() {
 
           {data.length > 0 && (
             <Typography variant="caption" color="text.secondary" sx={{ display: "block", textAlign: "center", mt: 2 }}>
-              Score = problems solved × 10 pts · Showing top {data.length} students
+              Score = problems solved Ã— 10 pts Â· Showing top {data.length} students
             </Typography>
           )}
         </>
-      )}
-
-      {board === "rating" && (
-        <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
-          {ratingLoading ? (
-            <Box sx={{ p: 2 }}>
-              {Array.from({ length: 6 }).map((_, i) => (
-                <Skeleton key={i} height={48} sx={{ mb: 1 }} />
-              ))}
-            </Box>
-          ) : ratingData.length === 0 ? (
-            <EmptyState
-              icon={<EmojiEventsOutlinedIcon />}
-              title="No rated users yet"
-              description="Finalize a contest's ratings first to populate this board."
-            />
-          ) : (
-            <TableContainer sx={{ overflowX: "auto" }}>
-              <Table aria-label="Leaderboard by contest rating" sx={{ minWidth: 520 }}>
-                <TableHead>
-                  <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600, borderColor: "outlineVariant" } }}>
-                    <TableCell align="center" sx={{ width: 64 }}>Rank</TableCell>
-                    <TableCell>User</TableCell>
-                    <TableCell align="right" sx={{ width: 120 }}>Rating</TableCell>
-                    <TableCell align="right" sx={{ width: 120, display: { xs: "none", md: "table-cell" } }}>Contests</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {ratingData
-                    .filter((u) => u.name.toLowerCase().includes(search.toLowerCase()))
-                    .map((u) => {
-                      const isMe = String(u.id) === currentUserId;
-                      return (
-                        <TableRow
-                          key={u.id}
-                          hover
-                          sx={{
-                            bgcolor: isMe ? "primaryContainer" : undefined,
-                            borderLeft: isMe ? "2px solid" : "2px solid transparent",
-                            borderLeftColor: isMe ? "primary.main" : "transparent",
-                            "& td": { borderColor: "outlineVariant" },
-                            "&:last-child td": { border: 0 },
-                          }}
-                        >
-                          <TableCell align="center">
-                            <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center" }}>
-                              <RankCell rank={u.rank} />
-                            </Box>
-                          </TableCell>
-                          <TableCell>
-                            <Stack direction="row" spacing={1.5} alignItems="center">
-                              <Avatar
-                                sx={{
-                                  width: 32,
-                                  height: 32,
-                                  fontSize: 12,
-                                  fontWeight: 600,
-                                  bgcolor: isMe ? "primary.main" : "surfaceContainerHighest",
-                                  color: isMe ? "primary.contrastText" : "text.primary",
-                                }}
-                              >
-                                {avatarInitials(u.name)}
-                              </Avatar>
-                              <Stack direction="row" spacing={1} alignItems="center">
-                                <Typography variant="body2" fontWeight={500} noWrap>
-                                  {u.name}
-                                </Typography>
-                                {isMe && <YouChip />}
-                              </Stack>
-                            </Stack>
-                          </TableCell>
-                          <TableCell align="right">
-                            <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-                              <RatingBadge rating={u.rating} />
-                            </Box>
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontFamily: "ui-monospace, monospace", color: "text.secondary", display: { xs: "none", md: "table-cell" } }}>
-                            {u.contestsParticipated}
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          )}
-        </Card>
       )}
     </Box>
   );

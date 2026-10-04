@@ -23,6 +23,7 @@ import {
   TableSkeleton,
   TextSkeleton,
 } from "@/components/ui/Skeletons";
+import { QuickAccess } from "@/components/student/quick-access/QuickAccess";
 import { layout, radius } from "@/theme/tokens";
 import { MenuBookOutlinedIcon } from "@/components/ui/icons";
 
@@ -70,6 +71,7 @@ export default function StatesGallery() {
   const [retries, setRetries] = React.useState(0);
   // Computed once on mount, not on every render, so the demo timestamp is stable.
   const [staleSince] = React.useState(() => Date.now() - 23 * 60 * 1000);
+  const [demoNow] = React.useState(() => Date.now());
 
   return (
     <Box sx={{ maxWidth: 1200, mx: "auto", p: layout.pageGutter }}>
@@ -225,6 +227,34 @@ export default function StatesGallery() {
               </Box>
             </InteractiveCard>
           </Grid>
+        </SectionCard>
+
+        {/* ── Quick Access tiles ───────────────────────────────────────── */}
+        <SectionCard title="Quick access tiles — the dashboard entry row, with live lines">
+          <QuickAccess
+            stats={{ totalSubs: 48, acRate: 62, problemsSolved: 31, streak: 5, rank: 7, rating: 1200 }}
+            courses={[
+              { id: "java", title: "Java Fundamentals", description: null, moduleCount: 6, problemCount: 40, solvedCount: 25 },
+              { id: "dsa", title: "Data Structures", description: null, moduleCount: 8, problemCount: 60, solvedCount: 4 },
+            ]}
+            assignments={[
+              { id: "a1", title: "Arrays practice set", deadline: new Date(demoNow + 2 * 86400000).toISOString(), isExam: false, total: 5, solved: 2, problems: [] },
+              { id: "a2", title: "Recursion drill", deadline: new Date(demoNow + 5 * 86400000).toISOString(), isExam: false, total: 4, solved: 0, problems: [] },
+            ]}
+            exams={[
+              {
+                id: "e1", title: "Mid-term Coding Test", description: null,
+                window_start: new Date(demoNow + 3 * 86400000).toISOString(),
+                window_end: new Date(demoNow + 3 * 86400000 + 7200000).toISOString(),
+                duration_minutes: 90, section_count: 2, started: false, attempted: false, score: null, total: null,
+              },
+            ]}
+            className="CSE-A"
+          />
+          <Typography variant="caption" color="text.secondary">
+            Same component the dashboard renders, with stand-in data. Resize to phone width to see the row scroll
+            sideways instead of stacking.
+          </Typography>
         </SectionCard>
 
         {/* ── Shape scale ──────────────────────────────────────────────── */}

@@ -27,9 +27,10 @@ import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { VerdictChip } from "@/components/ui/VerdictChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
-import { useDashboardQuery } from "@/lib/queries/student";
+import { useAvailableExamsQuery, useDashboardQuery } from "@/lib/queries/student";
 import { ProblemOfTheDay } from "@/components/student/ProblemOfTheDay";
 import { ExamPerformance } from "@/components/student/ExamPerformance";
+import { QuickAccess } from "@/components/student/quick-access/QuickAccess";
 
 // ── Utilities ─────────────────────────────────────────────────────────────────
 
@@ -204,22 +205,22 @@ function DashboardSkeleton() {
 
 export default function DashboardPage() {
   const [name, setName] = React.useState("");
+  const [className, setClassName] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    setName(getUser()?.name?.split(" ")[0] ?? "");
+    const user = getUser();
+    setName(user?.name?.split(" ")[0] ?? "");
+    // "CSE-A" reads as the student's class without another request.
+    setClassName(user?.department ? [user.department, user.section].filter(Boolean).join("-") : null);
   }, []);
 
-  const { data, isLoading, isError, refetch } = useDashboardQuery();
+  const { data, isLoading, isError, error, refetch } = useDashboardQuery();
+  // Feeds the Tests tile. Its own failure must not take the dashboard down, so
+  // it stays a separate query and falls back to an empty list.
+  const { data: exams } = useAvailableExamsQuery();
 
   if (isLoading) return <DashboardSkeleton />;
-  if (isError || !data)
-    return (
-      <ErrorState
-        title="Couldn't load your dashboard"
-        description="Check your connection and try again."
-        onRetry={() => refetch()}
-      />
-    );
+  if (isError || !data) return <ErrorState error={error} onRetry={() => refetch()} />;
 
   const { dashboard, assignments, recommendations, courses } = data;
   const { stats, topics, recentSubmissions, heatmap } = dashboard;
@@ -233,6 +234,10 @@ export default function DashboardPage() {
         new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
     )
     .slice(0, 5);
+
+  const coursesCompleted = courses.filter(
+    (c) => c.problemCount > 0 && c.solvedCount >= c.problemCount,
+  ).length;
 
   const topTopics = topics.slice(0, 6);
   const topRecs = recommendations.slice(0, 5);
@@ -281,6 +286,14 @@ export default function DashboardPage() {
         </Typography>
       </Box>
 
+      <QuickAccess
+        stats={stats}
+        courses={courses}
+        assignments={assignments}
+        exams={exams ?? []}
+        className={className}
+      />
+
       {/* ── Stats row ── */}
       <Reveal>
       <Box
@@ -311,9 +324,10 @@ export default function DashboardPage() {
           accent="secondary"
         />
         <StatCard
-          icon={<EmojiEventsOutlinedIcon />}
-          label="Contest Rating"
-          value={stats.rating}
+          icon={<MenuBookOutlinedIcon />}
+          label="Courses Completed"
+          value={coursesCompleted}
+          helper={courses.length > 0 ? `of ${courses.length} enrolled` : undefined}
           accent="tertiary"
         />
       </Box>
