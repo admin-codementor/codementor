@@ -5,6 +5,42 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 14
+**Area:** Pre-merge readiness audit of `feat/student-persona` (S0–S11 + B0 + B3)
+**Checked:** branch is 15 ahead / 0 behind `origin/main` (clean fast-forward, no conflicts); no secrets or `.env`
+tracked; backend lockfile resolves (`npm ci --dry-run`); frontend dependencies untouched; no new env vars; no
+composite Firestore index needed (only single-field equality queries); `/api/:path*` rewrite already covers the
+new `/api/public/*`; lint 0 errors both sides; `tsc` clean; production build passes; 349 smoke checks pass;
+every route declared. Walked every student page plus three faculty pages in a browser with seeded data, logged
+in and logged out — **zero console errors** across the whole walk.
+**Three real problems found and fixed:**
+- **The courses header double-counted.** It summed per-course totals in the browser, so a problem in two courses
+  counted twice: "81 problems, 24 solved" next to a dashboard saying 22. `GET /api/courses` now returns
+  deduplicated `totals` alongside `data` (additive — every existing caller is unaffected), and the page uses it.
+  Reads 77 / 22 now.
+- **The problem page never showed which list it was walking.** S6's API returns the module name and nothing
+  rendered it, so the counter read a bare "1/22" — of what? It now reads **"1/22 in Basics"**. My S6 report said
+  it already did; the count was right, the label was not displayed. Corrected.
+- **Two smoke suites were leaking into the live database.** `codingRunAndSubmit` and `examCodingAndProctor`
+  create real graded submissions and never removed them — **53 fake submissions** had accumulated (16% of the
+  table), inflating the platform-wide totals faculty are shown. Worse, side-effect writes nobody owned had built
+  up **1,372 smoke-test entries in a 1,471-row audit log** (93%), so the faculty audit page was almost entirely
+  noise. Both suites now purge their submissions, and the runner ends with a sweep for audit/mastery/proctor
+  rows written under the `smoketest-` prefix. Backlog deleted: submissions 336 → 283 real, audit log 1471 → 99
+  real. A full run now verifiably leaves the database clean.
+**Verified end-to-end in the browser:** dashboard, courses, roadmaps, practice, tests hub, assignments,
+mistakes, leaderboard (scoped, pinned row, one profile link), Job-Ready Score (workings re-added by hand),
+profile incl. the Public Link tab, the public profile logged out, and a **real broken submission through the
+judge** — "0 of 2 hidden test cases passed", average/maximum time, terminal output with a clickable `line 1`.
+Faculty dashboard, courses and analytics render unchanged. All probe data deleted afterwards.
+**Still open — your call, nothing changed:** (1) `POST /api/submit` runs code for anonymous callers;
+(2) `GET /api/problems` serves the catalogue unauthenticated. Both are pre-existing and deliberate.
+**Known gaps, unchanged:** design lint rules stay warnings (98, all in faculty/IDE files no phase has swept);
+deep contest/Elo removal; class auto-enrolment (D5); the Firestore-emulator CI step still paused for Java.
+**Branch:** `feat/student-persona` — **not pushed, not merged.** Awaiting your go-ahead.
+
+---
+
 ## 2026-10-04 (Sun) — part 13
 **Area:** Student persona — B3 authorization, S10 Job-Ready Score, S11 shareable profile
 **Did — B3 (landed first, because S11 opens the first public endpoint):**

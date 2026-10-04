@@ -598,8 +598,22 @@ function IDEHeader({
           </Tooltip>
 
           {adjacent && (
-            <Typography variant="caption" color="text.secondary" sx={{ minWidth: 52, textAlign: "center", flexShrink: 0, display: { xs: "none", sm: "block" } }}>
+            // The count alone is ambiguous — "1/22" of what? Naming the module
+            // is the whole point of the context the API already returns, and
+            // without it a student cannot tell a module walk from a walk of the
+            // entire catalogue. Dropped first on narrow screens, then the count.
+            <Typography
+              variant="caption"
+              color="text.secondary"
+              noWrap
+              sx={{ minWidth: 52, textAlign: "center", flexShrink: 0, display: { xs: "none", sm: "block" } }}
+            >
               {adjacent.position}/{adjacent.total}
+              {adjacent.context && (
+                <Box component="span" sx={{ display: { xs: "none", md: "inline" } }}>
+                  {" "}in {adjacent.context}
+                </Box>
+              )}
             </Typography>
           )}
 

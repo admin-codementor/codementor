@@ -170,6 +170,8 @@ export interface AdjacentProblems {
   next: string | number | null;
   position: number;
   total: number;
+  /** The module or assignment being walked, or null for the whole catalogue. */
+  context?: string | null;
 }
 
 // ── Verdict / submissions ─────────────────────────────────────────────────────

@@ -51,6 +51,29 @@ export function useCoursesQuery() {
   });
 }
 
+export interface CourseTotals {
+  problems: number;
+  solved: number;
+  courses: number;
+}
+
+/**
+ * Catalogue-wide totals, deduplicated server-side.
+ *
+ * Adding the per-course counts up in the browser counts a problem twice when
+ * two courses share it, which had the header reading "81 problems, 24 solved"
+ * next to a dashboard saying 22.
+ */
+export function useCourseTotalsQuery() {
+  return useQuery<CourseTotals>({
+    queryKey: ["courses", "totals"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; totals?: CourseTotals }>("/api/courses");
+      return res.data?.totals ?? { problems: 0, solved: 0, courses: 0 };
+    },
+  });
+}
+
 export interface SolvedProblem {
   submission_id: string;
   problem_id: string | number;

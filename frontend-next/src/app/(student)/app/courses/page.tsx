@@ -21,7 +21,7 @@ import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
 import Chip from "@mui/material/Chip";
 import { shape, radius } from "@/theme/tokens";
-import { useCoursesQuery } from "@/lib/queries/student";
+import { useCoursesQuery, useCourseTotalsQuery } from "@/lib/queries/student";
 import type { CourseSummary } from "@/lib/types";
 
 const SORTS = ["Progress", "Title (A–Z)", "Most problems"] as const;
@@ -151,17 +151,13 @@ export default function CoursesPage() {
   const [sort, setSort] = React.useState<Sort>("Progress");
 
   const { data, isLoading, isError, refetch } = useCoursesQuery();
+  const { data: courseTotals } = useCourseTotalsQuery();
   const courses = data ?? [];
   const loading = isLoading;
   const error = isError;
 
-  const totals = courses.reduce(
-    (acc, c) => ({
-      problems: acc.problems + c.problemCount,
-      solved: acc.solved + c.solvedCount,
-    }),
-    { problems: 0, solved: 0 },
-  );
+  // Server-side and deduplicated: a problem in two courses is one problem.
+  const totals = courseTotals ?? { problems: 0, solved: 0 };
   const overallPct = totals.problems > 0 ? Math.round((totals.solved / totals.problems) * 100) : 0;
 
   const visibleCourses = courses

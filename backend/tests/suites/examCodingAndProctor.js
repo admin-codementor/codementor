@@ -30,7 +30,10 @@ module.exports = async function examCodingAndProctorSuite() {
     for (const id of problems) await del(`/api/faculty/problems/${id}`, F);
     await purge('exams', 'facultyId', [userId('examcp')]);
     await purge('proctorEvents', 'userId', [userId('examcp-student')]);
-  }, 'probe problems, exams and proctor events');
+    // The exam's coding answers are ordinary submissions; removing the exam
+    // does not remove them, and they were accumulating on every run.
+    await purge('submissions', 'userId', [userId('examcp-student')]);
+  }, 'probe problems, exams, proctor events and submissions');
 
   const now = Date.now();
   const windowStart = new Date(now - 60_000).toISOString();

@@ -39,10 +39,21 @@ exports.getCourses = async (req, res) => {
     const mySolvedIds = new Set(mySubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId));
 
     const now = Date.now();
+    // Catalogue-wide totals, deduplicated across courses. The page used to add
+    // the per-course counts up, which counts a problem twice when two courses
+    // share it — here the four company problems also sit in the CDP course, so
+    // the header read "81 problems, 24 solved" beside a dashboard saying 22.
+    const everyProblemId = new Set();
+    const everySolvedId = new Set();
+
     const data = await Promise.all(courses.map(async (c) => {
       const modules = await courseRepo.getModules(c.id);
       const problemIds = [...new Set(modules.flatMap(m => m.problemIds || []))];
       const solvedCount = problemIds.filter(pid => mySolvedIds.has(pid)).length;
+      for (const pid of problemIds) {
+        everyProblemId.add(pid);
+        if (mySolvedIds.has(pid)) everySolvedId.add(pid);
+      }
 
       // Enough per-module detail for the list to show where the student is,
       // without shipping every problem of every course.
@@ -72,7 +83,13 @@ exports.getCourses = async (req, res) => {
       };
     }));
 
-    res.json({ success: true, data });
+    // `totals` sits beside `data` rather than inside it: every existing caller
+    // reads the array and is unaffected.
+    res.json({
+      success: true,
+      data,
+      totals: { problems: everyProblemId.size, solved: everySolvedId.size, courses: courses.length },
+    });
   } catch (error) {
     console.error('getCourses error:', error);
     res.status(500).json({ success: false, error: 'Server Error' });
