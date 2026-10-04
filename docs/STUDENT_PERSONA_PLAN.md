@@ -90,6 +90,25 @@ Removed from the menu: **Contests** (D7), **My Classes** (pending Q-A; informati
 
 ---
 
+## Backend track (runs alongside the persona phases)
+
+Agreed 2026-10-03: upgrade the existing Express backend in place; **no NestJS rewrite** (Appendix D). Order:
+**B0** safety net → **B3** central authorization → then B1/B2/B4/B5 folded into whichever persona phase touches
+that code. Standing rule: any persona phase touching a backend route brings it up to standard (input validation,
+central permission check, no full-collection reads, smoke-test coverage).
+
+**B0 status (2026-10-04): landed, partly verified, emulator step paused.**
+- Done and verified: backend ESLint (`npm run lint`, clean), startup configuration checks
+  (`backend/src/config/env.js`), graceful shutdown on SIGTERM/SIGINT plus crash logging
+  (`backend/src/server.js`), Dockerfile aligned to Node 22, `docs/credentials` gitignored.
+- Done, **not yet verified**: running the smoke suite in CI against a Firestore emulator
+  (`firebase.json`, `backend/tests/withEmulator.js`). The emulator needs Java, unavailable on the current
+  machine, so the CI step is gated to manual (`workflow_dispatch`) and normal CI is unaffected.
+- **Resume on the college machine:** install a JRE 17+, run the emulator suite locally, then remove the two
+  `if: github.event_name == 'workflow_dispatch'` guards in `.github/workflows/ci.yml`.
+
+---
+
 ## Phase S0 — Design foundations (style system + state kit)
 
 **Goal:** fix the root causes of "bad spacing, corners, hover, alignment" once, in the theme, so every later phase

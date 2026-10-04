@@ -18,16 +18,24 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 - **ESLint added to the backend** (`eslint.config.js`, `npm run lint`): bug-focused rules, not formatting. Found and
   fixed 8 real leftovers (unused imports/vars across seed scripts, `departmentAnalytics`, `topicMasteryRepository`,
   two test suites). Lint is clean.
-- **Backend tests can now run in CI** without touching real data: `firebase.json` adds a Firestore emulator, and
+- **Backend tests wired to run in CI** without touching real data: `firebase.json` adds a Firestore emulator and
   `backend/tests/withEmulator.js` boots the backend against it. It **refuses to run** unless
-  `FIRESTORE_EMULATOR_HOST` is set, so the suite can never hit the live database. CI now runs lint + smoke tests
-  + Docker build (previously install + Docker build only).
+  `FIRESTORE_EMULATOR_HOST` is set, so the suite can never hit the live database.
 - **Security:** `docs/credentials` was NOT gitignored in a public repo — now ignored. (File not opened.)
-**Verified:** clean `npm ci`; lint clean; backend boots in emulator mode with no service account; `/health` responds;
-the test runner correctly refuses to run without the emulator.
-**Not yet verified:** the full smoke suite against a live emulator (needs Java, which isn't installed on this
-machine) and SIGTERM shutdown (Windows can't deliver it; Render/CI are Linux).
-**Next:** finish B0 verification, then B3 (central permission check), then S0.
+- Vendored MUI + frontend-design skill guides are now tracked in the repo (gitignore exception) so the style rules
+  survive a fresh clone.
+**Verified:** clean `npm ci`; lint clean from a clean install; backend boots in emulator mode with no service
+account; `/health` responds; the real service-account path still works (no production regression); the test runner
+correctly refuses to run without the emulator; `node:22-bookworm-slim` base image exists.
+**PAUSED — emulator smoke tests:** the Firestore emulator needs Java, which this machine doesn't have and we chose
+not to install. The CI step is committed but gated to **manual run only** (`workflow_dispatch`), so an unverified
+step cannot fail a pull request. Normal CI remains lint + Docker build, both verified. SIGTERM shutdown is likewise
+unverified (Windows cannot deliver the signal; Render and CI are Linux).
+**To resume on the college machine:** install a JRE (17+), run `npx firebase emulators:exec --only firestore
+--project codementor-ci "cd backend && npm run test:emulator"`, fix anything it finds, then delete the two
+`if: github.event_name == 'workflow_dispatch'` lines in `.github/workflows/ci.yml` so the suite runs on every PR.
+**Next:** paused until the move to the college computer. After that: finish B0 verification → B3 (central
+permission check) → S0 (frontend design foundations).
 **Branch:** `feat/student-persona`
 
 ---

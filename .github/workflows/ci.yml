@@ -5,10 +5,13 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  # Lets the paused Firestore-emulator smoke tests be run on demand from the
+  # Actions tab without failing anyone's pull request. See the step below.
+  workflow_dispatch:
 
 jobs:
   backend:
-    name: Backend — lint, smoke tests & Docker build
+    name: Backend — lint & Docker build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -20,8 +23,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
-      # The Firestore emulator is a Java program.
+      # The Firestore emulator is a Java program. Only needed by the smoke-test
+      # step below, which is currently manual-only.
       - uses: actions/setup-java@v4
+        if: github.event_name == 'workflow_dispatch'
         with:
           distribution: temurin
           java-version: '17'
@@ -39,7 +44,15 @@ jobs:
       # start unless FIRESTORE_EMULATOR_HOST is set. Checks needing Judge0 or the
       # AI provider report SKIPPED here; they are covered by `npm run preflight`
       # before a deploy.
-      - name: Smoke tests (Firestore emulator)
+      #
+      # PAUSED (2026-10-04): this step has never been run end to end, because the
+      # emulator needs Java and the development machine has none. Until it is
+      # verified it stays manual-only (Actions → CI → Run workflow) so an unproven
+      # step cannot fail anyone's pull request. Once it passes on the college
+      # machine, delete this `if:` and the one on setup-java above to make it run
+      # on every PR — which is the whole point of the step.
+      - name: Smoke tests (Firestore emulator) — manual run only, not yet verified
+        if: github.event_name == 'workflow_dispatch'
         run: >
           npx --yes firebase-tools@15 emulators:exec
           --only firestore
