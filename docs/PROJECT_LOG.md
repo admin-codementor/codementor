@@ -5,6 +5,32 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 8
+**Area:** Student persona — S5 Tests hub + proctoring as a switch
+**Did:**
+- **One Tests hub** at `/app/tests` with tabs **Exams | Aptitude | Technical MCQ**, replacing two separate menu
+  entries. Aptitude and Technical were already the same `mcqTests` collection split by category, so one panel
+  serves both; multi-section Exams keep their own panel. The tab lives in the URL (`?tab=technical`) so it can be
+  linked and survives a refresh. `/app/exams` and `/app/aptitude` redirect, so old links keep working.
+- **Proctoring is now a switch, not a type.** An assignment's `isExam` flag both marked it "an exam" and turned on
+  monitoring. It's now `proctored`, off by default, set by a "Require proctoring" toggle faculty already had.
+  Students see a **"Proctored"** chip and a "Start (proctored)" button — an assignment is coursework whether or
+  not it's watched; real exams live under Tests.
+- **No data migration.** Every reader (`examLock`, `cidrCheck`, analytics, the student and faculty endpoints)
+  takes `proctored ?? isExam`, and writes keep both fields. Existing assignments behave exactly as before, and
+  there was no risky one-off script against live data.
+**Verified in the browser:** hub tabs switch and filter correctly (Aptitude shows verbal/logical/aptitude,
+Technical shows only technical), the URL syncs, `/app/aptitude` redirects to the right tab, and the old Exams and
+Aptitude menu entries are gone.
+**Test note:** fixed a flaw in my own S3 suite — two seeded attempts shared a timestamp, so "the latest attempt"
+depended on Firestore's return order and the check failed intermittently. Also hit two environmental failures
+while re-running the suite repeatedly: the Gemini free-tier quota (429) and the problem-import rate limiter. Both
+are the suite tripping real protections, not regressions; every exam and assignment suite passed throughout.
+**Next:** S6 — problem page layout.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 7
 **Area:** Student persona — S4 course/module progress + scoped leaderboard
 **Did:**

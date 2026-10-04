@@ -99,7 +99,8 @@ async function enforceExamIP(req, res, next) {
         // submission policy), not here. The CIDR allowlist, if configured,
         // still applies regardless of isExam — unchanged from before this
         // function also learned about the exams collection.
-        const deadline = assignment.isExam ? (assignment.deadline?.toDate?.() ?? assignment.deadline) : null;
+        const proctored = assignment.proctored ?? assignment.isExam;
+        const deadline = proctored ? (assignment.deadline?.toDate?.() ?? assignment.deadline) : null;
         if (!checkWindowAndCidr(res, { deadline, allowedCidrs: assignment.allowedCidrs, closedMessage: 'This exam has ended. Submissions are closed.' }, req)) return;
       } // unknown assignment — let the controller handle it
     }

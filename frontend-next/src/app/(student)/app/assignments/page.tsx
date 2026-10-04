@@ -159,11 +159,13 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
             <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ maxWidth: { xs: 180, sm: 360 } }}>
               {assignment.title}
             </Typography>
+            {/* "Proctored", not "Exam": this is still an assignment, it just
+                has monitoring turned on. Real exams live under Tests. */}
             {assignment.isExam && (
               <Chip
-                label="Proctored Exam"
+                label="Proctored"
                 size="small"
-                sx={{ height: 20, fontSize: 10, fontWeight: 700, bgcolor: "tertiaryContainer", color: "onTertiaryContainer" }}
+                sx={{ height: 20, fontWeight: 700, bgcolor: "tertiaryContainer", color: "onTertiaryContainer" }}
               />
             )}
             {complete && (
@@ -241,7 +243,7 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
                     variant="body2"
                     sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, flexShrink: 0, fontWeight: 500 }}
                   >
-                    {assignment.isExam ? "Start Exam" : "Solve"}
+                    {assignment.isExam ? "Start (proctored)" : "Solve"}
                     <ArrowForwardIcon sx={{ fontSize: 15 }} />
                   </Link>
                 )}

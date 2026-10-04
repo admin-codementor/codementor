@@ -379,7 +379,7 @@ async function computeDeadlineRisk(scope, studentIds) {
   const result = new Map();
   const now = Date.now();
   const assignments = (await assignmentRepo.getAll()).filter((a) => (
-    !a.isExam && a.deadline && Array.isArray(a.problemIds) && a.problemIds.length && toMillis(a.deadline) <= now
+    !(a.proctored ?? a.isExam) && a.deadline && Array.isArray(a.problemIds) && a.problemIds.length && toMillis(a.deadline) <= now
   ));
   if (!assignments.length) return result;
 

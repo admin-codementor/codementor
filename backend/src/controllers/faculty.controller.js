@@ -95,7 +95,7 @@ exports.getDashboardData = async (req, res) => {
 
 // Shared validation for assignment create/update. Returns { error } on failure or
 // the normalised fields on success.
-async function normaliseAssignmentInput({ title, deadline, problem_ids, allowed_cidrs, is_exam, classroom_ids }, req) {
+async function normaliseAssignmentInput({ title, deadline, problem_ids, allowed_cidrs, is_exam, proctored, classroom_ids }, req) {
   if (typeof title !== 'string' || !title.trim() || title.length > 200) {
     return { error: 'Title is required and must be ≤ 200 characters.' };
   }
@@ -157,7 +157,13 @@ async function normaliseAssignmentInput({ title, deadline, problem_ids, allowed_
       title: title.trim(),
       deadline,
       allowedCidrs: cidrs,
-      isExam: is_exam === true,
+      // Proctoring is off unless the faculty member turns it on. `isExam` is the
+      // original name for the same switch and is still written so nothing that
+      // reads the old field changes behaviour; `proctored` is what the UI sends
+      // now, because "is this an exam?" and "should this be watched?" are the
+      // same question for an assignment and the second one is the honest one.
+      isExam: proctored === true || is_exam === true,
+      proctored: proctored === true || is_exam === true,
       problemIds: [...new Set(problem_ids)],
       classroomIds,
     },
@@ -223,7 +229,8 @@ exports.getAssignmentDetail = async (req, res) => {
         id: assignment.id,
         title: assignment.title || '',
         deadline: toISO(assignment.deadline),
-        is_exam: !!assignment.isExam,
+        is_exam: !!(assignment.proctored ?? assignment.isExam),
+        proctored: !!(assignment.proctored ?? assignment.isExam),
         allowed_cidrs: assignment.allowedCidrs || [],
         classroom_ids: classroomIds,
         classes,

@@ -35,8 +35,10 @@ module.exports = async function studentDashboardSuite() {
     // Same problem solved twice — the newer one must win, and it must appear once.
     { userId: STUDENT_ID, problemId: solvedId, verdict: 'Accepted', language: 'python', submittedAt: new Date(now - 3 * HOUR) },
     { userId: STUDENT_ID, problemId: solvedId, verdict: 'Accepted', language: 'java', submittedAt: new Date(now - 1 * HOUR) },
-    // Attempted but never solved — must not appear at all.
-    { userId: STUDENT_ID, problemId: failedId, verdict: 'Wrong Answer', language: 'python', submittedAt: new Date(now) },
+    // Attempted but never solved — must not appear at all. Distinct timestamps:
+    // with two identical ones, "the latest attempt" is whichever Firestore
+    // happened to return first, which made this suite flaky.
+    { userId: STUDENT_ID, problemId: failedId, verdict: 'Wrong Answer', language: 'python', submittedAt: new Date(now - 2 * HOUR) },
     { userId: STUDENT_ID, problemId: failedId, verdict: 'Runtime Error', language: 'python', submittedAt: new Date(now) },
   ];
   for (const row of seed) await db().collection('submissions').add(row);

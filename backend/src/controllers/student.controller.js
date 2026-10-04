@@ -231,7 +231,13 @@ exports.getAssignments = async (req, res) => {
           return { id: pid, title: p?.title || 'Unknown', difficulty: p?.difficulty || null, is_solved: solvedSet.has(pid) };
         });
         return {
-          id: a.id, title: a.title, deadline: toISO(a.deadline), isExam: a.isExam === true,
+          id: a.id,
+          title: a.title,
+          deadline: toISO(a.deadline),
+          // Students see "Proctored", not "Exam": an assignment is coursework
+          // whether or not it is watched.
+          proctored: (a.proctored ?? a.isExam) === true,
+          isExam: (a.proctored ?? a.isExam) === true,
           problems, total: problems.length, solved: problems.filter(p => p.is_solved).length,
         };
       });
