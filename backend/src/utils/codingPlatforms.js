@@ -68,6 +68,44 @@ async function fetchLeetCode(handle) {
   };
 }
 
+/**
+ * The free text on a platform profile, for proving the account is the
+ * student's: they paste a one-time code into a field only the account owner can
+ * edit, and we read it back.
+ *
+ * Several fields are joined rather than one being picked, because which of them
+ * a student finds and edits varies — Codeforces calls it "First name" and
+ * "Organization", LeetCode calls it "Summary". Any of them is proof.
+ */
+async function fetchProfileText(platform, handle) {
+  if (platform === 'codeforces') {
+    const info = await fetchJSON(`https://codeforces.com/api/user.info?handles=${encodeURIComponent(handle)}`);
+    if (info.status !== 'OK' || !info.result?.length) throw new Error('Codeforces handle not found');
+    const u = info.result[0];
+    return [u.firstName, u.lastName, u.organization].filter(Boolean).join(' ');
+  }
+
+  if (platform === 'leetcode') {
+    const query = `query u($username:String!){ matchedUser(username:$username){ profile{ realName aboutMe } } }`;
+    const data = await fetchJSON('https://leetcode.com/graphql', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Referer': 'https://leetcode.com' },
+      body: JSON.stringify({ query, variables: { username: handle } }),
+    });
+    const profile = data?.data?.matchedUser?.profile;
+    if (!profile) throw new Error('LeetCode username not found');
+    return [profile.realName, profile.aboutMe].filter(Boolean).join(' ');
+  }
+
+  throw new Error('This platform cannot be verified automatically');
+}
+
+/** Where to paste the code, so the instruction on screen matches the site. */
+const VERIFY_FIELD = {
+  codeforces: 'your Codeforces profile — the "First name" or "Organization" field under Settings → Social',
+  leetcode: 'your LeetCode profile — the "Summary" field under Edit Profile',
+};
+
 // Dispatch. Returns stats or throws (caller records sync_status='error').
 async function fetchPlatform(platform, handle) {
   if (platform === 'codeforces') return fetchCodeforces(handle);
@@ -75,4 +113,4 @@ async function fetchPlatform(platform, handle) {
   throw new Error('Platform is link-only (no live sync)');
 }
 
-module.exports = { LIVE_PLATFORMS, LINK_PLATFORMS, ALL_PLATFORMS, fetchPlatform };
+module.exports = { LIVE_PLATFORMS, LINK_PLATFORMS, ALL_PLATFORMS, fetchPlatform, fetchProfileText, VERIFY_FIELD };

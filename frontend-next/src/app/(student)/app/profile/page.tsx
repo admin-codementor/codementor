@@ -19,7 +19,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Divider from "@mui/material/Divider";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
-import { EditOutlinedIcon, CheckIcon, CloseIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, TrackChangesOutlinedIcon, LockOutlinedIcon, PersonOutlineIcon, HubOutlinedIcon, CodeOffOutlinedIcon, BugReportOutlinedIcon, CancelOutlinedIcon, TrendingUpIcon, TrendingDownIcon, LayersOutlinedIcon, CheckCircleOutlinedIcon } from "@/components/ui/icons";
+import { EditOutlinedIcon, CheckIcon, CloseIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, TrackChangesOutlinedIcon, LockOutlinedIcon, PersonOutlineIcon, HubOutlinedIcon, CodeOffOutlinedIcon, BugReportOutlinedIcon, CancelOutlinedIcon, TrendingUpIcon, TrendingDownIcon, LayersOutlinedIcon, CheckCircleOutlinedIcon, LinkOutlinedIcon } from "@/components/ui/icons";
 import { ResponsivePie } from "@nivo/pie";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal } from "@/components/ui/motion";
@@ -34,6 +34,7 @@ import { RatingBadge } from "@/components/ui/RatingBadge";
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
 import { ProfileSubmissions } from "@/components/profile/ProfileSubmissions";
 import { ProfileCodingProfiles } from "@/components/profile/ProfileCodingProfiles";
+import { PublicProfilePanel } from "@/components/profile/PublicProfilePanel";
 import type { DashboardStats, TopicMastery } from "@/lib/types";
 
 interface LanguageRow {
@@ -98,7 +99,7 @@ interface StatsData {
   languages: { language: string; n: number }[];
 }
 
-const TABS = ["overview", "submissions", "coding-profiles", "account"] as const;
+const TABS = ["overview", "submissions", "coding-profiles", "public-link", "account"] as const;
 type TabKey = (typeof TABS)[number];
 
 function initialsOf(name?: string) {
@@ -384,6 +385,7 @@ function ProfileInner() {
         <Tab value="overview" icon={<PersonOutlineIcon fontSize="small" />} iconPosition="start" label="Overview" sx={{ minHeight: 48, textTransform: "none" }} />
         <Tab value="submissions" icon={<CheckCircleOutlinedIcon fontSize="small" />} iconPosition="start" label="Solved" sx={{ minHeight: 48, textTransform: "none" }} />
         <Tab value="coding-profiles" icon={<HubOutlinedIcon fontSize="small" />} iconPosition="start" label="Coding Profiles" sx={{ minHeight: 48, textTransform: "none" }} />
+        <Tab value="public-link" icon={<LinkOutlinedIcon fontSize="small" />} iconPosition="start" label="Public Link" sx={{ minHeight: 48, textTransform: "none" }} />
         <Tab value="account" icon={<LockOutlinedIcon fontSize="small" />} iconPosition="start" label="Account" sx={{ minHeight: 48, textTransform: "none" }} />
       </Tabs>
 
@@ -649,6 +651,8 @@ function ProfileInner() {
 
       {/* ── Coding Profiles ── */}
       {tab === "coding-profiles" && <ProfileCodingProfiles />}
+
+      {tab === "public-link" && <PublicProfilePanel />}
 
       {/* ── Account ── */}
       {tab === "account" && (

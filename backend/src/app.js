@@ -37,6 +37,8 @@ const examRoutes = require('./routes/exam.routes');
 const profilesRoutes = require('./routes/profiles.routes');
 const courseRoutes = require('./routes/courses.routes');
 const roadmapRoutes = require('./routes/roadmaps.routes');
+const publicRoutes = require('./routes/public.routes');
+const { publicRoute } = require('./middleware/routeGuard');
 
 const { validateSubmission } = require('./middleware/security');
 
@@ -69,7 +71,7 @@ app.use('/api', apiLimiter);
 app.use('/api/auth', authRoutes);
 app.use('/api/student', studentRoutes);
 app.use('/api/faculty', facultyRoutes);
-app.post('/api/submit', validateSubmission);
+app.post('/api/submit', publicRoute('request validation only — the handler lives in submissions.routes'), validateSubmission);
 app.use('/api', submissionRoutes);
 app.use('/api/problems', problemRoutes);
 app.use('/api/ai', aiRoutes);
@@ -86,9 +88,10 @@ app.use('/api/exams', examRoutes);
 app.use('/api/profiles', profilesRoutes);
 app.use('/api/courses', courseRoutes);
 app.use('/api/roadmaps', roadmapRoutes);
+app.use('/api/public', publicRoutes);
 
 // ── Health check ────────────────────────────────────────────────────────────
-app.get('/health', (req, res) => {
+app.get('/health', publicRoute('liveness probe for the host, no data'), (req, res) => {
   res.json({ status: 'ok', message: 'CodeMentor API is running', timestamp: new Date().toISOString() });
 });
 

@@ -20,4 +20,9 @@ router.put('/me', c.setHandle);
 router.post('/me/sync', syncLimiter, c.syncMine);
 router.get('/leaderboard', c.getLeaderboard);
 
+// Ownership proof. Reading the external profile back is another outbound call,
+// and a wrong code invites retrying, so it shares the sync budget.
+router.post('/me/:platform/verify-code', syncLimiter, c.startVerification);
+router.post('/me/:platform/verify', syncLimiter, c.confirmVerification);
+
 module.exports = router;

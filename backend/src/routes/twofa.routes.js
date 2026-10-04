@@ -1,6 +1,7 @@
 const express = require('express');
 const { createLimiter } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth.middleware');
+const { publicRoute } = require('../middleware/routeGuard');
 const {
   setup2FA,
   enable2FA,
@@ -24,6 +25,6 @@ router.post('/enable', protect, enable2FA);
 router.post('/disable', protect, disable2FA);
 
 // Public login-flow endpoint.
-router.post('/verify', twofaLimiter, verify2FA);
+router.post('/verify', publicRoute('second factor during sign-in, before an access token exists'), twofaLimiter, verify2FA);
 
 module.exports = router;

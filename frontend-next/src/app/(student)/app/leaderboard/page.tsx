@@ -1,6 +1,8 @@
 "use client";
 
 import * as React from "react";
+import NextLink from "next/link";
+import Link from "@mui/material/Link";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Stack from "@mui/material/Stack";
@@ -47,6 +49,8 @@ interface LeaderboardEntry {
   id: string;
   rank: number;
   name: string;
+  /** Set only for students who have published a profile (D10). */
+  publicHandle?: string | null;
   rating: number;
   department?: string | null;
   section?: string | null;
@@ -391,9 +395,26 @@ export default function LeaderboardPage() {
                               </Avatar>
                               <Box sx={{ minWidth: 0 }}>
                                 <Stack direction="row" spacing={1} alignItems="center">
-                                  <Typography variant="body2" fontWeight={500} noWrap>
-                                    {u.name}
-                                  </Typography>
+                                  {/* A name links to its profile only when that
+                                      student chose to publish one; everyone else
+                                      stays plain text rather than a dead link. */}
+                                  {u.publicHandle ? (
+                                    <Link
+                                      component={NextLink}
+                                      href={`/u/${u.publicHandle}`}
+                                      variant="body2"
+                                      fontWeight={500}
+                                      noWrap
+                                      underline="hover"
+                                      color="inherit"
+                                    >
+                                      {u.name}
+                                    </Link>
+                                  ) : (
+                                    <Typography variant="body2" fontWeight={500} noWrap>
+                                      {u.name}
+                                    </Typography>
+                                  )}
                                   {isMe && <YouChip />}
                                 </Stack>
                                 {tier && (

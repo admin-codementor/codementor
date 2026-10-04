@@ -12,6 +12,7 @@
 const { capabilities, BASE } = require('./harness');
 
 const SUITES = {
+  routeAuth: require('./suites/routeAuthorization'),
   roles: require('./suites/roles'),
   authoring: require('./suites/authoring'),
   mcqImport: require('./suites/mcqAndImport'),
@@ -22,6 +23,7 @@ const SUITES = {
   studentDashboard: require('./suites/studentDashboard'),
   progressLeaderboard: require('./suites/progressAndLeaderboard'),
   roadmaps: require('./suites/roadmaps'),
+  jobReadyProfile: require('./suites/jobReadyAndProfile'),
   analyticsAi: require('./suites/analyticsAndAi'),
 };
 

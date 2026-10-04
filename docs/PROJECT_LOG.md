@@ -5,6 +5,64 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 13
+**Area:** Student persona — B3 authorization, S10 Job-Ready Score, S11 shareable profile
+**Did — B3 (landed first, because S11 opens the first public endpoint):**
+- `publicRoute(reason)` + a route audit that walks the mounted Express app. A route mounted without
+  `protect` fails silently — it works, for everyone, and looks exactly like one that was meant to. Now a route
+  must be guarded or declared, `npm run check:routes` prints the open surface, and a suite fails on anything new.
+- **It immediately found 12 open routes.** Checked each: sign-in, 2FA verify and `/health` are correct;
+  `/api/problems*` is open by design (documented in the route file, serves titles/tags only, no test cases);
+  `/api/submit*` and `/api/submissions` use deliberate optional auth. All 12 now carry a written reason.
+  **Two are worth your decision** — see "Open questions" below. Nothing was silently re-architected.
+- Express 5 keeps a mount path only inside a compiled matcher, and `protect` is an anonymous arrow with
+  `fn.name === ''` — matching on the name reported all 156 routes as unguarded. Fixed by comparing by reference
+  and recording mount paths at `app.use` time (`tests/routeAudit.js`).
+**Did — S10 Job-Ready Score:**
+- A score per target (Service companies · Product companies · your roadmap role) with **the workings shown**:
+  each component's own 0–100, its weight, the raw figures, and what would raise it. `/app/placement` is now the
+  Job-Ready Score page; the menu entry says "Job-Ready" and the old URL still works.
+- "Your next three things", ranked by **weight × gap** so a student is not sent to fix a 5-point component while
+  a 35-point one sits at zero.
+- "+N this week" is the same computation re-run over the data as it stood seven days ago — no stored snapshot to
+  drift, and nothing new to remember to write.
+- **Fixed a long-standing bug this exposed:** `placementTracks.js` says "array"/"hashmap" while real problems are
+  tagged "arrays"/"hashing", so the literal lookup matched almost nothing and the placement page has been
+  under-reporting every student's topics. Topics now carry aliases and match through `tagMatches`.
+**Did — S11 shareable verified profile:**
+- `/u/<handle>` — off by default, student picks a handle and publishes, unpublishing 404s the link immediately.
+  Handles are their own collection so uniqueness is the document id and the public read is a single get.
+- **Verified-only (Q-F).** An external account appears only after the student proves it is theirs by putting a
+  one-time `CM-XXXXXXXX` code in their Codeforces or LeetCode profile text, which we read back. Platforms we
+  cannot read back say so and can never appear. Changing a handle clears its verification.
+- No email, phone, roll number or section. The response is assembled field by field rather than by spreading a
+  user document and deleting things, so a field added to users later cannot leak. `X-Robots-Tag: noindex` plus
+  page metadata, a 30/minute rate limit, and the same 404 for "no such handle" and "not published" so the
+  endpoint cannot be used to discover handles.
+- Leaderboard names link to a profile only when that student published one.
+**Found by checking in a browser, not by tests:**
+- The score's components summed to 60 under a headline reading 59 — each contribution was rounded for display
+  while the total was computed exactly. On a page whose whole claim is "no black box", that is the one thing it
+  cannot do. The total is now the sum of the displayed figures.
+- "easy" and "medium" were showing as two of a student's **strongest topics** on the public profile, because
+  imported problems are tagged with their own difficulty.
+- The publish switch sat in its old position for a second before jumping; now optimistic, and it reverts on
+  failure.
+- The activity grid opened scrolled to a year ago — the least interesting end of it.
+**Verified:** browser walk of the score page (workings expanded and re-added by hand), the public profile logged
+out in dark + light at 1280px and 375px with no overflow, the publish/unpublish round trip against the live
+endpoint, and the leaderboard link appearing for exactly the one published student. Full suite **349 passed,
+5 skipped**; `tsc` clean, production build passes, 0 lint errors. Probe student, its 29 submissions and its
+handle all deleted afterwards.
+**Open questions for you (B3 found these; I did not change them):**
+1. `POST /api/submit` runs code for an **anonymous** caller. Rate-limited by IP, but it spends Judge0 capacity.
+   Lock it to signed-in users?
+2. `GET /api/problems` serves the whole catalogue (titles, tags, difficulty) to anyone. Deliberate, and nothing
+   depends on it — but a college may want its question bank private.
+**Branch:** `feat/student-persona` — still not pushed. S0–S11 complete.
+
+---
+
 ## 2026-10-04 (Sun) — part 12
 **Area:** Student persona — S9 Roadmaps
 **Did:**

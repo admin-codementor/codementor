@@ -24,7 +24,9 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Tests", href: "/app/tests", icon: <TimerOutlinedIcon />, section: "Work" },
   { label: "Mistakes", href: "/app/mistakes", icon: <HistoryOutlinedIcon />, section: "Progress" },
   { label: "Leaderboard", href: "/app/leaderboard", icon: <LeaderboardOutlinedIcon />, section: "Progress" },
-  { label: "Placement", href: "/app/placement", icon: <WorkOutlineOutlinedIcon />, section: "Progress" },
+  // The route keeps its old path so existing links still work; the label
+  // matches what the page is now called.
+  { label: "Job-Ready", href: "/app/placement", icon: <WorkOutlineOutlinedIcon />, section: "Progress" },
   { label: "AI Tutor", href: "/app/ai-tutor", icon: <SmartToyOutlinedIcon />, section: "Assistant" },
 ];
 

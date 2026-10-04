@@ -6,6 +6,7 @@ const classroomRepo = require('../repositories/classroomRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const mistakeNoteRepo = require('../repositories/mistakeNoteRepository');
+const publicHandleRepo = require('../repositories/publicHandleRepository');
 
 // Assignments a given student is actually assigned.
 //
@@ -385,13 +386,20 @@ exports.getLeaderboard = async (req, res) => {
       if (s.verdict === 'Accepted') stat.solved.add(s.problemId);
     }
 
+    // Public handles for the students on this board who have published one, so a
+    // name can link to its profile (D10). One query rather than one per row, and
+    // a student who has not published simply has no link.
+    const handleByUser = await publicHandleRepo.mapByUser();
+
     const ranked = scopedIds
       .map((id) => {
         const profile = studentsMap.get(id) || {};
         const stat = statsByUser.get(id);
+        const handle = profile.publicProfile?.published ? handleByUser.get(id) ?? null : null;
         return {
           id,
           name: profile.name || 'Unknown',
+          publicHandle: handle,
           rating: profile.rating != null ? parseInt(profile.rating, 10) : 1200,
           department: profile.department || null,
           section: profile.section || null,
@@ -628,6 +636,7 @@ exports.getPlacementReadiness = async (req, res) => {
   const userId = req.user.id;
   try {
     const { TRACKS } = require('../config/placementTracks');
+    const { tagMatches } = require('../services/roadmapService');
 
     // Distinct accepted problems per topic for this student.
     const mySubs = await submissionRepo.listByUser(userId);
@@ -641,13 +650,21 @@ exports.getPlacementReadiness = async (req, res) => {
       }
     }
     const tagRows = Object.entries(solvedByTopic).map(([topic, solved]) => ({ topic, solved }));
+    const solvedProblems = [...acceptedProblemsMap.values()];
 
     // Build each track's readiness from real solved counts.
     const deficitByTopic = {};
     const tracks = TRACKS.map(t => {
       let targetSum = 0, gotSum = 0;
       const topics = t.topics.map(tp => {
-        const solved = solvedByTopic[tp.topic] || 0;
+        // Was `solvedByTopic[tp.topic]`, a literal lookup of "array" against a
+        // tag spelled "arrays" — it matched almost nothing, so this page told
+        // students they had solved none of the topics they had just solved.
+        // Counts distinct problems, so a problem tagged both "graphs" and "bfs"
+        // is one solve for the Graphs topic, not two.
+        const terms = tp.aliases?.length ? tp.aliases : [tp.topic];
+        const solved = solvedProblems.filter(
+          p => (p.tags || []).some(tag => terms.some(term => tagMatches(tag, term)))).length;
         const counted = Math.min(solved, tp.target);
         targetSum += tp.target;
         gotSum += counted;
