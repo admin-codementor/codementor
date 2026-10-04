@@ -36,6 +36,7 @@ const mcqRoutes = require('./routes/mcq.routes');
 const examRoutes = require('./routes/exam.routes');
 const profilesRoutes = require('./routes/profiles.routes');
 const courseRoutes = require('./routes/courses.routes');
+const roadmapRoutes = require('./routes/roadmaps.routes');
 
 const { validateSubmission } = require('./middleware/security');
 
@@ -84,6 +85,7 @@ app.use('/api/mcq', mcqRoutes);
 app.use('/api/exams', examRoutes);
 app.use('/api/profiles', profilesRoutes);
 app.use('/api/courses', courseRoutes);
+app.use('/api/roadmaps', roadmapRoutes);
 
 // ── Health check ────────────────────────────────────────────────────────────
 app.get('/health', (req, res) => {

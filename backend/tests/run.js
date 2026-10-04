@@ -21,6 +21,7 @@ const SUITES = {
   codingRunSubmit: require('./suites/codingRunAndSubmit'),
   studentDashboard: require('./suites/studentDashboard'),
   progressLeaderboard: require('./suites/progressAndLeaderboard'),
+  roadmaps: require('./suites/roadmaps'),
   analyticsAi: require('./suites/analyticsAndAi'),
 };
 

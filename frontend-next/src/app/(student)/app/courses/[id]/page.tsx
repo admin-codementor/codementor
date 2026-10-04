@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import NextLink from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
 import Link from "@mui/material/Link";
@@ -93,6 +93,7 @@ function ModuleSection({ module, courseId, defaultExpanded }: { module: CourseMo
   const isEmpty = total === 0;
   return (
     <Accordion
+      id={`module-${module.id}`}
       defaultExpanded={defaultExpanded && !isEmpty}
       disableGutters
       elevation={0}
@@ -251,6 +252,10 @@ function ModuleSection({ module, courseId, defaultExpanded }: { module: CourseMo
 export default function CourseDetailPage() {
   const params = useParams<{ id: string }>();
   const courseId = params.id;
+  // A roadmap milestone links straight to the module it covers. Without this the
+  // student lands on the course and has to find it again, which is the "where was
+  // I?" problem roadmaps exist to remove.
+  const focusModuleId = useSearchParams().get("module");
   const [course, setCourse] = React.useState<CourseDetail | null>(null);
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState(false);
@@ -272,6 +277,13 @@ export default function CourseDetailPage() {
   React.useEffect(() => {
     load();
   }, [load]);
+
+  // Bring the linked module into view once it has rendered. Opening it is not
+  // enough on a long course: it can be well below the fold.
+  React.useEffect(() => {
+    if (!course || !focusModuleId) return;
+    document.getElementById(`module-${focusModuleId}`)?.scrollIntoView({ block: "start", behavior: "smooth" });
+  }, [course, focusModuleId]);
 
   // The server now deduplicates a problem shared by two modules and returns the
   // course totals, so the list page, this page and the dashboard can't disagree.
@@ -364,8 +376,9 @@ export default function CourseDetailPage() {
                   key={m.id}
                   module={m}
                   courseId={courseId}
-                  // Open where the work is, not simply the first module.
-                  defaultExpanded={m.id === course.nextUp?.moduleId}
+                  // Open where the work is: the module we were sent to, else
+                  // the one with work left, never simply the first.
+                  defaultExpanded={m.id === (focusModuleId ?? course.nextUp?.moduleId)}
                 />
               ))}
             </Stack>

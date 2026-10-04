@@ -1,0 +1,348 @@
+{
+  "version": 1,
+  "roadmaps": [
+    {
+      "id": "service-company-placement",
+      "role": "Service-Company Placement",
+      "tagline": "TCS, Infosys, Wipro, Accenture, Cognizant, Capgemini",
+      "summary": "The shortest honest path to clearing a mass-recruiter drive. These companies test breadth, not depth: clean basics, steady coding, aptitude, and the confidence to explain what you wrote. Work through this in order and you will have seen every shape of question they ask.",
+      "forWho": "Pre-final and final year students sitting for campus drives.",
+      "milestones": [
+        {
+          "id": "scp-1",
+          "title": "Write and run programs without hesitating",
+          "why": "Every drive starts with a timed online round. Fumbling over input parsing or a for-loop costs you the questions you could have solved.",
+          "practice": { "modules": ["basics"], "tags": ["programming basics"], "count": 12 }
+        },
+        {
+          "id": "scp-2",
+          "title": "Arrays",
+          "why": "More campus coding questions are array questions than anything else: traversal, searching, rotation, sub-arrays.",
+          "practice": { "modules": ["arrays"], "tags": ["arrays", "array"], "count": 12 }
+        },
+        {
+          "id": "scp-3",
+          "title": "Strings",
+          "why": "Palindromes, anagrams, reversal, counting characters. Cheap marks once you stop fearing index arithmetic.",
+          "practice": { "modules": ["strings"], "tags": ["strings"], "count": 12 }
+        },
+        {
+          "id": "scp-4",
+          "title": "Searching and sorting",
+          "why": "Binary search turns a brute-force timeout into a pass. Knowing which sort to reach for is routinely asked aloud in interviews.",
+          "practice": { "modules": ["searching", "sorting"], "tags": ["binary search", "sorting"], "count": 6 }
+        },
+        {
+          "id": "scp-5",
+          "title": "Hashing",
+          "why": "The single highest-leverage idea in this list: it collapses most nested-loop solutions into one pass.",
+          "practice": { "modules": ["hashing"], "tags": ["hashing"], "count": 4 }
+        },
+        {
+          "id": "scp-6",
+          "title": "Two pointers and sliding window",
+          "why": "The two patterns that come up whenever a question says subarray, pair, or without repeating characters.",
+          "practice": { "modules": ["two pointers", "sliding window"], "tags": ["two pointers", "sliding window"], "count": 6 }
+        },
+        {
+          "id": "scp-7",
+          "title": "Stacks, queues and linked lists",
+          "why": "Rarely the hard question, often the viva question. You are expected to be able to draw one and code one.",
+          "practice": { "modules": ["stacks", "queues", "linked list"], "tags": ["stack", "linked list"], "count": 5 }
+        },
+        {
+          "id": "scp-8",
+          "title": "Recursion and introductory DP",
+          "why": "Fibonacci, staircase, coin change. Service companies stop about here, so a working memoised solution is enough.",
+          "practice": { "modules": ["dynamic programming"], "tags": ["dynamic programming", "backtracking"], "count": 4 }
+        },
+        {
+          "id": "scp-9",
+          "title": "Aptitude and logical reasoning",
+          "why": "The round most people lose, because they practise code and assume aptitude will take care of itself. It will not: it is timed arithmetic under pressure.",
+          "mcq": ["aptitude", "logical", "verbal"]
+        },
+        {
+          "id": "scp-10",
+          "title": "Company-pattern practice",
+          "why": "Each recruiter has habits. Sit the company sets closest to your drive once you can already solve the topics above.",
+          "practice": { "modules": ["tcs", "infosys", "wipro", "accenture", "cognizant", "capgemini"], "count": 8 }
+        },
+        {
+          "id": "scp-11",
+          "title": "Explain your own code out loud",
+          "why": "The technical interview is mostly walk me through what you did. Re-open three problems you solved and narrate the approach, the complexity, and one case you got wrong first.",
+          "reading": [
+            { "label": "Big-O notation refresher", "url": "https://en.wikipedia.org/wiki/Big_O_notation" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "java-developer",
+      "role": "Java Developer",
+      "tagline": "Core Java, collections, Spring Boot",
+      "summary": "Java is still what most Indian service and product companies build on. This path takes you from syntax to a deployable Spring Boot service, with the data-structure work that interviews actually test sitting alongside it rather than after it.",
+      "forWho": "Students targeting Java backend roles, or anyone whose college stack is Java.",
+      "milestones": [
+        {
+          "id": "jd-1",
+          "title": "Java syntax and your first programs",
+          "why": "Types, loops, methods, and reading input. Nothing here is interesting, and everything later depends on it.",
+          "practice": { "modules": ["basics"], "tags": ["programming basics"], "count": 12 },
+          "reading": [
+            { "label": "Oracle: Language Basics", "url": "https://docs.oracle.com/javase/tutorial/java/nutsandbolts/index.html" }
+          ]
+        },
+        {
+          "id": "jd-2",
+          "title": "Arrays and strings",
+          "why": "A Java String is immutable and a Java array is fixed-length. Both facts shape how you solve almost every question.",
+          "practice": { "modules": ["arrays", "strings"], "tags": ["arrays", "strings"], "count": 16 }
+        },
+        {
+          "id": "jd-3",
+          "title": "Object-oriented programming",
+          "why": "Classes, inheritance, interfaces, polymorphism. This is the part of the interview where a wrong answer is remembered.",
+          "mcq": ["technical"],
+          "reading": [
+            { "label": "Oracle: Classes and Objects", "url": "https://docs.oracle.com/javase/tutorial/java/javaOO/index.html" }
+          ]
+        },
+        {
+          "id": "jd-4",
+          "title": "Collections framework",
+          "why": "List, Set, Map, and when each one is the right answer. Being able to describe HashMap is close to mandatory.",
+          "practice": { "modules": ["hashing"], "tags": ["hashing"], "count": 4 },
+          "reading": [
+            { "label": "Oracle: Collections Trail", "url": "https://docs.oracle.com/javase/tutorial/collections/index.html" }
+          ]
+        },
+        {
+          "id": "jd-5",
+          "title": "Exceptions and file I/O",
+          "why": "Checked versus unchecked, try-with-resources, and reading a file without leaking a handle.",
+          "reading": [
+            { "label": "Oracle: Exceptions", "url": "https://docs.oracle.com/javase/tutorial/essential/exceptions/index.html" }
+          ]
+        },
+        {
+          "id": "jd-6",
+          "title": "Linked lists, stacks and queues",
+          "why": "Implement them once by hand. After that you will understand what the library is doing for you.",
+          "practice": { "modules": ["linked list", "stacks", "queues"], "tags": ["linked list", "stack"], "count": 5 }
+        },
+        {
+          "id": "jd-7",
+          "title": "Trees and graphs",
+          "why": "Traversals, depth, and the two searches. Where product-company interviews start and service-company ones usually stop.",
+          "practice": { "modules": ["trees", "graphs"], "tags": ["trees", "graphs"], "count": 5 }
+        },
+        {
+          "id": "jd-8",
+          "title": "Dynamic programming",
+          "why": "Recognising overlapping subproblems. Aim for a correct memo table before you chase elegance.",
+          "practice": { "modules": ["dynamic programming"], "tags": ["dynamic programming"], "count": 4 }
+        },
+        {
+          "id": "jd-9",
+          "title": "SQL and databases",
+          "why": "Every backend role asks for joins, grouping and an index. It is the most reliably examined non-Java topic in a Java interview.",
+          "reading": [
+            { "label": "PostgreSQL: SQL Tutorial", "url": "https://www.postgresql.org/docs/current/tutorial-sql.html" }
+          ]
+        },
+        {
+          "id": "jd-10",
+          "title": "Spring Boot and REST APIs",
+          "why": "Controllers, dependency injection, and a service that answers on a port. This is what the job is.",
+          "reading": [
+            { "label": "Spring: Building a RESTful Web Service", "url": "https://spring.io/guides/gs/rest-service" }
+          ]
+        },
+        {
+          "id": "jd-11",
+          "title": "Ship one project, then prepare to defend it",
+          "why": "A small, finished, deployed service beats three half-built ones. Be ready to explain every dependency you added.",
+          "reading": [
+            { "label": "Git Basics", "url": "https://git-scm.com/book/en/v2/Git-Basics-Getting-a-Git-Repository" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "python-data-analyst",
+      "role": "Python / Data Analyst",
+      "tagline": "Python, SQL, pandas, statistics",
+      "summary": "Analyst roles reward a different skill from software roles: getting a messy table into a shape that answers a question, and then saying what it means. Python and SQL are the tools; the judgement is the job.",
+      "forWho": "Students aiming at data analyst, BI or junior data science roles.",
+      "milestones": [
+        {
+          "id": "pda-1",
+          "title": "Python basics",
+          "why": "Loops, functions, conditionals, input. Get fluent enough that the language stops being the obstacle.",
+          "practice": { "modules": ["basics"], "tags": ["programming basics"], "count": 12 },
+          "reading": [
+            { "label": "Python: The Tutorial", "url": "https://docs.python.org/3/tutorial/index.html" }
+          ]
+        },
+        {
+          "id": "pda-2",
+          "title": "Lists, dictionaries and sets",
+          "why": "Almost all data cleaning is dictionary work in disguise. Counting and grouping by hand first will make pandas make sense later.",
+          "practice": { "modules": ["arrays", "hashing"], "tags": ["arrays", "hashing"], "count": 12 }
+        },
+        {
+          "id": "pda-3",
+          "title": "Strings and text handling",
+          "why": "Real data arrives dirty: trailing spaces, mixed case, inconsistent separators. Text wrangling is most of the work.",
+          "practice": { "modules": ["strings"], "tags": ["strings"], "count": 12 }
+        },
+        {
+          "id": "pda-4",
+          "title": "Sorting, searching and slicing",
+          "why": "Top-N, ranking and lookups are the questions analysts are actually asked, every week.",
+          "practice": { "modules": ["searching", "sorting", "two pointers"], "tags": ["binary search", "two pointers"], "count": 5 }
+        },
+        {
+          "id": "pda-5",
+          "title": "Recursion and problem decomposition",
+          "why": "Less for the interview than for the habit: break a question into a smaller version of itself before writing anything.",
+          "practice": { "modules": ["dynamic programming"], "tags": ["dynamic programming", "backtracking"], "count": 3 }
+        },
+        {
+          "id": "pda-6",
+          "title": "NumPy and pandas",
+          "why": "DataFrames, filtering, groupby, merge. The point where you stop writing loops over rows.",
+          "reading": [
+            { "label": "pandas: 10 minutes to pandas", "url": "https://pandas.pydata.org/docs/user_guide/10min.html" },
+            { "label": "NumPy: the absolute basics", "url": "https://numpy.org/doc/stable/user/absolute_beginners.html" }
+          ]
+        },
+        {
+          "id": "pda-7",
+          "title": "SQL for analysis",
+          "why": "This is the round you will be tested on. Joins, GROUP BY, then window functions, in that order.",
+          "reading": [
+            { "label": "PostgreSQL: SQL Tutorial", "url": "https://www.postgresql.org/docs/current/tutorial-sql.html" }
+          ]
+        },
+        {
+          "id": "pda-8",
+          "title": "Statistics you will be asked about",
+          "why": "Mean versus median and why it matters, distributions, correlation is not causation, and what a p-value does and does not say.",
+          "mcq": ["aptitude", "logical"]
+        },
+        {
+          "id": "pda-9",
+          "title": "Visualisation and explaining a result",
+          "why": "A chart that needs explaining has failed. Practise reducing a finding to one sentence and one picture.",
+          "reading": [
+            { "label": "Matplotlib: Quick Start", "url": "https://matplotlib.org/stable/users/explain/quick_start.html" }
+          ]
+        },
+        {
+          "id": "pda-10",
+          "title": "One end-to-end analysis",
+          "why": "Take a public dataset, ask a real question, clean it, chart it, and write the answer in a paragraph. That is your portfolio.",
+          "reading": [
+            { "label": "data.gov.in open datasets", "url": "https://data.gov.in/" }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "web-developer",
+      "role": "Web Developer",
+      "tagline": "HTML, CSS, JavaScript, React, Node",
+      "summary": "The fastest route to something you can show someone. You build visible things early, which keeps motivation up, but the fundamentals still decide whether you pass the interview, so they stay in the path rather than being skipped.",
+      "forWho": "Students aiming at frontend, full-stack or product-engineering roles.",
+      "milestones": [
+        {
+          "id": "wd-1",
+          "title": "Programming foundations",
+          "why": "Frameworks change every two years. Loops, functions and conditionals do not.",
+          "practice": { "modules": ["basics"], "tags": ["programming basics"], "count": 10 }
+        },
+        {
+          "id": "wd-2",
+          "title": "HTML and CSS",
+          "why": "Semantic markup, the box model, flexbox and grid. Most of the frustration here is one unread page of documentation.",
+          "reading": [
+            { "label": "MDN: your first website", "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Your_first_website" },
+            { "label": "MDN: CSS layout", "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout" }
+          ]
+        },
+        {
+          "id": "wd-3",
+          "title": "JavaScript fundamentals",
+          "why": "Arrays and strings are where JavaScript is actually written: map, filter, reduce, split, join.",
+          "practice": { "modules": ["arrays", "strings"], "tags": ["arrays", "strings"], "count": 14 },
+          "reading": [
+            { "label": "MDN: scripting first steps", "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting" }
+          ]
+        },
+        {
+          "id": "wd-4",
+          "title": "The DOM and browser APIs",
+          "why": "Events, fetch, and local storage. Enough to make a page respond to a person without any framework at all.",
+          "reading": [
+            { "label": "MDN: introduction to the DOM", "url": "https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Introduction" }
+          ]
+        },
+        {
+          "id": "wd-5",
+          "title": "Data structures behind the UI",
+          "why": "Hash maps for lookups, stacks for undo and history. Interviews ask these even for frontend roles.",
+          "practice": { "modules": ["hashing", "stacks", "queues"], "tags": ["hashing", "stack"], "count": 4 }
+        },
+        {
+          "id": "wd-6",
+          "title": "Git and the command line",
+          "why": "Branch, commit, merge, resolve a conflict. Not optional, and quietly assessed from your first day.",
+          "reading": [
+            { "label": "Git: branching and merging", "url": "https://git-scm.com/book/en/v2/Git-Branching-Basic-Branching-and-Merging" }
+          ]
+        },
+        {
+          "id": "wd-7",
+          "title": "React",
+          "why": "Components, state and props. Learn why re-renders happen before learning the hooks that work around them.",
+          "reading": [
+            { "label": "React: Learn React", "url": "https://react.dev/learn" }
+          ]
+        },
+        {
+          "id": "wd-8",
+          "title": "Node and REST APIs",
+          "why": "A server, a route, a JSON response. Once your own frontend talks to your own backend, full-stack stops being a buzzword.",
+          "reading": [
+            { "label": "MDN: Express and Node introduction", "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Server-side/Express_Nodejs/Introduction" }
+          ]
+        },
+        {
+          "id": "wd-9",
+          "title": "Databases",
+          "why": "Store something that survives a restart. Schemas, queries, and why you never concatenate user input into SQL.",
+          "reading": [
+            { "label": "PostgreSQL: SQL Tutorial", "url": "https://www.postgresql.org/docs/current/tutorial-sql.html" }
+          ]
+        },
+        {
+          "id": "wd-10",
+          "title": "Algorithms for the interview round",
+          "why": "Even frontend interviews include one coding question. Two pointers, searching and a little recursion cover most of them.",
+          "practice": { "modules": ["two pointers", "sliding window", "searching", "dynamic programming"], "tags": ["two pointers", "sliding window", "binary search", "dynamic programming"], "count": 8 }
+        },
+        {
+          "id": "wd-11",
+          "title": "Deploy it, then write about it",
+          "why": "A live URL and a readable README are worth more than a private repository with twice the code.",
+          "reading": [
+            { "label": "MDN: publishing your website", "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Your_first_website/Publishing_your_website" }
+          ]
+        }
+      ]
+    }
+  ]
+}

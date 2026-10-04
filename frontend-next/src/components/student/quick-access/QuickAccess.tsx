@@ -11,6 +11,7 @@ import { ExpandLessIcon, ExpandMoreIcon } from "@/components/ui/icons";
 import { layout } from "@/theme/tokens";
 import type { Assignment, CourseSummary, DashboardStats } from "@/lib/types";
 import { examStatus, type ExamCardData } from "@/lib/queries/student";
+import type { RoadmapSummary } from "@/lib/queries/roadmaps";
 import {
   AssignmentsArt,
   ClassArt,
@@ -36,6 +37,8 @@ export interface QuickAccessProps {
   assignments: Assignment[];
   exams: ExamCardData[];
   className?: string | null;
+  /** The roadmap the student chose to follow, if any. */
+  activeRoadmap?: RoadmapSummary | null;
   loading?: boolean;
 }
 
@@ -67,6 +70,7 @@ function buildTiles({
   assignments,
   exams,
   className,
+  activeRoadmap,
   now,
 }: Omit<QuickAccessProps, "loading"> & { now: number }): Tile[] {
   // Furthest-along course that isn't finished; otherwise anything started.
@@ -128,6 +132,14 @@ function buildTiles({
         ? "Pick up where you left off"
         : "Solve your first problem";
 
+  // Following a roadmap is the useful state; until then the tile invites the
+  // student to pick one rather than reporting a number they have not chosen.
+  const roadmapLine = activeRoadmap
+    ? activeRoadmap.percent > 0
+      ? `${activeRoadmap.role} · ${activeRoadmap.percent}%`
+      : `${activeRoadmap.role} · start step 1`
+    : "Pick a path for the job you want";
+
   const rank = stats?.rank ?? 0;
   const classLine = className
     ? rank > 0
@@ -140,10 +152,16 @@ function buildTiles({
   return [
     { key: "learning", title: "My Learning", href: inProgress ? `/app/courses/${inProgress.id}` : "/app/courses", art: <LearningArt />, line: learningLine },
     { key: "assignments", title: "Assignments", href: "/app/assignments", art: <AssignmentsArt />, line: assignmentsLine },
-    { key: "tests", title: "Tests", href: "/app/exams", art: <TestsArt />, line: testsLine },
+    { key: "tests", title: "Tests", href: "/app/tests", art: <TestsArt />, line: testsLine },
     { key: "practice", title: "Practice", href: "/app/problems", art: <PracticeArt />, line: practiceLine },
     { key: "class", title: "My Class", href: "/app/classes", art: <ClassArt />, line: classLine },
-    { key: "roadmaps", title: "Roadmaps", href: "/app/placement", art: <RoadmapArt />, line: "See where you stand for placements" },
+    {
+      key: "roadmaps",
+      title: "Roadmaps",
+      href: activeRoadmap ? `/app/roadmaps/${activeRoadmap.id}` : "/app/roadmaps",
+      art: <RoadmapArt />,
+      line: roadmapLine,
+    },
   ];
 }
 

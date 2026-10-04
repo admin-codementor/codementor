@@ -119,7 +119,19 @@ async function addTestCases(problemId, testCases) {
   await batch.commit();
 }
 
+// Everything needed to decide "which problems belong to this topic, and has
+// this student solved them" — and nothing else. `description`, `starterCode`
+// and `solution` are the bulk of a problem document, and matching on tags never
+// looks at them. Roadmap progress reads the whole catalog on every request, so
+// the mask is the difference between a few kilobytes and a few hundred.
+const CATALOG_FIELDS = ['title', 'difficulty', 'tags', 'status'];
+
+async function listCatalog() {
+  const snap = await col().select(...CATALOG_FIELDS).get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
 module.exports = {
-  getAll, getById, getMapByIds, getTestCases, getPublicTestCases,
+  getAll, listCatalog, getById, getMapByIds, getTestCases, getPublicTestCases,
   create, update, remove, replaceTestCases, addTestCases,
 };

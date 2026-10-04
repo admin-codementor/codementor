@@ -5,6 +5,47 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 12
+**Area:** Student persona — S9 Roadmaps
+**Did:**
+- **Four career roadmaps** (Q-D): Service-Company Placement, Java Developer, Python / Data Analyst, Web
+  Developer. 10–11 milestones each, our own writing, stored as data (`backend/src/data/roadmaps.json`), with
+  `GET /api/roadmaps`, `GET /api/roadmaps/:id` and `PUT /api/student/active-roadmap`.
+- **Content is matched to the catalog, not hard-wired to it.** A milestone says what it is about ("two
+  pointers", "hashing"); the resolver finds this college's matching course modules and tagged problems. So
+  progress fills in from work already done — a student with 12 solves opens the placement roadmap at **30%**,
+  not 0% — a college that imports its own problems gets working roadmaps for free, and renaming a course cannot
+  silently empty a milestone. Targets are capped at what exists, so a thin topic cannot strand a roadmap at 90%.
+- **Steps we cannot verify say so.** Reading and test milestones are listed in the path but report `tracked:
+  false` rather than 0%, and the UI says why. Claiming to measure whether someone read the Spring docs would
+  make the whole number meaningless.
+- **Seeded Firestore is optional.** The API serves the bundled JSON when the `roadmaps` collection is empty, so
+  a fresh deployment has all four without a seed step; `scripts/seed-roadmaps.js` moves them into Firestore when
+  they should become editable.
+- Roadmaps added to the Learn menu; the dashboard tile now follows the chosen roadmap
+  ("Java Developer · 35%") instead of pointing at Placement, and the Tests tile points at `/app/tests`.
+- **Course pages take `?module=`**, so a milestone opens the module it covers and scrolls to it.
+- New smoke suite: 26 checks. Full suite **302 passed, 5 skipped** (same rate-limited AI/import skips).
+**Found by checking in a browser, not by tests:**
+- **The roadmap total double-counted.** "17 of 56 problems" for a student who had solved 12 — steps legitimately
+  share problems, so the sum over milestones is a weighting, not a count. The UI now reports the percentage and
+  "Step 1 of 9"; per-step counts stay exact. A new `currentStep` field carries the position (derived from where
+  the student is, not from how many steps are finished, which is wrong if they go out of order).
+- **A bad roadmap URL rendered a permanently blank page.** React Query paused the retry in
+  `fetchStatus: "paused"` because its online-manager believed the browser was offline — with
+  `navigator.onLine === true`. No data, no error, nothing on screen, forever. Fixed app-wide in `queryClient`:
+  `networkMode: "always"`, plus no retry on 4xx. This affected **every** React Query page, not just roadmaps.
+- Two wording fixes: a caption pointing "below" at something above it, and a loading skeleton shorter than the
+  card it stood in for.
+**Verified:** browser walk of all four roadmaps (dark + light, 1280px + 375px, no horizontal overflow), the
+follow/unfollow round trip, the module deep link, the 404 path, external links carrying
+`rel="noopener noreferrer"`, console clean. `tsc` clean, production build passes, 0 lint errors (99 pre-existing
+warnings in untouched files). Probe student and its 12 seeded submissions deleted afterwards.
+**Next:** S10 Job-Ready Score, then S11 shareable profile (B3 authorization helper must land before S11).
+**Branch:** `feat/student-persona` — still not pushed.
+
+---
+
 ## 2026-10-04 (Sun) — part 11
 **Area:** Student persona — S8 sweep (partial)
 **Did:**

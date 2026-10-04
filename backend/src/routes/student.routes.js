@@ -17,6 +17,7 @@ const {
   getStats,
   getSkills
 } = require('../controllers/student.controller');
+const { setActiveRoadmap } = require('../controllers/roadmaps.controller');
 const { protect } = require('../middleware/auth.middleware');
 
 const router = express.Router();
@@ -39,5 +40,8 @@ router.get('/placement', getPlacementReadiness);
 router.get('/badges', getBadges);
 router.get('/problems/:id/solutions', getProblemSolutions);
 router.put('/profile', updateProfile);
+// Lives with the student's own settings rather than under /api/roadmaps: it
+// writes to the user, not to a roadmap.
+router.put('/active-roadmap', setActiveRoadmap);
 
 module.exports = router;

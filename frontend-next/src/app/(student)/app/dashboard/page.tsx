@@ -27,6 +27,7 @@ import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useAvailableExamsQuery, useDashboardQuery, useMistakesQuery } from "@/lib/queries/student";
+import { useRoadmapsQuery } from "@/lib/queries/roadmaps";
 import { ProblemOfTheDay } from "@/components/student/ProblemOfTheDay";
 import { ExamPerformance } from "@/components/student/ExamPerformance";
 import { QuickAccess } from "@/components/student/quick-access/QuickAccess";
@@ -234,6 +235,11 @@ export default function DashboardPage() {
   // Feeds the Tests tile. Its own failure must not take the dashboard down, so
   // it stays a separate query and falls back to an empty list.
   const { data: exams } = useAvailableExamsQuery();
+  // The roadmap tile needs only the followed one; a failure here leaves the tile
+  // on its "pick a path" wording rather than breaking the dashboard.
+  const { data: roadmapData } = useRoadmapsQuery();
+  const activeRoadmap =
+    roadmapData?.roadmaps.find((r) => r.id === roadmapData.activeRoadmapId) ?? null;
   // Teaser only — its failure must not affect the rest of the dashboard.
   const { data: mistakes } = useMistakesQuery();
 
@@ -347,6 +353,7 @@ export default function DashboardPage() {
         assignments={assignments}
         exams={exams ?? []}
         className={className}
+        activeRoadmap={activeRoadmap}
       />
 
       {/* ── Stats row ── */}
