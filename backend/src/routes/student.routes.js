@@ -6,6 +6,9 @@ const {
   getRecommendations,
   getLeaderboard,
   getSolvedProblems,
+  getSolvedHistory,
+  getMistakes,
+  saveMistakeNote,
   getDailyChallenge,
   updateProfile,
   getPlacementReadiness,
@@ -28,6 +31,9 @@ router.get('/notifications', getNotifications);
 router.get('/recommendations', getRecommendations);
 router.get('/leaderboard', getLeaderboard);
 router.get('/solved-problems', getSolvedProblems);
+router.get('/solved', getSolvedHistory);
+router.get('/mistakes', getMistakes);
+router.put('/mistakes/:problemId/note', saveMistakeNote);
 router.get('/daily-challenge', getDailyChallenge);
 router.get('/placement', getPlacementReadiness);
 router.get('/badges', getBadges);

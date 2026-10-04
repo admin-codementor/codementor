@@ -5,6 +5,7 @@ const assignmentRepo = require('../repositories/assignmentRepository');
 const classroomRepo = require('../repositories/classroomRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const submissionRepo = require('../repositories/submissionRepository');
+const mistakeNoteRepo = require('../repositories/mistakeNoteRepository');
 
 // Assignments a given student is actually assigned.
 //
@@ -382,6 +383,138 @@ exports.getDailyChallenge = async (req, res) => {
   } catch (error) {
     console.error('Daily Challenge Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch daily challenge' });
+  }
+};
+
+// GET /api/student/solved — every problem this student has solved, newest first.
+//
+// One row per problem, carrying the accepted submission only. This is what
+// replaced the old submission history: a student's own record is the work they
+// finished, not a log of everything that failed on the way.
+exports.getSolvedHistory = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 200);
+
+    const mySubs = await submissionRepo.listByUser(userId);
+
+    const latestByProblem = new Map();
+    for (const s of mySubs) {
+      if (s.verdict !== 'Accepted') continue;
+      const seen = latestByProblem.get(s.problemId);
+      if (!seen || subMillis(s) > subMillis(seen)) latestByProblem.set(s.problemId, s);
+    }
+
+    const rows = [...latestByProblem.values()].sort((a, b) => subMillis(b) - subMillis(a)).slice(0, limit);
+    const problemsMap = await problemRepo.getMapByIds(rows.map((r) => r.problemId));
+
+    const data = rows.map((r) => {
+      const p = problemsMap.get(r.problemId);
+      return {
+        submission_id: r.id,
+        problem_id: r.problemId,
+        problem_title: p?.title || 'Unknown',
+        difficulty: p?.difficulty || null,
+        tags: p?.tags || [],
+        language: r.language,
+        runtime: r.runtime ?? null,
+        memory: r.memory ?? null,
+        solved_at: toISO(r.submittedAt),
+      };
+    });
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Solved history error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// Judge verdicts, said plainly. A student shouldn't have to decode "TLE" or be
+// shown a raw status string to know what to fix.
+const VERDICT_SUMMARY = {
+  'Wrong Answer': 'Wrong answer on a test case',
+  'Time Limit Exceeded': 'Too slow — hit the time limit',
+  'Memory Limit Exceeded': 'Used too much memory',
+  'Compilation Error': "Didn't compile",
+  'Runtime Error': 'Crashed while running',
+};
+
+const plainVerdict = (verdict) => {
+  if (!verdict) return 'Not solved yet';
+  if (VERDICT_SUMMARY[verdict]) return VERDICT_SUMMARY[verdict];
+  if (verdict.startsWith('Runtime Error')) return 'Crashed while running';
+  return verdict;
+};
+
+// GET /api/student/mistakes — problems attempted but never solved.
+//
+// The useful half of the failed attempts we stopped listing on the dashboard:
+// a revision list the student can work through, rather than a feed of failures.
+// A problem leaves this list automatically once it is accepted.
+exports.getMistakes = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const mySubs = await submissionRepo.listByUser(userId);
+
+    const solvedIds = new Set(mySubs.filter((s) => s.verdict === 'Accepted').map((s) => s.problemId));
+
+    const byProblem = new Map();
+    for (const s of mySubs) {
+      if (solvedIds.has(s.problemId)) continue;
+      const entry = byProblem.get(s.problemId) || { attempts: 0, last: null };
+      entry.attempts += 1;
+      if (!entry.last || subMillis(s) > subMillis(entry.last)) entry.last = s;
+      byProblem.set(s.problemId, entry);
+    }
+
+    const problemIds = [...byProblem.keys()];
+    const [problemsMap, notes] = await Promise.all([
+      problemRepo.getMapByIds(problemIds),
+      mistakeNoteRepo.listByUser(userId),
+    ]);
+    const noteByProblem = new Map(notes.map((n) => [String(n.problemId), n.note]));
+
+    const data = problemIds
+      .map((pid) => {
+        const { attempts, last } = byProblem.get(pid);
+        const p = problemsMap.get(pid);
+        return {
+          problem_id: pid,
+          problem_title: p?.title || 'Unknown',
+          difficulty: p?.difficulty || null,
+          tags: p?.tags || [],
+          attempts,
+          last_verdict: last?.verdict || null,
+          last_verdict_summary: plainVerdict(last?.verdict),
+          last_attempt_at: toISO(last?.submittedAt),
+          note: noteByProblem.get(String(pid)) || null,
+        };
+      })
+      // A problem whose record has been deleted would otherwise show as "Unknown".
+      .filter((row) => problemsMap.has(row.problem_id))
+      .sort((a, b) => new Date(b.last_attempt_at).getTime() - new Date(a.last_attempt_at).getTime());
+
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Mistakes error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// PUT /api/student/mistakes/:problemId/note — the student's own reminder.
+exports.saveMistakeNote = async (req, res) => {
+  try {
+    const { problemId } = req.params;
+    const raw = typeof req.body?.note === 'string' ? req.body.note.trim() : '';
+    if (raw.length > 500) {
+      return res.status(400).json({ success: false, error: 'A note can be at most 500 characters.' });
+    }
+    const saved = await mistakeNoteRepo.set(req.user.id, problemId, raw);
+    res.json({ success: true, data: { problem_id: problemId, note: saved?.note ?? null } });
+  } catch (error) {
+    console.error('Save mistake note error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 };
 

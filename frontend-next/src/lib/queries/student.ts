@@ -51,6 +51,52 @@ export function useCoursesQuery() {
   });
 }
 
+export interface SolvedProblem {
+  submission_id: string;
+  problem_id: string | number;
+  problem_title: string;
+  difficulty: string | null;
+  tags: string[];
+  language: string;
+  runtime: number | null;
+  memory: number | null;
+  solved_at: string;
+}
+
+/** Every problem the student has solved — the accepted attempt only. */
+export function useSolvedHistoryQuery() {
+  return useQuery<SolvedProblem[]>({
+    queryKey: ["student", "solved"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: SolvedProblem[] }>("/api/student/solved");
+      return res.data?.data ?? [];
+    },
+  });
+}
+
+export interface MistakeEntry {
+  problem_id: string | number;
+  problem_title: string;
+  difficulty: string | null;
+  tags: string[];
+  attempts: number;
+  last_verdict: string | null;
+  last_verdict_summary: string;
+  last_attempt_at: string;
+  note: string | null;
+}
+
+/** Problems attempted but not yet solved — the retry list. */
+export function useMistakesQuery() {
+  return useQuery<MistakeEntry[]>({
+    queryKey: ["student", "mistakes"],
+    queryFn: async () => {
+      const res = await api.get<{ success: boolean; data: MistakeEntry[] }>("/api/student/mistakes");
+      return res.data?.data ?? [];
+    },
+  });
+}
+
 export interface DailyChallenge {
   id: string | number;
   title: string;

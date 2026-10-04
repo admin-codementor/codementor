@@ -17,7 +17,7 @@ import Chip from "@mui/material/Chip";
 import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
-import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon, MenuBookOutlinedIcon, TimerOutlinedIcon } from "@/components/ui/icons";
+import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon, MenuBookOutlinedIcon, TimerOutlinedIcon, HistoryOutlinedIcon } from "@/components/ui/icons";
 import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
 import { Reveal } from "@/components/ui/motion";
@@ -26,7 +26,7 @@ import { shape, hoverTransition, radius } from "@/theme/tokens";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
-import { useAvailableExamsQuery, useDashboardQuery } from "@/lib/queries/student";
+import { useAvailableExamsQuery, useDashboardQuery, useMistakesQuery } from "@/lib/queries/student";
 import { ProblemOfTheDay } from "@/components/student/ProblemOfTheDay";
 import { ExamPerformance } from "@/components/student/ExamPerformance";
 import { QuickAccess } from "@/components/student/quick-access/QuickAccess";
@@ -232,6 +232,8 @@ export default function DashboardPage() {
   // Feeds the Tests tile. Its own failure must not take the dashboard down, so
   // it stays a separate query and falls back to an empty list.
   const { data: exams } = useAvailableExamsQuery();
+  // Teaser only — its failure must not affect the rest of the dashboard.
+  const { data: mistakes } = useMistakesQuery();
 
   if (isLoading) return <DashboardSkeleton />;
   if (isError || !data) return <ErrorState error={error} onRetry={() => refetch()} />;
@@ -248,6 +250,8 @@ export default function DashboardPage() {
         new Date(a.deadline).getTime() - new Date(b.deadline).getTime()
     )
     .slice(0, 5);
+
+  const mistakeCount = mistakes?.length ?? 0;
 
   const coursesCompleted = courses.filter(
     (c) => c.problemCount > 0 && c.solvedCount >= c.problemCount,
@@ -439,6 +443,19 @@ export default function DashboardPage() {
                 </Link>
               }
             >
+              {/* Unsolved attempts get their own page rather than a feed here. */}
+              {mistakeCount > 0 && (
+                <Button
+                  component={NextLink}
+                  href="/app/mistakes"
+                  size="small"
+                  fullWidth
+                  startIcon={<HistoryOutlinedIcon fontSize="small" />}
+                  sx={{ mb: 1.5, justifyContent: "flex-start" }}
+                >
+                  {mistakeCount} problem{mistakeCount === 1 ? "" : "s"} waiting for a retry
+                </Button>
+              )}
               {recentSolved.length === 0 ? (
                 <EmptyState
                   compact

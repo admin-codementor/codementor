@@ -4,7 +4,7 @@
 // student is shown the work they have SOLVED, never a feed of their failed
 // attempts. That rule is easy to undo by accident the next time this endpoint is
 // touched, so these checks seed real submissions and assert the filtering.
-const { tokenFor, get, Suite, purge, userId, db } = require('../harness');
+const { tokenFor, get, request, Suite, purge, userId, db } = require('../harness');
 
 const HOUR = 3600_000;
 
@@ -72,6 +72,53 @@ module.exports = async function studentDashboardSuite() {
   s.check('problemsSolved counts the solved problem', data.stats?.problemsSolved >= 1, `got ${data.stats?.problemsSolved}`);
   s.check('acceptance rate stays within 0-100',
     data.stats?.acRate >= 0 && data.stats?.acRate <= 100, `got ${data.stats?.acRate}`);
+
+  // ── Solved history (/api/student/solved) ───────────────────────────────────
+  const hist = await get('/api/student/solved', STUDENT);
+  s.check('solved history returns 200', hist.status === 200, `status ${hist.status}`);
+  const history = hist.body?.data ?? [];
+  s.check('solved history lists the solved problem once',
+    history.filter((r) => String(r.problem_id) === solvedId).length === 1,
+    `${history.filter((r) => String(r.problem_id) === solvedId).length} rows`);
+  s.check('solved history excludes the unsolved problem',
+    !history.some((r) => String(r.problem_id) === failedId));
+  s.check('solved history leaks no verdict', history.every((r) => r.verdict === undefined));
+
+  // ── Mistakes notebook (/api/student/mistakes) ──────────────────────────────
+  const mis = await get('/api/student/mistakes', STUDENT);
+  s.check('mistakes returns 200', mis.status === 200, `status ${mis.status}`);
+  const mistakes = mis.body?.data ?? [];
+
+  const failedRow = mistakes.find((m) => String(m.problem_id) === failedId);
+  s.check('an attempted-but-unsolved problem is listed', !!failedRow);
+  s.check('attempts are counted', failedRow?.attempts === 2, `got ${failedRow?.attempts}`);
+  s.check('the last verdict is explained in plain words',
+    failedRow?.last_verdict_summary === 'Crashed while running',
+    `got ${failedRow?.last_verdict_summary}`);
+  s.check('a solved problem never appears in mistakes',
+    !mistakes.some((m) => String(m.problem_id) === solvedId));
+
+  // A note is private to its author and survives a round trip.
+  s.onCleanup(() => purge('mistakeNotes', 'userId', [STUDENT_ID]), 'mistake notes');
+  const noteText = 'smoketest: forgot the empty-array case';
+  const put = await request('PUT', `/api/student/mistakes/${failedId}/note`, { token: STUDENT, body: { note: noteText } });
+  s.check('saving a note returns 200', put.status === 200, `status ${put.status}`);
+
+  const afterNote = (await get('/api/student/mistakes', STUDENT)).body?.data ?? [];
+  s.check('the note comes back on the entry',
+    afterNote.find((m) => String(m.problem_id) === failedId)?.note === noteText);
+
+  const otherStudent = tokenFor('sd-other', 'student');
+  const theirs = (await get('/api/student/mistakes', otherStudent)).body?.data ?? [];
+  s.check('another student never sees that note',
+    !theirs.some((m) => m.note === noteText));
+
+  const cleared = await request('PUT', `/api/student/mistakes/${failedId}/note`, { token: STUDENT, body: { note: '' } });
+  s.check('an emptied note is removed', cleared.status === 200 && cleared.body?.data?.note === null,
+    `status ${cleared.status}, note ${cleared.body?.data?.note}`);
+
+  const tooLong = await request('PUT', `/api/student/mistakes/${failedId}/note`, { token: STUDENT, body: { note: 'x'.repeat(501) } });
+  s.check('an over-long note is rejected', tooLong.status === 400, `status ${tooLong.status}`);
 
   // ── Daily challenge ────────────────────────────────────────────────────────
   const daily = await get('/api/student/daily-challenge', STUDENT);

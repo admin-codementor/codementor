@@ -5,6 +5,34 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-04 (Sun) — part 5
+**Area:** Student persona — S3 solved-only everywhere + Mistakes notebook
+**Did:**
+- **Profile → "Submissions" tab is now "Solved".** It was a submission log with Accepted/Failed filters. It now
+  lists the problems the student has actually solved (title, difficulty, language, runtime, date), searchable by
+  title or topic. Backend: new `GET /api/student/solved`.
+- **Problem page → "Submissions" tab is now "My solution"**, showing accepted attempts only. When the problem
+  isn't solved it says so plainly instead of listing failures.
+- **New Mistakes notebook** (`/app/mistakes`, in the menu under Progress): problems attempted but not yet solved,
+  with attempt count, when it was last tried, **what went wrong in plain words** ("Crashed while running", not
+  "Runtime Error (SIGSEGV)"), topic chips and a Try again button. Each entry takes a private note
+  ("forgot the empty-array case"). Problems leave the list automatically once solved.
+  Backend: `GET /api/student/mistakes`, `PUT /api/student/mistakes/:problemId/note`, and a `mistakeNotes` store.
+- Dashboard shows a one-line teaser ("3 problems waiting for a retry") linking to the notebook.
+- `/app/submissions` still redirects, so old links keep working.
+**Why this shape:** the user's rule is that students see correct, final submissions only. Failed attempts aren't
+deleted or hidden from faculty — they're moved somewhere there's something to *do* about them.
+**Test coverage:** the student suite grew to **28 checks**, including that a note is private (another student
+never sees it), an emptied note is removed, and an over-long note is rejected. Full suite **254 passed** (was 240),
+5 skipped (AI quota — pre-existing). `tsc`, lint and production build clean.
+**Still not verified in a browser.** The pages need a logged-in student and the browser pane has no session. Also
+discovered the frontend dev server can only run once per directory — yours is already on port 3000, so the
+preview now points there rather than starting a second one.
+**Next:** S4 — course → module progress with due dates, and the scoped (class/department/college) leaderboard.
+**Branch:** `feat/student-persona`
+
+---
+
 ## 2026-10-04 (Sun) — part 4
 **Area:** Student persona — S2 dashboard body (first phase with backend work)
 **Did:**

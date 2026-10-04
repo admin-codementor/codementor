@@ -19,7 +19,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Divider from "@mui/material/Divider";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
-import { EditOutlinedIcon, CheckIcon, CloseIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, TrackChangesOutlinedIcon, LockOutlinedIcon, PersonOutlineIcon, HistoryOutlinedIcon, HubOutlinedIcon, CodeOffOutlinedIcon, BugReportOutlinedIcon, CancelOutlinedIcon, TrendingUpIcon, TrendingDownIcon, LayersOutlinedIcon } from "@/components/ui/icons";
+import { EditOutlinedIcon, CheckIcon, CloseIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, EmojiEventsOutlinedIcon, TrackChangesOutlinedIcon, LockOutlinedIcon, PersonOutlineIcon, HubOutlinedIcon, CodeOffOutlinedIcon, BugReportOutlinedIcon, CancelOutlinedIcon, TrendingUpIcon, TrendingDownIcon, LayersOutlinedIcon, CheckCircleOutlinedIcon } from "@/components/ui/icons";
 import { ResponsivePie } from "@nivo/pie";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal } from "@/components/ui/motion";
@@ -309,7 +309,7 @@ function ProfileInner() {
 
   return (
     <Box>
-      <PageHeader title="Profile" subtitle="Your stats, achievements, submissions, and account." />
+      <PageHeader title="Profile" subtitle="Your stats, achievements, solved problems, and account." />
 
       {/* Identity header — persists across tabs */}
       <Card variant="outlined" sx={{ borderColor: "outlineVariant", mb: 3 }}>
@@ -379,7 +379,7 @@ function ProfileInner() {
         sx={{ mb: 3, borderBottom: "1px solid", borderColor: "outlineVariant", minHeight: 48 }}
       >
         <Tab value="overview" icon={<PersonOutlineIcon fontSize="small" />} iconPosition="start" label="Overview" sx={{ minHeight: 48, textTransform: "none" }} />
-        <Tab value="submissions" icon={<HistoryOutlinedIcon fontSize="small" />} iconPosition="start" label="Submissions" sx={{ minHeight: 48, textTransform: "none" }} />
+        <Tab value="submissions" icon={<CheckCircleOutlinedIcon fontSize="small" />} iconPosition="start" label="Solved" sx={{ minHeight: 48, textTransform: "none" }} />
         <Tab value="coding-profiles" icon={<HubOutlinedIcon fontSize="small" />} iconPosition="start" label="Coding Profiles" sx={{ minHeight: 48, textTransform: "none" }} />
         <Tab value="account" icon={<LockOutlinedIcon fontSize="small" />} iconPosition="start" label="Account" sx={{ minHeight: 48, textTransform: "none" }} />
       </Tabs>
@@ -641,7 +641,7 @@ function ProfileInner() {
         </Stack>
       )}
 
-      {/* ── Submissions ── */}
+      {/* ── Solved problems ── */}
       {tab === "submissions" && <ProfileSubmissions />}
 
       {/* ── Coding Profiles ── */}

@@ -39,11 +39,10 @@ import { fireConfetti } from "@/components/feedback/confetti";
 import { clearSession, getUser } from "@/lib/auth";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { TagChip } from "@/components/ui/TagChip";
-import { VerdictChip } from "@/components/ui/VerdictChip";
 import { ErrorState } from "@/components/ui/States";
 import { AITutorSidebar, type FailingTest } from "@/components/problem/AITutorSidebar";
 import { TimerWidget } from "@/components/problem/TimerWidget";
-import { darkScheme, lightScheme } from "@/theme/tokens";
+import { darkScheme, lightScheme, radius } from "@/theme/tokens";
 import type {
   ProblemDetail,
   AdjacentProblems,
@@ -807,6 +806,12 @@ export default function ProblemSolvingPage() {
     }
   }, [problemId]);
 
+  // Only accepted work is shown back to the student; see the panel below.
+  const acceptedHistory = React.useMemo(
+    () => history.filter((h) => h.verdict === "Accepted"),
+    [history],
+  );
+
   const handlePanelTab = (_: React.SyntheticEvent, val: PanelTab) => {
     setPanelTab(val);
     if (val === "submissions" && history.length === 0 && !historyLoading) {
@@ -1207,7 +1212,7 @@ export default function ProblemSolvingPage() {
               sx={{ minHeight: 42, "& .MuiTab-root": { minHeight: 42, py: 1, fontSize: "0.8rem" } }}
             >
               <Tab label="Description" value="description" />
-              <Tab label="Submissions" value="submissions" />
+              <Tab label="My solution" value="submissions" />
             </Tabs>
           </Box>
 
@@ -1306,10 +1311,12 @@ export default function ProblemSolvingPage() {
                       <Skeleton key={i} height={56} sx={{ borderRadius: 2 }} />
                     ))}
                   </Stack>
-                ) : history.length === 0 ? (
+                ) : acceptedHistory.length === 0 ? (
                   <Box sx={{ py: 8, textAlign: "center" }}>
                     <Typography color="text.secondary" variant="body2">
-                      No submissions yet for this problem.
+                      {history.length === 0
+                        ? "You haven't submitted this problem yet."
+                        : "Not solved yet — your accepted solution will appear here."}
                     </Typography>
                     <Button variant="outlined" size="small" onClick={() => setPanelTab("description")} sx={{ mt: 2 }}>
                       Read the problem
@@ -1317,22 +1324,31 @@ export default function ProblemSolvingPage() {
                   </Box>
                 ) : (
                   <Stack spacing={1}>
-                    {history.map((h) => (
+                    {/* Accepted work only. A list of failed attempts is not a
+                        useful record; unsolved problems collect in the Mistakes
+                        notebook instead, where there is something to do. */}
+                    {acceptedHistory.map((h) => (
                       <Box
                         key={h.id}
                         sx={{
                           display: "flex",
                           alignItems: "center",
                           justifyContent: "space-between",
+                          gap: 1,
                           px: 2,
                           py: 1.25,
                           bgcolor: "surfaceContainerLow",
-                          borderRadius: 2,
+                          borderRadius: radius.sm,
                           border: "1px solid",
                           borderColor: "outlineVariant",
                         }}
                       >
-                        <VerdictChip verdict={h.verdict} />
+                        <Stack direction="row" spacing={0.75} alignItems="center">
+                          <CheckCircleOutlineIcon fontSize="small" color="success" />
+                          <Typography variant="caption" fontWeight={600} color="success.main">
+                            Accepted
+                          </Typography>
+                        </Stack>
                         <Typography variant="caption" color="text.secondary">
                           {historyLangName(h.language)}
                         </Typography>
