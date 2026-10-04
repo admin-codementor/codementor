@@ -76,6 +76,9 @@ temp/
 *.key
 *.crt
 *.p12
+# Local credential notes — this repository is public; nothing here may be committed.
+docs/credentials
+docs/credentials/
 
 # ── Logs ─────────────────────────────────────────────────────
 logs/

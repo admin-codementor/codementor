@@ -12,15 +12,11 @@ const morgan = require('morgan');
 const helmet = require('helmet');
 require('dotenv').config({ quiet: true });
 
-const { apiLimiter } = require('./middleware/rateLimiter');
+// Check configuration before anything else loads — a missing secret should stop
+// the boot here, not surface as a confusing failure on a student's first request.
+require('./config/env').validateEnvOrExit();
 
-// Validate required environment variables before starting
-const REQUIRED_ENV = ['JWT_SECRET', 'JWT_REFRESH_SECRET'];
-const missing = REQUIRED_ENV.filter(k => !process.env[k]);
-if (missing.length > 0) {
-  console.error(`❌ Missing required environment variables: ${missing.join(', ')}`);
-  process.exit(1);
-}
+const { apiLimiter } = require('./middleware/rateLimiter');
 
 const authRoutes = require('./routes/auth.routes');
 const submissionRoutes = require('./routes/submissions.routes');
@@ -100,7 +96,8 @@ app.use((req, res) => {
 });
 
 // ── Global error handler ─────────────────────────────────────────────────────
-// eslint-disable-next-line no-unused-vars
+// Express identifies an error handler by its four-argument shape, so `next` must
+// stay even though it is unused.
 app.use((err, req, res, next) => {
   console.error('Unhandled error:', err);
   const status = err.status || err.statusCode || 500;

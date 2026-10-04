@@ -2,7 +2,7 @@
 //
 // The analytics checks assert the ARITHMETIC, not just HTTP 200 — a dashboard that
 // renders confident wrong numbers is worse than one that errors.
-const { tokenFor, get, post, Suite, capabilities, purge, userId, del } = require('../harness');
+const { tokenFor, get, post, Suite, capabilities, purge, userId } = require('../harness');
 
 module.exports = async function analyticsAndAiSuite() {
   const s = new Suite('Analytics & AI');

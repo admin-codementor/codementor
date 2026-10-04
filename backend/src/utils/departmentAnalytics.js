@@ -4,7 +4,7 @@
 // Shape follows the CampusTrack HOD review (docs/COMPETITOR_UX_RESEARCH.md part 2):
 // a four-state funnel first, then flags, then per-section comparison, then
 // written insights. The funnel is the spine: every other number hangs off it.
-const { studentState, flagFor, weeklyActivity, STATE_LABELS } = require('./studentState');
+const { flagFor, weeklyActivity, STATE_LABELS } = require('./studentState');
 
 const DAY_MS = 86400000;
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;

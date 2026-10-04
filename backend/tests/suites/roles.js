@@ -36,7 +36,7 @@ module.exports = async function rolesSuite() {
   }, 'probe classes and MCQ tests');
 
   // ── Read gates ──────────────────────────────────────────────────────────────
-  for (const [method, path, label] of STAFF_ROUTES) {
+  for (const [, path, label] of STAFF_ROUTES) {
     for (const role of STAFF) {
       const r = await get(path, tokenFor(`role-${role}`, role));
       s.check(`${label} — ${role} passes the gate`, r.status !== 403, `status ${r.status}`);

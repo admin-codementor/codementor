@@ -29,8 +29,6 @@ const LAST_NAMES = ['Sharma','Verma','Reddy','Iyer','Nair','Gupta','Rao','Menon'
   'Patel','Singh','Das','Bose','Chatterjee','Naidu','Pandey','Mishra','Joshi','Kapoor'];
 const DEPARTMENTS = ['CSE', 'ECE', 'MECH', 'CIVIL'];
 const SECTIONS = ['A', 'B'];
-const TOPICS = ['arrays','strings','hashing','two pointers','sliding window','stack','queue','linked list',
-  'trees','graphs','dynamic programming','greedy','backtracking','binary search','math','bit manipulation'];
 
 function makeName() { return `${rand(FIRST_NAMES)} ${rand(LAST_NAMES)}`; }
 function makeCode(len = 6) {
@@ -417,7 +415,7 @@ async function seedAuditLogs(faculty) {
 
 async function main() {
   const { students, faculty } = await seedPeople();
-  const newProblems = await seedProblems(faculty.map(f => f.id));
+  await seedProblems(faculty.map(f => f.id));
 
   // Full catalog for course/assignment/contest seeding = the 5 pre-existing + 15 new.
   const existing = await problemRepo.getAll();

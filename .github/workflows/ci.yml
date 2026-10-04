@@ -8,8 +8,9 @@ on:
 
 jobs:
   backend:
-    name: Backend — install & Docker build
+    name: Backend — lint, smoke tests & Docker build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
 
@@ -19,9 +20,31 @@ jobs:
           cache: 'npm'
           cache-dependency-path: backend/package-lock.json
 
+      # The Firestore emulator is a Java program.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Install dependencies
         working-directory: backend
         run: npm ci
+
+      - name: Lint
+        working-directory: backend
+        run: npm run lint
+
+      # Runs the suite against a throwaway in-memory Firestore, never the real
+      # project — no credentials exist in CI, and tests/withEmulator.js refuses to
+      # start unless FIRESTORE_EMULATOR_HOST is set. Checks needing Judge0 or the
+      # AI provider report SKIPPED here; they are covered by `npm run preflight`
+      # before a deploy.
+      - name: Smoke tests (Firestore emulator)
+        run: >
+          npx --yes firebase-tools@15 emulators:exec
+          --only firestore
+          --project codementor-ci
+          "cd backend && npm run test:emulator"
 
       - name: Build Docker image
         run: docker build -t codementor-backend:ci ./backend

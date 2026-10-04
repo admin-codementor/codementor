@@ -6,7 +6,10 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "nodemon src/server.js",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
     "test": "node tests/run.js",
+    "test:emulator": "node tests/withEmulator.js",
     "preflight": "node src/scripts/preflight.js",
     "check:ai": "node src/scripts/checkAiKey.js",
     "test:smoke": "node tests/run.js"
@@ -42,6 +45,8 @@
     "uuid": "^9.0.1"
   },
   "devDependencies": {
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
     "nodemon": "^3.1.14"
   },
   "overrides": {
