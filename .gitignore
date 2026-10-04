@@ -92,7 +92,16 @@ backend/_cleanup.js
 Problem Solving Page Design After claude/
 
 # ── Local Claude Code skills (personal to this machine, not shared) ─────────
-.claude/skills/
+# Personal skills stay out of the repo, but the vendored third-party UI guides
+# below are shared project standards — they must survive a fresh clone so every
+# machine and tool builds to the same rules. Licences and attribution are in
+# .claude/skills/THIRD_PARTY_NOTICES.md.
+.claude/skills/*
+!.claude/skills/THIRD_PARTY_NOTICES.md
+!.claude/skills/material-ui-styling/
+!.claude/skills/material-ui-theming/
+!.claude/skills/material-ui-nextjs/
+!.claude/skills/frontend-design/
 # One-off local admin-account creation script — writes real credentials to
 # the console when run; not something to ship in the repo.
 backend/scripts/create-admin-account.js
