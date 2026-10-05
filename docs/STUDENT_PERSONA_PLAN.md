@@ -31,6 +31,7 @@ of every student page done on 2026-10-03 (findings quoted inline below with file
 |---|---|---|
 | D1 | Illustrated home | ~~Tiles at the top of the dashboard~~ → **revised 2026-10-04 (D1b)**. |
 | D1b | Illustrated home | Illustrated **Quick Access** tiles are their own **Home page at `/app`**, which is where a student lands after signing in. The dashboard keeps the statistics and nothing else. Reversed after seeing D1 built: the tiles competed with the numbers below them and made one page do two jobs. |
+| D1c | Illustrated home | **No sidebar on Home** — a top bar, the six tiles, nothing else; the sidebar belongs to the screens reached from it, and the two are never shown together. Tiles follow CodeTantra's shape: illustration on a tinted panel, caption, then the name in a solid bar. Settled against the real screen rather than a description of it. |
 | D2 | Illustrations | unDraw, recoloured to our brand primary. Stored locally as SVGs. |
 | D3 | Style guidance | Use official MUI agent skills + Material 3 spacing rules + our own project skill (see S0). |
 | D4 | Submissions | Students see **only accepted, final** submissions. No wrong / error submissions anywhere on the student side. |

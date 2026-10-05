@@ -31,7 +31,21 @@ job does not rename the check it reports. Name restored, with a comment saying i
 **Verified:** Home and dashboard in a browser, dark and light, 1280px and 375px, no horizontal overflow, all six
 tiles real links with aria-labels, console clean, nav highlighting correct on both pages. `tsc` clean,
 production build passes, 0 lint errors (97 warnings, down from 98). Probe student deleted.
-**Decision recorded:** D1 → **D1b** in `STUDENT_PERSONA_PLAN.md`.
+**Then revised again the same day, against the real CodeTantra screen (D1c):**
+- **Home has no sidebar.** Shown the actual screen, the ask was clearer than "its own page": a top bar, the tiles,
+  and nothing else. The sidebar appears on the screens you reach *from* Home — never both at once, which would
+  give a student two sets of destinations for the same six places. `HomeShell` provides that bar; the student
+  layout picks the shell by route.
+- **Tiles took the CodeTantra shape**: illustration on a tinted panel, the caption below it, and the name last in
+  a solid bar — the part you aim at. Our captions stay live ("Profiling Test-1 is live now") where theirs read
+  "Click here to view all your scheduled and completed tests"; a label repeating the button under it is not worth
+  the space.
+- The gradient greeting band went too — on a launchpad a hero just pushes the third row off the screen. One quiet
+  line remains, and it carries the `h1`.
+- The account menu moved into `shell/AccountMenu.tsx`, shared by both shells. Two copies of a sign-out button is
+  how one of them ends up behaving differently from the other. That left a good deal of dead code in `AppShell`,
+  now removed.
+**Decision recorded:** D1 → **D1b** → **D1c** in `STUDENT_PERSONA_PLAN.md`.
 **Next:** roadmap.sh-style visual roadmaps. Agreed approach: extend the content model from a milestone list to a
 graph (topics · checkpoints · notes), render with React Flow + dagre, colour nodes by *verified* progress rather
 than self-declaration, and offer a list view on mobile. Build the renderer and re-author **one** roadmap first,

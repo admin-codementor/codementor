@@ -6,23 +6,20 @@ import Typography from "@mui/material/Typography";
 import { DataState } from "@/components/ui/DataState";
 import { CardGridSkeleton } from "@/components/ui/Skeletons";
 import { QuickAccessGrid } from "@/components/student/quick-access/QuickAccessGrid";
-import { Reveal } from "@/components/ui/motion";
 import { getUser } from "@/lib/auth";
-import { shape, layout } from "@/theme/tokens";
 import { useAvailableExamsQuery, useDashboardQuery } from "@/lib/queries/student";
 import { useRoadmapsQuery } from "@/lib/queries/roadmaps";
 
 /**
  * Home — where a student lands after signing in.
  *
- * Six illustrated tiles and nothing else. The temptation is to put a couple of
- * statistics here too, and that is exactly what went wrong when this lived on
- * top of the dashboard: two jobs on one page, each making the other harder to
- * read. The numbers are one click away on the dashboard, which is now free to
- * be only that.
+ * Six illustrated tiles and nothing else, on the pattern of the screen the HOD
+ * liked. No sidebar (see `HomeShell`), no statistics, no greeting band: the
+ * point of a launchpad is that there are six things on it.
  *
- * Each tile carries a live line, so the page still answers "what should I do
- * now?" — "Profiling Test-1 is live now" is worth more than six labels.
+ * One difference from the screen it is modelled on: each tile's caption is live
+ * rather than "click here to view your tests". "Profiling Test-1 is live now"
+ * is worth the space; a label repeating the button under it is not.
  */
 
 function greetingFor(hour: number) {
@@ -52,51 +49,30 @@ export default function HomePage() {
   const activeRoadmap =
     roadmapData?.roadmaps.find((r) => r.id === roadmapData.activeRoadmapId) ?? null;
 
-  const stats = data?.dashboard?.stats;
-  const isNewUser = !!stats && stats.totalSubs === 0;
-
   return (
     <Box>
-      {/* Same tonal band the dashboard used to open with. It belongs here now:
-          a greeting belongs at the door, not one room further in. */}
-      <Box
-        sx={{
-          mb: layout.sectionGap,
-          p: { xs: 2.5, sm: 3.5 },
-          borderRadius: `${shape.extraLarge}px`,
-          color: "onPrimaryContainer",
-          background:
-            "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 12%, var(--mui-palette-primaryContainer)))",
-          boxShadow: "0 8px 24px color-mix(in srgb, var(--mui-palette-primaryContainer) 45%, transparent)",
-        }}
-      >
-        <Typography variant="h3" component="h1" fontWeight={700} sx={{ letterSpacing: "-0.01em" }}>
-          {name ? `${greeting}, ${name}!` : `${greeting}!`}
-        </Typography>
-        <Typography variant="body1" sx={{ mt: 0.75, opacity: 0.85, maxWidth: 560 }}>
-          {isNewUser
-            ? "Everything starts from here. Pick where you want to begin."
-            : "Where would you like to pick up?"}
-        </Typography>
-      </Box>
+      {/* One quiet line rather than the gradient band this page used to open
+          with. The tiles are the content; a hero above them just pushes the
+          third row off the screen. */}
+      <Typography variant="h6" component="h1" fontWeight={600} sx={{ mb: { xs: 2, sm: 3 } }}>
+        {name ? `${greeting}, ${name}` : greeting}
+      </Typography>
 
       <DataState
         loading={isLoading}
         fetching={isFetching && !isLoading}
         error={isError ? error : undefined}
         onRetry={refetch}
-        skeleton={<CardGridSkeleton count={6} height={128} minWidth={280} />}
+        skeleton={<CardGridSkeleton count={6} height={280} minWidth={260} />}
       >
-        <Reveal>
-          <QuickAccessGrid
-            stats={stats}
-            courses={data?.courses ?? []}
-            assignments={data?.assignments ?? []}
-            exams={exams ?? []}
-            className={className}
-            activeRoadmap={activeRoadmap}
-          />
-        </Reveal>
+        <QuickAccessGrid
+          stats={data?.dashboard?.stats}
+          courses={data?.courses ?? []}
+          assignments={data?.assignments ?? []}
+          exams={exams ?? []}
+          className={className}
+          activeRoadmap={activeRoadmap}
+        />
       </DataState>
     </Box>
   );

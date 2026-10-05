@@ -2,8 +2,10 @@
 
 import * as React from "react";
 import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, AssignmentOutlinedIcon, TimerOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon, FormatListBulletedOutlinedIcon, HistoryOutlinedIcon, WaypointsIcon, HomeOutlinedIcon } from "@/components/ui/icons";
+import { usePathname } from "next/navigation";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
+import { HomeShell } from "@/components/shell/HomeShell";
 
 // Grouped by what the student is doing — learning, graded work, then progress —
 // rather than by which feature built it.
@@ -34,11 +36,21 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  // Home gets a top bar and no sidebar; everything reached from it gets the
+  // full shell. Never both at once — two sets of destinations for the same six
+  // places reads as a menu attached to a menu.
+  const isHome = pathname === "/app";
+
   return (
     <AuthGuard>
-      <AppShell navItems={NAV_ITEMS} profileHref="/app/profile">
-        {children}
-      </AppShell>
+      {isHome ? (
+        <HomeShell profileHref="/app/profile">{children}</HomeShell>
+      ) : (
+        <AppShell navItems={NAV_ITEMS} profileHref="/app/profile">
+          {children}
+        </AppShell>
+      )}
     </AuthGuard>
   );
 }

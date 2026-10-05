@@ -6,7 +6,6 @@ import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { InteractiveCard } from "@/components/ui/InteractiveCard";
-import { layout } from "@/theme/tokens";
 import type { Assignment, CourseSummary, DashboardStats } from "@/lib/types";
 import { examStatus, type ExamCardData } from "@/lib/queries/student";
 import type { RoadmapSummary } from "@/lib/queries/roadmaps";
@@ -183,11 +182,11 @@ export function QuickAccessGrid(props: QuickAccessProps) {
       aria-label="Quick access"
       sx={{
         display: "grid",
-        gap: 2,
-        // One per row on a phone: this is the whole page now, so there is no
-        // reason to squeeze six tiles into a sideways-scrolling strip the way
-        // the dashboard row had to.
-        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", lg: "repeat(3, 1fr)" },
+        gap: { xs: 2, sm: 3 },
+        // One per row on a phone. This is the whole screen, so there is no
+        // reason to squeeze six tiles into the sideways-scrolling strip the
+        // dashboard row had to use.
+        gridTemplateColumns: { xs: "1fr", sm: "repeat(2, 1fr)", md: "repeat(3, 1fr)" },
       }}
     >
       {tiles.map((tile) => (
@@ -195,25 +194,59 @@ export function QuickAccessGrid(props: QuickAccessProps) {
           key={tile.key}
           href={tile.href}
           ariaLabel={`${tile.title}. ${tile.line}`}
+          contentSx={{ p: 0, alignItems: "stretch" }}
         >
-          <Stack
-            direction="row"
-            alignItems="center"
-            spacing={2.5}
-            sx={{ p: layout.cardPadding, minHeight: 128 }}
-          >
-            <Box sx={{ width: 104, height: 78, flexShrink: 0 }}>{tile.art}</Box>
-            <Box sx={{ minWidth: 0 }}>
-              <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.25 }}>
-                {tile.title}
-              </Typography>
+          <Stack sx={{ height: "100%" }}>
+            {/* Illustration above the words, on a tinted panel, so the row
+                reads as six pictures rather than six paragraphs. */}
+            <Box
+              aria-hidden
+              sx={{
+                px: 3,
+                pt: 3,
+                pb: 2,
+                display: "grid",
+                placeItems: "center",
+                backgroundColor: "surfaceContainerLow",
+              }}
+            >
+              <Box sx={{ width: "100%", maxWidth: 196, aspectRatio: "4 / 3" }}>{tile.art}</Box>
+            </Box>
+
+            {/* The live line sits where CodeTantra puts its "click here to…"
+                caption, and earns that space by saying something true today. */}
+            <Box
+              sx={{
+                flex: 1,
+                px: 2.5,
+                py: 2,
+                display: "grid",
+                placeItems: "center",
+                minHeight: 72,
+              }}
+            >
               {props.loading ? (
-                <Skeleton variant="text" width="80%" sx={{ mt: 0.5 }} />
+                <Skeleton variant="text" width="70%" />
               ) : (
-                <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                <Typography variant="body2" color="text.secondary" align="center">
                   {tile.line}
                 </Typography>
               )}
+            </Box>
+
+            {/* The name last, as a solid bar — the part you aim at. */}
+            <Box
+              sx={{
+                px: 2,
+                py: 1.5,
+                textAlign: "center",
+                backgroundColor: "primary.main",
+                color: "primary.contrastText",
+              }}
+            >
+              <Typography variant="subtitle1" component="span" fontWeight={700} noWrap>
+                {tile.title}
+              </Typography>
             </Box>
           </Stack>
         </InteractiveCard>
