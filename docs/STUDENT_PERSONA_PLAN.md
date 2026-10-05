@@ -46,6 +46,7 @@ of every student page done on 2026-10-03 (findings quoted inline below with file
 | D13 | Git | New branch from `main`. |
 | D14 | Log | `docs/PROJECT_LOG.md`, dated daily entries, newest first. |
 | D15 | New features | Add **Shareable verified profile** and **Mistakes notebook**. |
+| D16 | Practice vs. Courses | Not merged. Practice keeps its own identity — self-directed, weak-topic-aware — regrouped under a new **Workbench** section with Sandbox. Courses stays faculty-sequenced order. See S12. |
 
 ## 3. Answered follow-ups (2026-10-03)
 
@@ -500,8 +501,123 @@ check endpoints. Security review before release (it's the first public data endp
 | S9 Roadmaps | L | S4, Q-D |
 | S10 Job-Ready Score | M–L | S9, Q-C |
 | S11 Shareable profile | L | S10, Q-E, Q-F |
+| S12 Workbench (Practice rework) | S | S10 (reuses `getSkills`), D16 |
 
 S3/S4 can run in either order; S6–S7 can move earlier if the problem page is the most urgent complaint.
+
+---
+
+## Phase S12 — Workbench (Practice becomes weak-topic coaching, grouped with Sandbox)
+
+**Origin:** 2026-10-05 conversation. Started as "is Practice redundant with Courses?" — checked the real
+data and found **every one of the 77 published problems is already inside a course (zero orphans)**, which
+supports the instinct. But Practice is also the silent landing page for three other flows that already exist
+and were built this week:
+
+- Roadmap milestones link to `/app/problems?tag=<topic>` ("solve these to advance")
+- Job-Ready Score's "next actions" link to `/app/problems?tag=<topic>` ("worth N points")
+- Course and Mistakes empty-states point here as the "go find something to solve" fallback
+
+So the page isn't unused — it's used constantly, just **anonymously**: every one of those links silently
+pre-filters the table and the page gives no sign of why the student is there or what finishing it does for
+them. That's the actual defect, not the page's existence.
+
+**Decision: D16.** Practice is not folded into Courses. It keeps its own page and identity, regrouped under a
+new **Workbench** nav section alongside **Sandbox** (names settled in conversation — "Workbench" umbrella,
+"Practice" and "Sandbox" as the two children, unchanged labels for both so nothing a student already knows
+breaks). Courses stays the place for faculty-sequenced order; Practice becomes the place for
+**self-directed, weakness-aware** solving — two different jobs, not one duplicated.
+
+### What changes
+
+**1. Nav regrouping (frontend only, no backend change)**
+- New section `"Workbench"` in `NAV_ITEMS` (`frontend-next/src/app/(student)/app/layout.tsx`), containing
+  `Practice` (`/app/problems`, unchanged route) and `Sandbox` (`/app/sandbox`, unchanged route).
+- Both currently sit under `"Learn"` next to Courses and Roadmaps — pulling them out leaves Learn as
+  Courses + Roadmaps, which reads cleanly as "structured learning."
+- No route changes, so no redirects needed and no link elsewhere in the app breaks.
+
+**2. Practice page: weak-topics-first instead of catalogue-frequency**
+- Today the topic chips are the **12 most common tags across the whole catalogue** — frequency, same for
+  every student, disconnected from their own performance.
+- Reuse `GET /api/student/skills` (`topicMasteryRepo` → `computeStrengthsWeaknesses`, already built, already
+  gates on 3+ attempts per topic to avoid noise on thin data) to sort/badge topic chips by the student's own
+  weakest-first, with their accept-rate shown (`"Sorting · 2/7 (29%)"` instead of a bare catalogue count).
+- **Fallback for a new student with no mastery data** (the 3-attempt gate means weeks 1–2 have nothing): keep
+  today's frequency-sorted chips until mastery data exists, so the page is never empty of guidance.
+
+**3. Landing-with-context banner**
+- When the page loads with `?tag=` (or in future `?source=roadmap:<id>` / `?source=jobready:<target>`) from
+  an external link, show a one-line banner above the table: *"Practicing Sorting — finish this to advance
+  your Java Developer roadmap"* or *"Practicing Sorting — worth 15 points on your Job-Ready Score"*, with a
+  link back to where they came from.
+- Requires the two link-producing call sites (`frontend-next/src/lib/queries/roadmaps.ts`'s `milestoneHref`,
+  and the `nextActions` hrefs in `backend/src/services/jobReadinessService.js`) to add a `source` param to the
+  URL they already build. Small, additive change at both call sites.
+- No `source` param present → no banner, today's plain page. Nothing breaks for a cold nav click.
+
+**4. Personal stats replace global stats in the table**
+- `Accuracy` and `Solved` columns currently come from `problemStatsService` — platform-wide (what % of
+  *everyone's* submissions were accepted). Says nothing about this student.
+- Replace with the student's own signal: **Status** column already shows solved/unsolved (keep it); add
+  **last attempted** (relative time, from their own submissions) where they have one, blank otherwise. Drop
+  the global Accuracy/Solved columns — they belong on a faculty analytics view, not here.
+
+**5. "Pick Random" → "Solve my weakest topic"**
+- Today's button picks uniformly at random from whatever's currently filtered — no connection to anything.
+- Replace with a button that, when no filter is active, jumps straight to a problem in the student's weakest
+  topic (same source as the new chip sort); when a filter *is* active, keep today's random-within-filter
+  behaviour, since that's still useful once a topic is chosen.
+- Needs no new endpoint — `useSkillsQuery` already exists in `frontend-next/src/lib/queries/student.ts`.
+
+**6. Quick Access tile**
+- The "Practice" tile on Home (`QuickAccessGrid.tsx`) keeps its name and art; only its live line changes
+  from streak-only wording to lead with the weakest topic when one exists:
+  *"Sorting needs work · 2/7 solved"* in place of *"5-day streak · keep it going"* when a weakness is known,
+  falling back to the existing streak copy otherwise.
+
+### Explicitly not touched by S12
+- The underlying problem catalogue, search, difficulty filter, and `/api/problems` route — all stay as-is.
+- Sandbox itself — grouped differently, behaviour unchanged.
+- The "Browse all problems" button on the empty/loaded Courses page — still points at `/app/problems` and
+  still makes sense; Practice remains a legitimate destination, just a differently-purposed one.
+
+### Size & sequencing
+Mostly frontend (nav config, one page rework, two small backend-adjacent URL-param additions — no new
+backend endpoints). Estimated **S** (one sitting): reuses `getSkills` and `useSkillsQuery`, which already
+exist; the only genuinely new work is the context banner and the chip/button re-sort.
+
+Suggested build order: (1) nav regroup — zero risk, ships alone if needed; (2) weak-topic chip sort + weakest-
+topic button, using existing `useSkillsQuery`; (3) personal stats column swap; (4) context banner + the two
+call-site `source` param additions, last because it touches files outside the Practice page itself.
+
+**Shipped 2026-10-05**, on `feat/home-page`, all six items built in the suggested order. "Last activity"
+(item 4) ended up sourced from two existing hooks already in `queries/student.ts` — `useSolvedHistoryQuery`
+(solved_at) and `useMistakesQuery` (last_attempt_at) — merged into one per-problem map, so no new endpoint was
+needed there either. Three things turned up during the build that weren't in the plan above:
+
+- **A real bug, not just a missing feature.** `tag` state never actually read the `?tag=` URL param — it
+  always initialised to `null`, and `searchInput` silently absorbed the tag string as free-text *search*
+  instead. Every roadmap/Job-Ready link into this page has therefore been running a title-text search for the
+  topic name, not an actual tag filter, since S9/S10 shipped. Fixed as part of this phase, since the banner
+  work depends on the tag filter being real.
+- **Difficulty words leak into the tags array** (an import-time data quirk also fixed on the public profile
+  in S11) and were briefly showing up as a clickable "topic" — e.g. `easy (28)`. Excluded from the chip list
+  the same way as S11.
+- **`weaknesses` and `strengths` are not a partition** — `computeStrengthsWeaknesses` sorts the same attempted-
+  topic pool two ways and slices each to its own top 5. With only 1–2 topics attempted (a new student, almost
+  always), a 100%-accept topic can appear in `weaknesses` too, just last. Added a `genuineWeaknesses()` filter
+  (`<60%` accept rate) in `queries/student.ts` so the "needs work" badge, the weakest-topic button and the
+  Home tile line never flag a topic the student is actually good at. The underlying scoring utility
+  (`backend/src/utils/topicScores.js`, shared by Skills/Job-Ready) was left alone — this is a display-layer
+  fix, not a scoring-logic change, and out of scope here.
+
+Verified: real-data browser walk (weak/strong topic seeded via `topicMasteryRepo.recordAttempt`, matching
+production's own write path) confirmed the chip sort, the weakest-topic button landing on a real problem in
+that topic, both banner variants (roadmap + Job-Ready) with working back-links, the dismiss control, and
+"Solved 2 days ago" / "Attempted yesterday" rendering from real submission history — dark + light, 375px, no
+console errors. `tsc` clean, 0 new lint warnings (97 baseline, unchanged), production build passes. Full smoke
+suite: all failures traced to the documented Gemini free-tier quota (429/503), none in S12's own code paths.
 
 ---
 

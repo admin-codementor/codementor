@@ -203,7 +203,9 @@ function nextActions(target, scored, inputs) {
         weightLost: lost('coverage'),
         label: `Solve ${g.target - g.solved} more ${g.label} problem${g.target - g.solved === 1 ? '' : 's'}`,
         why: `${g.label} is ${g.solved} of ${g.target} for this target.`,
-        href: `/app/problems?tag=${encodeURIComponent(g.topic)}`,
+        // `source`/`from` ride along so Practice can tell the student why
+        //  they landed there (S12), same pattern as the roadmap milestone links.
+        href: `/app/problems?tag=${encodeURIComponent(g.topic)}&source=jobready&from=${encodeURIComponent(target.label)}`,
       });
     }
   }

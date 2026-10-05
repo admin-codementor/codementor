@@ -5,6 +5,54 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-05 (Mon) — part 16
+**Area:** S12 — Workbench (Practice regrouped with Sandbox, rebuilt as weak-topic coaching)
+**Why:** Asked whether Practice duplicates Courses. Checked the data: every one of the 77 published problems
+is already inside a course — zero orphans, supporting the instinct. But Practice is also the silent landing
+page for roadmap milestones, Job-Ready next actions, and three empty-state fallbacks, all built this week. The
+real defect wasn't that the page is unused — it's used constantly, just anonymously: every link into it
+pre-filters the table with no sign of why the student is there. Plan written and approved as **D16/S12**
+before building (see `STUDENT_PERSONA_PLAN.md`).
+**Did:**
+- **Nav regroup.** New **Workbench** section holding **Practice** and **Sandbox**, pulled out of "Learn" (now
+  just Courses + Roadmaps). Both keep their routes and labels — nothing a student already knows breaks.
+- **Weak-topic-first chips.** Topic chips now sort the student's weakest topic first (by accept rate, via the
+  existing `getSkills` endpoint), badged `"Sorting · 29%"` instead of a bare catalogue count. A brand-new
+  student with no attempt history sees the old frequency-sorted list — no regression.
+- **"Solve weakest topic"** replaces "Pick Random" when no filter is active — jumps straight into a problem
+  in the student's weakest topic. Falls back to today's random-within-filter once a filter is chosen.
+- **Landing-with-context banner.** Arriving via a roadmap milestone or a Job-Ready next action now shows why:
+  *"Practicing Strings — solve these to advance your Java Developer roadmap"*, with a working link back.
+  Dismissible. No `source` param → no banner, unchanged page.
+- **Personal "Last activity" column** replaces the old platform-wide Accuracy/Solved-by columns. Reads
+  `"Solved 2 days ago"` / `"Attempted yesterday"` from the student's own submission history — merges two
+  existing hooks, no new endpoint.
+- **Home tile** now leads with the weakest topic when one exists: *"strings needs work · 1/4"* in place of
+  streak wording.
+**Found and fixed along the way — not in the original plan:**
+- **A real bug**, not a missing feature: the page's `tag` state never read the `?tag=` URL param — it stayed
+  `null` and the tag silently fell into `searchInput` as a *title text search* instead. Every roadmap/Job-Ready
+  link into this page since S9/S10 shipped has been running a loose text search, not an actual tag filter.
+  Fixed — the banner work depends on the filter being real.
+- **Difficulty words ("easy"/"medium"/"hard") leak into the tags array** (same import-time quirk fixed on the
+  public profile in S11) and were showing up as a clickable "topic". Excluded the same way.
+- **`weaknesses` and `strengths` are not a partition.** `computeStrengthsWeaknesses` sorts one attempted-topic
+  pool two ways and slices each to its own top 5 — with 1–2 topics attempted (most students, most of the
+  time), a 100%-accept topic can land in `weaknesses` too, just last. Caught in testing: a seeded 100%-accept
+  "arrays" topic was rendering with an orange "needs work" badge. Added `genuineWeaknesses()` (<60% accept
+  rate) in `queries/student.ts`, used by the chip badge, the weakest-topic button, and the Home tile. Left the
+  shared scoring utility itself untouched — display-layer fix, not a scoring change.
+**Verified:** real-data browser walk — seeded a student via `topicMasteryRepo.recordAttempt` (production's own
+write path) with a genuine 25%-accept weak topic and a 100%-accept strong one. Confirmed the chip sort and
+badge, the weakest-topic button landing on an actual problem in that topic, both banner variants with working
+back-links, dismiss, and real "Solved X ago" / "Attempted X ago" rows. Dark + light, 375px, no console errors,
+no horizontal overflow. `tsc` clean, lint 97/0 (unchanged baseline), production build passes. Full smoke
+suite: 6 failures, all traced to the documented Gemini quota (429/503) — none in S12's own paths, which touch
+no AI code. Probe student, submissions and mastery rows deleted afterwards; confirmed zero leftover.
+**Branch:** `feat/home-page` — not yet committed as of this entry, not pushed.
+
+---
+
 ## 2026-10-04 (Sun) — part 15
 **Area:** PR #38 merged to main · Home page (decision D1 reversed to D1b)
 **Shipped:** PR #38 merged at 16:56 — S0–S11 plus B0 and B3 are on `main` and live. The merge was blocked for a

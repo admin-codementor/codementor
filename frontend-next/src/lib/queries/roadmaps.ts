@@ -105,11 +105,25 @@ export function useSetActiveRoadmap() {
   });
 }
 
-/** Where a milestone sends the student: its module, or a filtered practice list. */
-export function milestoneHref(m: Milestone): string | null {
+/**
+ * Where a milestone sends the student: its module, or a filtered practice
+ * list. `roadmapRole` and `milestoneTitle`, when given, ride along as query
+ * params so Practice can show why the student landed there (S12) — dropped
+ * silently by the receiving page when absent, so this is safe to call without
+ * them too.
+ */
+export function milestoneHref(m: Milestone, roadmapRole?: string, roadmapId?: string): string | null {
   if (!m.tracked) return null;
   if (m.link?.kind === "module") return `/app/courses/${m.link.courseId}?module=${m.link.moduleId}`;
-  if (m.link?.kind === "practice") return `/app/problems?tag=${encodeURIComponent(m.link.tag)}`;
+  if (m.link?.kind === "practice") {
+    const params = new URLSearchParams({ tag: m.link.tag });
+    if (roadmapRole) {
+      params.set("source", "roadmap");
+      params.set("from", roadmapRole);
+      if (roadmapId) params.set("rid", roadmapId);
+    }
+    return `/app/problems?${params.toString()}`;
+  }
   return null;
 }
 

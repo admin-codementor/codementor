@@ -7,7 +7,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { InteractiveCard } from "@/components/ui/InteractiveCard";
 import type { Assignment, CourseSummary, DashboardStats } from "@/lib/types";
-import { examStatus, type ExamCardData } from "@/lib/queries/student";
+import { examStatus, type ExamCardData, type SkillTopic } from "@/lib/queries/student";
 import type { RoadmapSummary } from "@/lib/queries/roadmaps";
 import {
   AssignmentsArt,
@@ -39,6 +39,8 @@ export interface QuickAccessProps {
   className?: string | null;
   /** The roadmap the student chose to follow, if any. */
   activeRoadmap?: RoadmapSummary | null;
+  /** Weakest topic by accept-rate (S12), when there is enough attempt history to say. */
+  weakestTopic?: SkillTopic | null;
   loading?: boolean;
 }
 
@@ -71,6 +73,7 @@ function buildTiles({
   exams,
   className,
   activeRoadmap,
+  weakestTopic,
   now,
 }: Omit<QuickAccessProps, "loading"> & { now: number }): Tile[] {
   // Furthest-along course that isn't finished; otherwise anything started.
@@ -125,8 +128,11 @@ function buildTiles({
       : "No tests scheduled";
 
   const streak = stats?.streak ?? 0;
-  const practiceLine =
-    streak > 0
+  // A known weak topic (S12) leads the line — it is more useful than the
+  // streak, which says nothing about what to actually work on next.
+  const practiceLine = weakestTopic
+    ? `${weakestTopic.topic.replace(/[-_]/g, " ")} needs work · ${weakestTopic.solvedCount}/${weakestTopic.attempts}`
+    : streak > 0
       ? `${streak}-day streak · keep it going`
       : stats && stats.problemsSolved > 0
         ? "Pick up where you left off"

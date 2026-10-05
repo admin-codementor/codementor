@@ -80,6 +80,8 @@ function MilestoneRow({
   current,
   expanded,
   onToggle,
+  roadmapRole,
+  roadmapId,
 }: {
   milestone: Milestone;
   index: number;
@@ -87,9 +89,11 @@ function MilestoneRow({
   current: boolean;
   expanded: boolean;
   onToggle: () => void;
+  roadmapRole: string;
+  roadmapId: string;
 }) {
   const done = milestone.tracked && milestone.status === "done";
-  const href = milestoneHref(milestone);
+  const href = milestoneHref(milestone, roadmapRole, roadmapId);
 
   return (
     <Box sx={{ display: "flex", gap: 2, position: "relative" }}>
@@ -412,6 +416,8 @@ export default function RoadmapDetailPage() {
                   current={m.id === currentId}
                   expanded={expanded.has(m.id)}
                   onToggle={() => toggle(m.id)}
+                  roadmapRole={roadmap.role}
+                  roadmapId={id}
                 />
               ))}
             </Box>

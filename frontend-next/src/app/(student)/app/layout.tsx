@@ -16,15 +16,19 @@ import { HomeShell } from "@/components/shell/HomeShell";
 //                 class is a once-ever action that doesn't deserve a permanent slot.
 //   Submissions, Coding Profiles — tabs on Profile, via the avatar menu.
 // Exams and Aptitude merge into a single "Tests" hub in a later phase.
+// Practice is not folded into Courses (D16) — Courses is faculty-sequenced
+// order, Practice is self-directed and weak-topic-aware; different jobs.
 const NAV_ITEMS: NavItem[] = [
   // Home is the landing page: six illustrated tiles and nothing else. The
   // dashboard is a deliberate second click for the numbers.
   { label: "Home", href: "/app", icon: <HomeOutlinedIcon /> },
   { label: "Dashboard", href: "/app/dashboard", icon: <SpaceDashboardOutlinedIcon /> },
   { label: "Courses", href: "/app/courses", icon: <MenuBookOutlinedIcon />, section: "Learn" },
-  { label: "Practice", href: "/app/problems", icon: <FormatListBulletedOutlinedIcon />, section: "Learn" },
   { label: "Roadmaps", href: "/app/roadmaps", icon: <WaypointsIcon />, section: "Learn" },
-  { label: "Sandbox", href: "/app/sandbox", icon: <CodeOutlinedIcon />, section: "Learn" },
+  // Workbench (D16): self-directed, weak-topic-aware solving and a free-form
+  // runner — grouped apart from Courses, which is faculty-sequenced order.
+  { label: "Practice", href: "/app/problems", icon: <FormatListBulletedOutlinedIcon />, section: "Workbench" },
+  { label: "Sandbox", href: "/app/sandbox", icon: <CodeOutlinedIcon />, section: "Workbench" },
   { label: "Assignments", href: "/app/assignments", icon: <AssignmentOutlinedIcon />, section: "Work" },
   { label: "Tests", href: "/app/tests", icon: <TimerOutlinedIcon />, section: "Work" },
   { label: "Mistakes", href: "/app/mistakes", icon: <HistoryOutlinedIcon />, section: "Progress" },

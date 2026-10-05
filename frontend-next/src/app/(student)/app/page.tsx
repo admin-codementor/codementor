@@ -7,7 +7,7 @@ import { DataState } from "@/components/ui/DataState";
 import { CardGridSkeleton } from "@/components/ui/Skeletons";
 import { QuickAccessGrid } from "@/components/student/quick-access/QuickAccessGrid";
 import { getUser } from "@/lib/auth";
-import { useAvailableExamsQuery, useDashboardQuery } from "@/lib/queries/student";
+import { useAvailableExamsQuery, useDashboardQuery, useSkillsQuery, genuineWeaknesses } from "@/lib/queries/student";
 import { useRoadmapsQuery } from "@/lib/queries/roadmaps";
 
 /**
@@ -32,6 +32,9 @@ export default function HomePage() {
   const { data, isLoading, isError, error, refetch, isFetching } = useDashboardQuery();
   const { data: exams } = useAvailableExamsQuery();
   const { data: roadmapData } = useRoadmapsQuery();
+  // Feeds the Practice tile's line (S12). A failure here just falls back to
+  // the tile's streak wording — it must not affect the rest of Home.
+  const { data: skillsData } = useSkillsQuery();
 
   const [name, setName] = React.useState("");
   const [className, setClassName] = React.useState<string | null>(null);
@@ -48,6 +51,7 @@ export default function HomePage() {
 
   const activeRoadmap =
     roadmapData?.roadmaps.find((r) => r.id === roadmapData.activeRoadmapId) ?? null;
+  const weakestTopic = genuineWeaknesses(skillsData?.weaknesses ?? [])[0] ?? null;
 
   return (
     <Box>
@@ -72,6 +76,7 @@ export default function HomePage() {
           exams={exams ?? []}
           className={className}
           activeRoadmap={activeRoadmap}
+          weakestTopic={weakestTopic}
         />
       </DataState>
     </Box>
