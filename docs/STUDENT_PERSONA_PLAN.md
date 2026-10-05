@@ -47,6 +47,7 @@ of every student page done on 2026-10-03 (findings quoted inline below with file
 | D14 | Log | `docs/PROJECT_LOG.md`, dated daily entries, newest first. |
 | D15 | New features | Add **Shareable verified profile** and **Mistakes notebook**. |
 | D16 | Practice vs. Courses | Not merged. Practice keeps its own identity — self-directed, weak-topic-aware — regrouped under a new **Workbench** section with Sandbox. Courses stays faculty-sequenced order. See S12. |
+| D17 | Assignments vs. Practice | Not merged. Different governance — faculty-set deadline/grading vs self-directed, no deadline. A cross-link (a chip on a Practice row when it's also an active assignment) considered but not built. |
 
 ## 3. Answered follow-ups (2026-10-03)
 
@@ -502,6 +503,7 @@ check endpoints. Security review before release (it's the first public data endp
 | S10 Job-Ready Score | M–L | S9, Q-C |
 | S11 Shareable profile | L | S10, Q-E, Q-F |
 | S12 Workbench (Practice rework) | S | S10 (reuses `getSkills`), D16 |
+| S13 Visual roadmaps + 20 roles | XL (new renderer + ~500+ nodes of writing, batched) | S9, D17, new dependency |
 
 S3/S4 can run in either order; S6–S7 can move earlier if the problem page is the most urgent complaint.
 
@@ -618,6 +620,186 @@ that topic, both banner variants (roadmap + Job-Ready) with working back-links, 
 "Solved 2 days ago" / "Attempted yesterday" rendering from real submission history — dark + light, 375px, no
 console errors. `tsc` clean, 0 new lint warnings (97 baseline, unchanged), production build passes. Full smoke
 suite: all failures traced to the documented Gemini free-tier quota (429/503), none in S12's own code paths.
+
+---
+
+## Phase S13 — Visual roadmaps (roadmap.sh-style graph) + 20 roles
+
+**Origin:** 2026-10-05 conversation, continued. Two reference images shared: roadmap.sh's node-graph view
+(yellow topic boxes, black checkpoint boxes, white annotation notes, connected by lines, grouped into
+tracks) and roadmap.sh's `/dashboard` (a grid of role cards with progress). Ask: rebuild both screens to
+that visual language, and grow the roster from 4 roles to **at least 20**.
+
+**D17 (confirmed this session):** Assignments and Practice stay separate pages — different governance
+(faculty-set deadline + grading vs self-directed, no deadline), not just a presentation overlap. Revisit
+later only as a cross-link: a chip on a Practice row when that problem is also part of an active
+assignment, not a merged list. Not built yet — parked.
+
+**Also raised, not yet decided:** renaming "Tests" (the exam/aptitude/MCQ hub) to reduce collision with
+"test" meaning test cases. Proposed "Assessments". **Not confirmed** — the conversation moved to roadmaps
+before this was settled. Revisit separately; nothing renamed yet.
+
+### Why this is a bigger lift than S9, and the honest constraint underneath it
+
+S9 shipped 4 roadmaps as flat milestone lists — about 45 items of original writing, reusing an existing
+visual pattern (a vertical rail of dots, the same shape Mistakes/dashboards already used). This ask is two
+compounding changes at once: a content model that didn't exist (a *graph* — nodes, edges, groups — not a
+list) and a renderer that doesn't exist (pan/zoom node-and-line canvas), **times five** the role count.
+
+The platform's one real asset is that progress on a node is *verified* — solved against Judge0, not
+self-ticked like roadmap.sh. That only works for nodes resolvable to judged coding problems. The catalogue
+today is **77 problems across 21 topic tags — straight DSA**, nothing that could ever be judged for Cloud,
+DevOps, SQL, Cybersecurity, UI/UX, or Android specifically (this is a code-execution platform, not a
+cloud-config or design grader). So the 20-role list below is split honestly into two kinds of roadmap:
+
+- **Code-judgeable roles** (12 of the 20): most nodes resolve to real tracked problems, same verified-
+  progress story as today's 4.
+  **Reading/checklist roles** (8 of the 20): coding nodes where they exist (most roles have *some* DSA/
+  scripting component), everything else is an honest `reading`/`checkpoint` node with no fake percentage —
+  the same "untracked, not 0%" rule S9 already established for non-code steps, just applied to more of a
+  roadmap at once for these 8.
+
+Stating this now rather than after 20 roadmaps are written, because it changes what "progress" means on a
+third of the roster — worth deciding on purpose, not discovering after the fact.
+
+### 1. Content model — JSON schema extended from a list to a graph
+
+Backward-compatible extension, not a replacement: a purely linear roadmap is just a graph with one group
+and a straight chain of edges, so the 4 existing roadmaps' *writing* (title/why/practice/reading per step)
+carries over unchanged — only the structural wrapper changes, in Phase B below.
+
+```jsonc
+{
+  "id": "java-developer",
+  "role": "Java Developer",
+  "tagline": "...",
+  "summary": "...",
+  "forWho": "...",
+  "groups": [                                   // vertical/horizontal tracks, like roadmap.sh's swimlanes
+    { "id": "foundations", "label": "Foundations" },
+    { "id": "core", "label": "Core Java" }
+  ],
+  "nodes": [
+    { "id": "n1", "type": "topic", "group": "foundations", "title": "Java syntax & basics",
+      "why": "...", "practice": { "modules": ["basics"], "tags": ["programming basics"], "count": 12 } },
+    { "id": "n2", "type": "checkpoint", "group": "foundations", "title": "Build: 10 small programs",
+      "why": "..." },
+    { "id": "n3", "type": "note", "attachTo": "n4",
+      "text": "Skip this if you already know OOP from C++." },
+    { "id": "n4", "type": "topic", "group": "core", "title": "Object-oriented programming", "mcq": ["technical"] }
+  ],
+  "edges": [{ "from": "n1", "to": "n2" }, { "from": "n2", "to": "n4" }]
+}
+```
+
+- Three node types, matching the reference image exactly: **topic** (resolves to practice, same matcher as
+  today), **checkpoint** (a project/milestone marker, untracked), **note** (a side annotation, no progress,
+  points at the node it comments on).
+- **No true OR-branch routing in v1.** roadmap.sh's own branches are mostly "pick a backend language" —
+  moot here, since that choice is already *which roadmap* a student follows (Java Developer vs a future
+  Backend Developer roadmap), not a fork inside one roadmap. Groups give the visual "multiple tracks" look
+  without the engineering cost of real branch-aware progress logic. Flagged as a decision, not slipped in
+  silently — say if you actually want in-roadmap branching and it changes the resolver's shape.
+- `roadmapService.js`'s matcher (`poolFor`, `tagMatches`, `moduleMatches`) does not change in kind — it
+  already resolves one step against the catalogue by tag/module. It generalises from "per milestone" to
+  "per node," which is the same function running more times, not a rewrite.
+
+### 2. Renderer — a real dependency addition
+
+Nothing in the current stack draws a node-and-line graph. Needs **`@xyflow/react`** (React Flow) for the
+canvas, nodes, pan/zoom, edges, plus **`dagre`** for automatic top-to-bottom layout from the groups/edges
+above — hand-building either is its own multi-week project, and both are the standard choice for exactly
+this (roadmap.sh itself is hand-rolled SVG, which is why its source is thousands of lines per roadmap; a
+layout library is the difference between that and a maintainable one).
+
+This is a **new frontend dependency** — per standing practice, a clean `npm ci` runs locally before it's
+pushed, and it's called out here rather than added quietly.
+
+- Custom node components in our tokens/palette, not roadmap.sh's yellow (same "recoloured to our brand"
+  rule as the unDraw illustrations, D2).
+- Node click → a **side panel** (matching the reference exactly), not a straight jump to the module: shows
+  why/progress/next-problems/reading, with the jump-to-module or jump-to-Practice action inside it. This
+  settles the open question from the earlier round.
+- **Mobile gets the list view, not the graph.** A pan/zoom canvas does not work below ~768px — this was
+  already the plan (S9/S12 era decision), restated here: same data, rendered as today's vertical rail on a
+  phone, the graph only on a wide enough screen.
+
+### 3. The roadmap list page → roadmap.sh's `/dashboard` card grid
+
+`/app/roadmaps` becomes a grid of role cards — icon, role, one-line tagline, a progress ring or bar,
+"Continue" wording when a student has started one — grouped the way roadmap.sh's own directory is:
+**Role-based** and **Skill/Domain-based**, as two labelled sections on the same page rather than a flat
+list of 20, so the page stays scannable.
+
+### 4. Proposed 20 roles — grounded in this college's placement reality, not a generic list
+
+Kept the 4 that already exist; added 16, chosen for what an Indian engineering college's recruiters
+actually ask for, not roadmap.sh's general software-industry list. Marked **[reading-heavy]** where the
+catalogue genuinely can't verify progress by code execution.
+
+**Role-based (12)**
+1. Service-Company Placement *(have)*
+2. **Product-Company Placement** *(new)* — harder DSA, intro system design, behavioural rounds; the
+   counterpart to #1 for TCS/Infosys-tier vs Amazon/Flipkart-tier drives.
+3. Java Developer *(have)*
+4. Python / Data Analyst *(have)*
+5. **Full Stack Web Developer** *(rework of today's "Web Developer")* — explicit MERN-ish path.
+6. **Frontend Developer** *(new, split out)* — today's Web Developer roadmap is full-stack-leaning; this
+   is the narrower, faster path some students specifically ask for.
+7. **Backend Developer (Node.js)** *(new)* — Java Developer already covers the Java-specific backend path;
+   this is the JS-stack equivalent.
+8. **Android Developer** *(new)* **[reading-heavy]** — Kotlin/Android SDK has no code-judge equivalent
+   here; DSA nodes stay tracked, the Android-specific ones are reading/checkpoint.
+9. **Data Scientist / ML Engineer** *(new)* — Python nodes tracked, ML-library nodes reading-based.
+10. **DevOps Engineer** *(new)* **[reading-heavy]**
+11. **QA / Test Automation Engineer** *(new)* — scripting nodes trackable, tooling nodes reading-based.
+12. **DSA Mastery / Technical Interview Prep** *(new)* — language-agnostic, pure problem-solving track for
+    any branch, the "I don't know what role yet, just make me interview-ready" option.
+
+**Skill/Domain-based (8)**
+13. **C++ & Competitive Programming** *(new)* — large existing culture in Indian CS depts, distinct from
+    "Service-Company Placement"'s breadth-first approach.
+14. **SQL & Database Engineer** *(new)* **[reading-heavy]** — no SQL judge on this platform yet.
+15. **Cloud Engineer (AWS fundamentals)** *(new)* **[reading-heavy]**
+16. **Cybersecurity Fundamentals** *(new)* **[reading-heavy]**
+17. **Flutter / Cross-Platform Mobile** *(new)* **[reading-heavy]**
+18. **Go Developer** *(new)* **[reading-heavy, confirmed]** — checked `submissions.routes.js`:
+    `ALLOWED_LANGUAGE_IDS` does not include Go (id 60), even though `languages.ts` has a label for it. A
+    student cannot submit Go today, so this roadmap's DSA nodes would need to route through Python/Java/
+    C++ instead ("practice the algorithm in a language you can submit, apply it in Go yourself") rather
+    than claim tracked Go progress that doesn't exist. Worth enabling Go server-side separately if this
+    roadmap matters enough — a small, unrelated backend change, not part of this plan.
+19. **GATE / Higher Studies** *(new)* — reuses the `GATE / Higher Studies` track **already defined** in
+    `backend/src/config/placementTracks.js` for the Job-Ready Score; mostly algorithms/complexity/core CS,
+    genuinely DSA-trackable.
+20. **UI/UX for Developers** *(new)* **[reading-heavy]**
+
+This list is a proposal, not a commitment — the easiest, cheapest point to change it is now, before any
+node is written. Swap, drop, or reorder before Phase C starts.
+
+### 5. Sequencing — foundation once, content in reviewable batches
+
+Authoring ~20 roadmaps at 25–35 nodes each in one pass repeats the exact mistake the original S9 plan
+explicitly avoided ("build one, review, then do the rest") — at 5× the roster the cost of a template being
+wrong before anyone looks at it is also 5×.
+
+| Phase | What | Why this order |
+|---|---|---|
+| **A — Foundation** | Graph JSON schema; `roadmapService.js` generalised to per-node; React Flow + dagre renderer with the 3 node types; side panel; mobile list fallback; `/app/roadmaps` restyled to the card-grid dashboard. | Built once, proven against real (already-approved) content next — not new content on an unproven renderer. |
+| **B — Reauthor the 4 existing roadmaps** onto the new schema | Mechanical restructure of already-written content into nodes/groups/edges — the writing doesn't change, the wrapper does. | Lowest-risk way to see the real renderer against real data before committing to 16 more. **Stop here for review.** |
+| **C — Author the 16 new roles, in batches of 4–5** | Each batch reviewed before the next starts. | Same lesson S9 already taught: a wrong template costs less caught at batch 1 than at batch 4. |
+
+Suggested first batch for Phase C (highest placement demand, most code-judgeable, lowest risk): Product-
+Company Placement, Full Stack Web Developer, Frontend Developer, Backend Developer (Node.js), DSA Mastery.
+
+### Open for you to confirm before Phase A starts
+1. The 20-role list above — keep as proposed, or swap any entries first.
+2. No in-roadmap branching (groups only) — confirmed approach, flag if you actually want real forks.
+3. Side panel on node click (not straight-to-module) — confirmed approach from the earlier open question.
+4. New dependency: React Flow (`@xyflow/react`) + `dagre` — flagging, not really optional given the ask.
+5. ~~Go/Judge0 language support~~ — checked: Go is not enabled server-side today. Either accept the Go
+   roadmap as reading-plus-borrowed-practice (above), or enable Go in `ALLOWED_LANGUAGE_IDS` first as a
+   small separate backend change. Your call, not blocking the rest of S13.
 
 ---
 
