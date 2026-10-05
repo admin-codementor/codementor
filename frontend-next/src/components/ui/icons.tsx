@@ -24,7 +24,7 @@ import {
   ChartNoAxesColumn, Sun, Link, Flame, Lock, LogIn, LogOut, Mail, MemoryStick, Menu,
   BookOpen, Medal, Activity, Pause, Clock4, User, Play, ShieldAlert, Brain, CircleHelp,
   Circle, ReceiptText, RefreshCw, RotateCcw, Save, GraduationCap, Search, Tag, Send,
-  Shield, Bot, LayoutDashboard, Timer, Lightbulb, Target, FileUp, Upload, LayoutGrid,
+  Shield, Bot, LayoutDashboard, Timer, Lightbulb, Target, FileUp, Upload, LayoutGrid, Flag,
   Eye, EyeOff, TriangleAlert, Briefcase,
   SignalLow, SignalMedium, SignalHigh, Type, Hash, ArrowRightLeft, ArrowDownUp, GitFork,
   Boxes, Binary, PenTool, Waypoints, TrendingUp, TrendingDown, GripVertical,
@@ -176,6 +176,7 @@ export const SpaceDashboardOutlinedIcon = makeIcon(LayoutDashboard, "SpaceDashbo
 export const TimerOutlinedIcon = makeIcon(Timer, "TimerOutlinedIcon");
 export const TipsAndUpdatesOutlinedIcon = makeIcon(Lightbulb, "TipsAndUpdatesOutlinedIcon");
 export const TrackChangesOutlinedIcon = makeIcon(Target, "TrackChangesOutlinedIcon");
+export const FlagOutlinedIcon = makeIcon(Flag, "FlagOutlinedIcon");
 export const UploadFileOutlinedIcon = makeIcon(FileUp, "UploadFileOutlinedIcon");
 export const UploadOutlinedIcon = makeIcon(Upload, "UploadOutlinedIcon");
 export const ViewModuleOutlinedIcon = makeIcon(LayoutGrid, "ViewModuleOutlinedIcon");

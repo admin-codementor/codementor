@@ -163,5 +163,65 @@ module.exports = async function roadmapsSuite() {
   s.check('the student can clear the choice', cleared.status === 200
     && (await get('/api/roadmaps', TOKEN)).body?.activeRoadmapId === null, JSON.stringify(cleared.body));
 
+  // ── A graph-shaped roadmap (S13) resolves the same way, structured
+  //    differently ──────────────────────────────────────────────────────────
+  // Every check above ran against `roadmaps[0]`, which is always the first
+  // (legacy, flat-list) roadmap in the file — none of it exercises the graph
+  // path at all. `java-developer` is the one roadmap authored as nodes/edges/
+  // groups so far; this block is the only coverage the graph resolver has.
+  const graphRes = await get('/api/roadmaps/java-developer', TOKEN);
+  const graph = graphRes.body?.data;
+  s.check('a graph roadmap says so in its format field',
+    graphRes.status === 200 && graph?.format === 'graph', `format ${graph?.format}`);
+
+  s.check('a graph roadmap returns nodes/edges/groups, not milestones',
+    Array.isArray(graph?.nodes) && Array.isArray(graph?.edges) && Array.isArray(graph?.groups)
+      && graph?.milestones === undefined,
+    JSON.stringify({ hasNodes: !!graph?.nodes, hasMilestones: graph?.milestones !== undefined }));
+
+  const noteNode = graph?.nodes?.find((n) => n.type === 'note');
+  s.check('a note node is never tracked and never "you are here"',
+    !!noteNode && noteNode.tracked === false && noteNode.status === 'note'
+      && graph.currentMilestone?.id !== noteNode.id,
+    JSON.stringify(noteNode));
+
+  const checkpointNode = graph?.nodes?.find((n) => n.type === 'checkpoint');
+  s.check('a checkpoint node is untracked with its own status, not folded into reading/test',
+    !!checkpointNode && checkpointNode.tracked === false && checkpointNode.status === 'checkpoint',
+    JSON.stringify(checkpointNode));
+
+  const graphTracked = (graph?.nodes ?? []).filter((n) => n.tracked);
+  s.check('the graph roadmap target is the sum of its tracked nodes, same arithmetic as the legacy path',
+    graph.target === graphTracked.reduce((n, x) => n + x.target, 0),
+    `${graph.target} vs ${graphTracked.reduce((n, x) => n + x.target, 0)}`);
+
+  // Same "solving moves progress" proof as the legacy block above, run once
+  // more against the graph shape so the resolver generalisation is actually
+  // checked, not just assumed from the legacy roadmap passing.
+  const graphStep = graphTracked.find((n) => n.nextProblems?.length > 0);
+  if (!graphStep) {
+    s.skip('solving a graph node\'s problems raises that node', 'no node resolved to any problem');
+  } else {
+    const now2 = Date.now();
+    for (const p of graphStep.nextProblems) {
+      await db().collection('submissions').add({
+        userId: ME, problemId: p.id, verdict: 'Accepted', language: 'python',
+        submittedAt: new Date(now2 - HOUR),
+      });
+    }
+    const n2 = graphStep.nextProblems.length;
+    const graphAfter = (await get('/api/roadmaps/java-developer', TOKEN)).body?.data;
+    const graphStepAfter = graphAfter.nodes.find((x) => x.id === graphStep.id);
+    // `ME` already solved problems earlier in this same suite run, against the
+    // legacy roadmap tested above — on a shared catalogue, some of those can
+    // land in this node's pool too (e.g. an "arrays" solve counts for more
+    // than one roadmap's Arrays node). The expectation has to add to whatever
+    // was already solved here, not assume a clean slate.
+    const expectedSolved = Math.min(graphStep.solved + n2, graphStepAfter.target);
+    s.check('solving a graph node\'s problems moves that node',
+      graphStepAfter.solved === expectedSolved,
+      `expected ${expectedSolved}, got ${graphStepAfter.solved}`);
+  }
+
   return s;
 };

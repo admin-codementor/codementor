@@ -12,6 +12,8 @@ import Chip from "@mui/material/Chip";
 import LinearProgress from "@mui/material/LinearProgress";
 import ButtonBase from "@mui/material/ButtonBase";
 import MuiLink from "@mui/material/Link";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
 import {
   WaypointsIcon,
   CheckCircleIcon,
@@ -36,6 +38,8 @@ import {
   mcqHref,
   type Milestone,
 } from "@/lib/queries/roadmaps";
+import { RoadmapGraph } from "@/components/roadmap/RoadmapGraph";
+import { GraphNodeList } from "@/components/roadmap/GraphNodeList";
 
 /** The dot on the rail. Its shape alone should say where the student stands. */
 function StatusDot({ milestone, current }: { milestone: Milestone; current: boolean }) {
@@ -302,6 +306,10 @@ export default function RoadmapDetailPage() {
   const query = useRoadmapQuery(id);
   const setActive = useSetActiveRoadmap();
   const showToast = useToast();
+  const theme = useTheme();
+  // A pan/zoom canvas does not work at phone width — same threshold AppShell
+  // already uses to decide desktop vs mobile chrome.
+  const isWideEnoughForGraph = useMediaQuery(theme.breakpoints.up("md"));
 
   const roadmap = query.data?.roadmap;
   const isActive = query.data?.isActive ?? false;
@@ -406,21 +414,29 @@ export default function RoadmapDetailPage() {
               </Box>
             </Card>
 
-            <Box>
-              {roadmap.milestones.map((m, i) => (
-                <MilestoneRow
-                  key={m.id}
-                  milestone={m}
-                  index={i}
-                  last={i === roadmap.milestones.length - 1}
-                  current={m.id === currentId}
-                  expanded={expanded.has(m.id)}
-                  onToggle={() => toggle(m.id)}
-                  roadmapRole={roadmap.role}
-                  roadmapId={id}
-                />
-              ))}
-            </Box>
+            {roadmap.format === "graph" ? (
+              isWideEnoughForGraph ? (
+                <RoadmapGraph roadmap={roadmap} roadmapId={id} />
+              ) : (
+                <GraphNodeList roadmap={roadmap} roadmapId={id} />
+              )
+            ) : (
+              <Box>
+                {roadmap.milestones.map((m, i) => (
+                  <MilestoneRow
+                    key={m.id}
+                    milestone={m}
+                    index={i}
+                    last={i === roadmap.milestones.length - 1}
+                    current={m.id === currentId}
+                    expanded={expanded.has(m.id)}
+                    onToggle={() => toggle(m.id)}
+                    roadmapRole={roadmap.role}
+                    roadmapId={id}
+                  />
+                ))}
+              </Box>
+            )}
           </>
         )}
       </DataState>

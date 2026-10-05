@@ -84,9 +84,17 @@
       "tagline": "Core Java, collections, Spring Boot",
       "summary": "Java is still what most Indian service and product companies build on. This path takes you from syntax to a deployable Spring Boot service, with the data-structure work that interviews actually test sitting alongside it rather than after it.",
       "forWho": "Students targeting Java backend roles, or anyone whose college stack is Java.",
-      "milestones": [
+      "groups": [
+        { "id": "foundations", "label": "Foundations" },
+        { "id": "oop", "label": "OOP & Collections" },
+        { "id": "dsa", "label": "Data Structures & Algorithms" },
+        { "id": "backend", "label": "Backend & Shipping" }
+      ],
+      "nodes": [
         {
           "id": "jd-1",
+          "type": "topic",
+          "group": "foundations",
           "title": "Java syntax and your first programs",
           "why": "Types, loops, methods, and reading input. Nothing here is interesting, and everything later depends on it.",
           "practice": { "modules": ["basics"], "tags": ["programming basics"], "count": 12 },
@@ -96,12 +104,16 @@
         },
         {
           "id": "jd-2",
+          "type": "topic",
+          "group": "foundations",
           "title": "Arrays and strings",
           "why": "A Java String is immutable and a Java array is fixed-length. Both facts shape how you solve almost every question.",
           "practice": { "modules": ["arrays", "strings"], "tags": ["arrays", "strings"], "count": 16 }
         },
         {
           "id": "jd-3",
+          "type": "topic",
+          "group": "oop",
           "title": "Object-oriented programming",
           "why": "Classes, inheritance, interfaces, polymorphism. This is the part of the interview where a wrong answer is remembered.",
           "mcq": ["technical"],
@@ -110,7 +122,15 @@
           ]
         },
         {
+          "id": "jd-3-note",
+          "type": "note",
+          "attachTo": "jd-3",
+          "text": "Already know OOP from C++ or Python? Skim this one — the concepts transfer, only the keywords change."
+        },
+        {
           "id": "jd-4",
+          "type": "topic",
+          "group": "oop",
           "title": "Collections framework",
           "why": "List, Set, Map, and when each one is the right answer. Being able to describe HashMap is close to mandatory.",
           "practice": { "modules": ["hashing"], "tags": ["hashing"], "count": 4 },
@@ -120,6 +140,8 @@
         },
         {
           "id": "jd-5",
+          "type": "topic",
+          "group": "dsa",
           "title": "Exceptions and file I/O",
           "why": "Checked versus unchecked, try-with-resources, and reading a file without leaking a handle.",
           "reading": [
@@ -128,24 +150,32 @@
         },
         {
           "id": "jd-6",
+          "type": "topic",
+          "group": "dsa",
           "title": "Linked lists, stacks and queues",
           "why": "Implement them once by hand. After that you will understand what the library is doing for you.",
           "practice": { "modules": ["linked list", "stacks", "queues"], "tags": ["linked list", "stack"], "count": 5 }
         },
         {
           "id": "jd-7",
+          "type": "topic",
+          "group": "dsa",
           "title": "Trees and graphs",
           "why": "Traversals, depth, and the two searches. Where product-company interviews start and service-company ones usually stop.",
           "practice": { "modules": ["trees", "graphs"], "tags": ["trees", "graphs"], "count": 5 }
         },
         {
           "id": "jd-8",
+          "type": "topic",
+          "group": "dsa",
           "title": "Dynamic programming",
           "why": "Recognising overlapping subproblems. Aim for a correct memo table before you chase elegance.",
           "practice": { "modules": ["dynamic programming"], "tags": ["dynamic programming"], "count": 4 }
         },
         {
           "id": "jd-9",
+          "type": "topic",
+          "group": "backend",
           "title": "SQL and databases",
           "why": "Every backend role asks for joins, grouping and an index. It is the most reliably examined non-Java topic in a Java interview.",
           "reading": [
@@ -154,6 +184,8 @@
         },
         {
           "id": "jd-10",
+          "type": "topic",
+          "group": "backend",
           "title": "Spring Boot and REST APIs",
           "why": "Controllers, dependency injection, and a service that answers on a port. This is what the job is.",
           "reading": [
@@ -162,12 +194,26 @@
         },
         {
           "id": "jd-11",
+          "type": "checkpoint",
+          "group": "backend",
           "title": "Ship one project, then prepare to defend it",
           "why": "A small, finished, deployed service beats three half-built ones. Be ready to explain every dependency you added.",
           "reading": [
             { "label": "Git Basics", "url": "https://git-scm.com/book/en/v2/Git-Basics-Getting-a-Git-Repository" }
           ]
         }
+      ],
+      "edges": [
+        { "from": "jd-1", "to": "jd-2" },
+        { "from": "jd-2", "to": "jd-3" },
+        { "from": "jd-3", "to": "jd-4" },
+        { "from": "jd-4", "to": "jd-5" },
+        { "from": "jd-5", "to": "jd-6" },
+        { "from": "jd-6", "to": "jd-7" },
+        { "from": "jd-7", "to": "jd-8" },
+        { "from": "jd-8", "to": "jd-9" },
+        { "from": "jd-9", "to": "jd-10" },
+        { "from": "jd-10", "to": "jd-11" }
       ]
     },
     {
