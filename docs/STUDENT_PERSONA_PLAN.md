@@ -801,6 +801,16 @@ Company Placement, Full Stack Web Developer, Frontend Developer, Backend Develop
    roadmap as reading-plus-borrowed-practice (above), or enable Go in `ALLOWED_LANGUAGE_IDS` first as a
    small separate backend change. Your call, not blocking the rest of S13.
 
+**Phase A — shipped 2026-10-06.** Schema, resolver, graph canvas (3 node types, side panel), mobile list
+fallback, and the list page restyled toward the roadmap.sh dashboard look (progress ring, Start/Continue/
+Review). One roadmap (Java Developer) converted as the proof vehicle; the other 3 legacy roadmaps and the
+16 new roles are still ahead in Phases B and C. Two decisions settled during the build, both matching what
+was proposed above: groups-only (no real branch routing), side panel on click. Group labels are authored
+and returned by the API but not yet drawn as their own swim-lane header on the canvas — dagre ranks by
+edges alone for now; a real visual improvement, deliberately deferred rather than rushed into this pass.
+New dependency landed: `@xyflow/react` + `dagre` (pre-existing vulnerability count unchanged — checked
+against `main` before and after, neither of the two new packages is implicated).
+
 ---
 
 ## Appendix A — Component state catalogue

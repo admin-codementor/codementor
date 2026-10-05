@@ -5,6 +5,53 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-05 (Mon) — part 17
+**Area:** S13 Phase A — the roadmap graph renderer (foundation only)
+**Did:**
+- Extended the roadmap content model from a flat milestone list to a graph — groups, nodes (**topic** /
+  **checkpoint** / **note**), edges — stored alongside the old shape rather than replacing it.
+  `roadmapService.js`'s resolver now dispatches on whether a roadmap carries `nodes` or `milestones`, so
+  the 3 roadmaps not yet converted keep resolving through the untouched legacy path.
+- **Checkpoint** (a project/mock-round marker) and **note** (a side annotation, never a step, excluded
+  from every progress calculation) are genuinely new — the flat list had no room for either.
+- Built the actual graph: **React Flow + dagre** (new dependency, flagged not snuck in), custom node
+  components in our tokens rather than roadmap.sh's yellow, auto-layout from the authored edges. A node
+  click opens a **side panel** — matches the reference image, settles the open question from the plan.
+- **Mobile gets the same data as a vertical list**, not the canvas — a pan/zoom graph does not work below
+  ~768px. Both surfaces read from one shared `NodeDetailBody` component so they cannot disagree.
+- Converted **Java Developer** onto the new schema as the proof vehicle — 12 nodes, 1 note, 1 checkpoint,
+  4 groups — every word of its existing writing carried over unchanged, only the structural wrapper
+  changed. The other 3 roadmaps are untouched, still rendering their original rail.
+- `/app/roadmaps` restyled toward the roadmap.sh dashboard: a **progress ring** (pulled into a shared
+  `ProgressRing` component rather than a third copy of the Job-Ready Score dial's SVG) and a
+  Start/Continue/Review cue in place of the old icon tile and linear bar.
+- 6 new backend checks specifically exercise the graph path — `format` field, nodes/edges/groups instead
+  of milestones, a note never tracked or "you are here", a checkpoint carrying its own status, and solving
+  a graph node's problems moving it. The existing 26 checks only ever touched the legacy list roadmap.
+**Found while verifying, not while building:**
+- My own first version of the new graph-path test asserted a clean-slate solve count and failed —
+  `ME` had already solved overlapping-tag problems earlier in the same suite run, against the legacy
+  roadmap tested first, on the same shared catalogue. Fixed the assertion to add to what was already
+  solved rather than assume zero — same "steps share problems" lesson S9 already taught, now also true
+  across different roadmaps in one run, not just within one.
+- Coordinate-based clicks in the browser pane were landing a few pixels off the node and missing — not a
+  bug in the component. Confirmed by dispatching the click event directly on the DOM node, which opened
+  the side panel correctly with the right content.
+**Verified:** Java Developer's graph rendered and confirmed in the browser — all 12 boxes, the note beside
+OOP, the dark checkpoint box at the bottom, connectors, the side panel's content matching exactly. Mobile
+fallback confirmed separately: list view, same note, same checkpoint, no horizontal overflow. The 3
+untouched roadmaps confirmed still using the old rail. The Home tile confirmed reading the graph-shaped
+active roadmap correctly. Clean `npm ci` (lockfile reproducible, pre-existing vulnerability count
+unchanged — neither new package implicated), `tsc` clean, lint unchanged at 97/0, production build
+passes, full smoke suite **355 passed, 5 skipped** (same documented AI-quota skips). Probe data deleted.
+**Not done, deliberately:** group labels are authored and returned by the API but not drawn as their own
+swim-lane header on the canvas yet — dagre ranks by edges alone for now, a real improvement left for later
+rather than rushed in. Phases B (reauthor the other 3 roadmaps) and C (the 16 new roles, in batches) are
+still ahead — this was foundation only, as planned.
+**Branch:** `feat/home-page` — not pushed.
+
+---
+
 ## 2026-10-05 (Mon) — part 16
 **Area:** S12 — Workbench (Practice regrouped with Sandbox, rebuilt as weak-topic coaching)
 **Why:** Asked whether Practice duplicates Courses. Checked the data: every one of the 77 published problems
