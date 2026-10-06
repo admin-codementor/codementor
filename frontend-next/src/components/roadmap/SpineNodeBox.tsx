@@ -1,42 +1,25 @@
 "use client";
 
 import * as React from "react";
-import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import ButtonBase from "@mui/material/ButtonBase";
-import { CheckCircleIcon, FlagOutlinedIcon } from "@/components/ui/icons";
+import { FlagOutlinedIcon } from "@/components/ui/icons";
 import { radius } from "@/theme/tokens";
 import type { StepNode } from "./spineLayout";
 
 /**
- * One box on the spine canvas — a topic (brand colour, filled once done) or
- * a checkpoint (its own dark shape, "you built something" reads differently
- * from "you learned something"). Branch nodes use the same tone rules at a
- * smaller size, same as the reference's topic leaves.
+ * One box on the spine canvas — a topic (neutral tone, same for every topic
+ * regardless of status) or a checkpoint (its own dark shape, a project or
+ * mock round rather than a lesson). This is a content map, not a progress
+ * tracker: no solved count, no done/not-done styling — see S13's canvas
+ * reskin decision (D18). Branch/subtopic leaves use the same shape, smaller.
  */
 
-function tone(node: StepNode): { bg: string; border: string; fg: string } {
-  if (!node.tracked) return { bg: "surfaceContainerHigh", border: "outlineVariant", fg: "text.primary" };
-  if (node.status === "done") return { bg: "success.main", border: "success.main", fg: "success.contrastText" };
-  if (node.status === "in_progress") return { bg: "primaryContainer", border: "primary.main", fg: "onPrimaryContainer" };
-  return { bg: "surfaceContainerHighest", border: "outlineVariant", fg: "text.primary" };
-}
-
-function ProgressBadge({ node }: { node: StepNode }) {
-  if (!node.tracked) {
-    const label = node.status === "test" ? "Test" : node.status === "checkpoint" ? "Checkpoint" : "Reading";
-    return (
-      <Typography variant="caption" sx={{ opacity: 0.8 }}>
-        {label}
-      </Typography>
-    );
-  }
-  if (node.status === "done") return <CheckCircleIcon fontSize="small" />;
-  return (
-    <Typography variant="caption" fontWeight={700} sx={{ fontVariantNumeric: "tabular-nums" }}>
-      {node.solved}/{node.target}
-    </Typography>
-  );
+function typeLabel(node: StepNode): string | null {
+  if (node.tracked) return null;
+  if (node.status === "test") return "Test";
+  if (node.status === "checkpoint") return null; // the flag icon + dark tone already say this
+  return "Reading";
 }
 
 export function SpineNodeBox({
@@ -58,8 +41,8 @@ export function SpineNodeBox({
   selected: boolean;
   onClick: (e: React.MouseEvent) => void;
 }) {
-  const t = tone(node);
   const isCheckpoint = node.type === "checkpoint";
+  const label = typeLabel(node);
 
   return (
     <ButtonBase
@@ -74,9 +57,9 @@ export function SpineNodeBox({
         py: branch ? 0.75 : 1.25,
         borderRadius: branch ? radius.sm : radius.md,
         border: "2px solid",
-        borderColor: selected ? "primary.main" : isCheckpoint ? "transparent" : t.border,
-        backgroundColor: isCheckpoint ? "inverseSurface" : t.bg,
-        color: isCheckpoint ? "inverseOnSurface" : t.fg,
+        borderColor: selected ? "primary.main" : isCheckpoint ? "transparent" : "outlineVariant",
+        backgroundColor: isCheckpoint ? "inverseSurface" : branch ? "surfaceContainerHigh" : "surfaceContainerHighest",
+        color: isCheckpoint ? "inverseOnSurface" : "text.primary",
         display: "flex",
         flexDirection: branch ? "row" : "column",
         alignItems: branch ? "center" : "stretch",
@@ -91,10 +74,10 @@ export function SpineNodeBox({
       <Typography variant={branch ? "caption" : "subtitle2"} fontWeight={700} sx={{ lineHeight: 1.25, flex: 1, minWidth: 0 }} noWrap={branch}>
         {node.title}
       </Typography>
-      {!branch && (
-        <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-          <ProgressBadge node={node} />
-        </Box>
+      {!branch && label && (
+        <Typography variant="caption" sx={{ opacity: 0.8, alignSelf: "flex-end" }}>
+          {label}
+        </Typography>
       )}
     </ButtonBase>
   );

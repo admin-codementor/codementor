@@ -223,6 +223,10 @@ function resolveNode(node, catalog, solvedSet) {
     mcq: node.mcq || null,
     attachTo: node.attachTo || null,
     text: node.type === 'note' ? node.text || node.why || null : undefined,
+    // Short labelled sub-skills shown as branch leaves on the roadmap canvas
+    // (e.g. "HashMap", "TreeMap" under "Collections framework") — purely
+    // descriptive, authored content, never matched against the catalog.
+    subtopics: node.type === 'note' ? undefined : node.subtopics || [],
   };
 
   if (node.type === 'note') {

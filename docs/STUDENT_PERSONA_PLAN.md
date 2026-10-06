@@ -48,6 +48,8 @@ of every student page done on 2026-10-03 (findings quoted inline below with file
 | D15 | New features | Add **Shareable verified profile** and **Mistakes notebook**. |
 | D16 | Practice vs. Courses | Not merged. Practice keeps its own identity — self-directed, weak-topic-aware — regrouped under a new **Workbench** section with Sandbox. Courses stays faculty-sequenced order. See S12. |
 | D17 | Assignments vs. Practice | Not merged. Different governance — faculty-set deadline/grading vs self-directed, no deadline. A cross-link (a chip on a Practice row when it's also an active assignment) considered but not built. |
+| D18 | Roadmap visual + content source | User-supplied reference file's curved-spine visual adopted exactly (replaced dagre). Its 91-role content library is Phase C's *source list* for roadmap.sh fetches, not ingested verbatim — our nodes need real catalog-tag matches to track progress, which that file's descriptive text does not carry. |
+| D19 | Roadmap purpose | A roadmap is a **map of the path and its resources**, not a progress tracker. No solved counts, no done/not-done styling, no link from a roadmap node into Problems/Practice/Tests — that connection was the thing the user flagged as wrong. Each topic now also shows 3–4 short **sub-skill labels** (branch leaves, e.g. "HashMap" under "Collections framework"), matching the roadmap.sh reference's structure. Progress tracking itself is unchanged in the backend and still powers Job-Ready Score / the dashboard tile / the public profile — only the roadmap *pages* stopped displaying it. |
 
 ## 3. Answered follow-ups (2026-10-03)
 
@@ -803,13 +805,38 @@ Company Placement, Full Stack Web Developer, Frontend Developer, Backend Develop
 
 **Phase A — shipped 2026-10-06.** Schema, resolver, graph canvas (3 node types, side panel), mobile list
 fallback, and the list page restyled toward the roadmap.sh dashboard look (progress ring, Start/Continue/
-Review). One roadmap (Java Developer) converted as the proof vehicle; the other 3 legacy roadmaps and the
-16 new roles are still ahead in Phases B and C. Two decisions settled during the build, both matching what
-was proposed above: groups-only (no real branch routing), side panel on click. Group labels are authored
-and returned by the API but not yet drawn as their own swim-lane header on the canvas — dagre ranks by
-edges alone for now; a real visual improvement, deliberately deferred rather than rushed into this pass.
-New dependency landed: `@xyflow/react` + `dagre` (pre-existing vulnerability count unchanged — checked
-against `main` before and after, neither of the two new packages is implicated).
+Review). One roadmap (Java Developer) converted as the proof vehicle. Two decisions settled during the
+build, both matching what was proposed above: groups-only (no real branch routing), side panel on click.
+
+**Canvas reskinned — shipped 2026-10-06.** The user supplied a closer visual reference (a hand-rolled
+vertical spine with curved bezier branches, roadmap.sh's actual balsamiq look) and asked for it applied
+exactly. `@xyflow/react` + `dagre` are gone — replaced with a purpose-built layout (`spineLayout.ts`) that
+picks the critical path through each roadmap's nodes/edges and renders plain SVG connectors under
+absolutely-positioned MUI boxes. No schema or resolver change; this is a frontend-only reskin. Group labels
+(deferred in Phase A) are drawn now, as inline section headers along the spine — the spine format made this
+natural where dagre's generic layout had not.
+
+**Phase B — shipped 2026-10-06.** The other 3 legacy roadmaps (Service-Company Placement, Python / Data
+Analyst, Web Developer) converted from flat `milestones` to `groups`/`nodes`/`edges` — mechanical restructure,
+every milestone's own writing (title/why/practice/reading/mcq) carried over unchanged. Each existing
+"ship a project" / "explain your own code" capstone step became a `checkpoint` node, matching the pattern
+Java Developer's `jd-11` already established. The suite's generic roadmap checks assumed `roadmaps[0]` was
+always flat-list-shaped (true before this change, since it was always the first legacy roadmap) — updated to
+read either shape, since there is no longer a flat-list roadmap left to assume. All 4 roadmaps are
+graph-shaped as of this phase; 16 new roles remain, in Phase C.
+
+**Purpose correction — shipped 2026-10-06.** User flagged, from a live screenshot of their own earlier
+reference site, that the roadmap page should never have connected nodes to specific problems — "see in
+roadmap we will show the full roadmap and resources not any problems" (D19). Removed: per-node solved/target
+badges and done/not-done coloring, the "Step X of Y / percent" card on the detail page, the list page's
+`ProgressRing`/Start-Continue-Review cue, the side panel's "Next up" problem list and "Practise this"/"Open
+module"/"Go to Tests" buttons, and the now-fully-orphaned `milestoneHref`/`nodeHref`/`mcqHref` helpers. Added:
+a `subtopics` field (3–6 short sub-skill labels per node, e.g. "HashMap" under "Collections framework"),
+authored for all 43 existing nodes and rendered as branch-leaf chips on the canvas — the same visual slot
+`spineLayout.ts`'s branch-node machinery already supported, now doing double duty for authored labels instead
+of (so far nonexistent) real graph forks. Backend `resolveNode()` passes `subtopics` through unchanged; no
+other progress math touched, since Job-Ready Score and the dashboard tile still read `solved`/`target`/
+`percent` from the same resolver — only the roadmap pages stopped displaying it.
 
 ---
 

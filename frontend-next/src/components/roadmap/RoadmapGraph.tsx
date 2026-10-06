@@ -19,7 +19,7 @@ import { NodeSidePanel } from "./NodeSidePanel";
  * Not used below ~768px — see the roadmap detail page, which renders
  * `GraphNodeList` instead on a phone.
  */
-export function RoadmapGraph({ roadmap, roadmapId }: { roadmap: RoadmapGraphDetail; roadmapId: string }) {
+export function RoadmapGraph({ roadmap }: { roadmap: RoadmapGraphDetail }) {
   const layout = React.useMemo(
     () => layoutRoadmapSpine(roadmap.nodes, roadmap.edges, roadmap.groups),
     [roadmap.nodes, roadmap.edges, roadmap.groups],
@@ -86,6 +86,31 @@ export function RoadmapGraph({ roadmap, roadmapId }: { roadmap: RoadmapGraphDeta
             />
           ))}
 
+          {layout.subtopics.map((sub) => (
+            <Box
+              key={sub.id}
+              sx={{
+                position: "absolute",
+                left: sub.x,
+                top: sub.y,
+                width: sub.w,
+                minHeight: sub.h,
+                px: 1.25,
+                py: 0.75,
+                borderRadius: radius.sm,
+                border: "1px solid",
+                borderColor: "outlineVariant",
+                backgroundColor: "surfaceContainer",
+                display: "flex",
+                alignItems: "center",
+              }}
+            >
+              <Typography variant="caption" fontWeight={600} noWrap>
+                {sub.text}
+              </Typography>
+            </Box>
+          ))}
+
           {layout.notes.map((note) => (
             <Box
               key={note.id}
@@ -114,13 +139,7 @@ export function RoadmapGraph({ roadmap, roadmapId }: { roadmap: RoadmapGraphDeta
         </Box>
       </Box>
 
-      <NodeSidePanel
-        node={selected}
-        current={selected?.id === (roadmap.currentMilestone?.id ?? null)}
-        roadmapRole={roadmap.role}
-        roadmapId={roadmapId}
-        onClose={() => setSelectedId(null)}
-      />
+      <NodeSidePanel node={selected} onClose={() => setSelectedId(null)} />
     </>
   );
 }

@@ -30,6 +30,18 @@ export interface PositionedNote {
   w: number;
 }
 
+/** A plain labelled leaf — a node's sub-skill, drawn beside it but never
+ * clickable and never a step of its own (same role as the reference file's
+ * topic boxes). */
+export interface PositionedSubtopic {
+  id: string;
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 export interface GroupHeader {
   id: string;
   label: string;
@@ -45,6 +57,7 @@ export interface Connector {
 export interface SpineLayout {
   steps: PositionedStep[];
   notes: PositionedNote[];
+  subtopics: PositionedSubtopic[];
   groupHeaders: GroupHeader[];
   connectors: Connector[];
   width: number;
@@ -55,6 +68,8 @@ export const SPINE_WIDTH = 240;
 export const SPINE_HEIGHT = 68;
 export const BRANCH_WIDTH = 176;
 export const BRANCH_HEIGHT = 44;
+const SUBTOPIC_WIDTH = 150;
+const SUBTOPIC_HEIGHT = 34;
 const NOTE_WIDTH = 200;
 const SIDE_GAP = 48;
 const TOP_PAD = 32;
@@ -153,6 +168,7 @@ export function layoutRoadmapSpine(
   const { spineOrder, branchParent } = buildSpine(steps, edges);
 
   const rawPositions = new Map<string, { x: number; y: number; w: number; h: number; branch: boolean }>();
+  const rawSubtopics: { id: string; text: string; x: number; y: number; w: number; h: number }[] = [];
   const groupHeaders: GroupHeader[] = [];
   const connectors: Connector[] = [];
 
@@ -169,9 +185,19 @@ export function layoutRoadmapSpine(
       lastGroup = node.group;
     }
 
-    const branches = steps.filter((s) => branchParent.get(s.id) === id);
-    const rows = Math.max(Math.ceil(branches.length / 2), 1);
-    const blockHeight = Math.max(SPINE_HEIGHT + 72, rows * (BRANCH_HEIGHT + 12) + 56);
+    // Leaves off this spine node: real forks in the graph (rare — today's
+    // content is a single chain) plus its authored subtopics (the common
+    // case). Both alternate left/right in one combined row sequence, same
+    // rule the reference file uses for its topic leaves.
+    const branchSteps = steps.filter((s) => branchParent.get(s.id) === id);
+    type Leaf = { kind: "step"; step: StepNode } | { kind: "label"; text: string; index: number };
+    const leaves: Leaf[] = [
+      ...branchSteps.map((step): Leaf => ({ kind: "step", step })),
+      ...(node.subtopics ?? []).map((text, index): Leaf => ({ kind: "label", text, index })),
+    ];
+    const rowHeight = Math.max(BRANCH_HEIGHT, SUBTOPIC_HEIGHT);
+    const rows = Math.max(Math.ceil(leaves.length / 2), 1);
+    const blockHeight = Math.max(SPINE_HEIGHT + 72, rows * (rowHeight + 12) + 56);
 
     const x = centerX - SPINE_WIDTH / 2;
     const y = yCursor;
@@ -185,19 +211,27 @@ export function layoutRoadmapSpine(
       });
     }
 
-    branches.forEach((b, i) => {
+    leaves.forEach((leaf, i) => {
       const side: "left" | "right" = i % 2 === 0 ? "left" : "right";
       const row = Math.floor(i / 2);
-      const rowOffset = (row - (rows - 1) / 2) * (BRANCH_HEIGHT + 12);
-      const bx = side === "left" ? x - SIDE_GAP - BRANCH_WIDTH : x + SPINE_WIDTH + SIDE_GAP;
-      const by = y + (SPINE_HEIGHT - BRANCH_HEIGHT) / 2 + rowOffset;
-      rawPositions.set(b.id, { x: bx, y: by, w: BRANCH_WIDTH, h: BRANCH_HEIGHT, branch: true });
+      const rowOffset = (row - (rows - 1) / 2) * (rowHeight + 12);
+      const leafW = leaf.kind === "step" ? BRANCH_WIDTH : SUBTOPIC_WIDTH;
+      const leafH = leaf.kind === "step" ? BRANCH_HEIGHT : SUBTOPIC_HEIGHT;
+      const bx = side === "left" ? x - SIDE_GAP - leafW : x + SPINE_WIDTH + SIDE_GAP;
+      const by = y + (SPINE_HEIGHT - leafH) / 2 + rowOffset;
+
+      if (leaf.kind === "step") {
+        rawPositions.set(leaf.step.id, { x: bx, y: by, w: leafW, h: leafH, branch: true });
+      } else {
+        rawSubtopics.push({ id: `${id}-sub-${leaf.index}`, text: leaf.text, x: bx, y: by, w: leafW, h: leafH });
+      }
 
       const fromX = side === "left" ? x : x + SPINE_WIDTH;
       const fromY = y + SPINE_HEIGHT / 2;
-      const toX = side === "left" ? bx + BRANCH_WIDTH : bx;
-      const toY = by + BRANCH_HEIGHT / 2;
-      connectors.push({ id: `branch-${b.id}`, d: curvePath(fromX, fromY, toX, toY, side), dashed: true });
+      const toX = side === "left" ? bx + leafW : bx;
+      const toY = by + leafH / 2;
+      const connId = leaf.kind === "step" ? `branch-${leaf.step.id}` : `sub-${id}-${leaf.index}`;
+      connectors.push({ id: connId, d: curvePath(fromX, fromY, toX, toY, side), dashed: true });
     });
 
     yCursor += blockHeight;
@@ -231,6 +265,10 @@ export function layoutRoadmapSpine(
     minX = Math.min(minX, n.x);
     maxX = Math.max(maxX, n.x + n.w);
   }
+  for (const sub of rawSubtopics) {
+    minX = Math.min(minX, sub.x);
+    maxX = Math.max(maxX, sub.x + sub.w);
+  }
   if (!Number.isFinite(minX)) {
     minX = -SPINE_WIDTH / 2;
     maxX = SPINE_WIDTH / 2;
@@ -241,6 +279,7 @@ export function layoutRoadmapSpine(
     Array.from(rawPositions.entries()).map(([id, p]) => [id, { ...p, x: p.x + shiftX }]),
   );
   const notes: PositionedNote[] = rawNotes.map((n) => ({ ...n, x: n.x + shiftX }));
+  const subtopics: PositionedSubtopic[] = rawSubtopics.map((s) => ({ ...s, x: s.x + shiftX }));
   const shiftedConnectors = connectors.map((c) => ({ ...c, d: shiftPathX(c.d, shiftX) }));
 
   const steps_: PositionedStep[] = spineOrder
@@ -254,6 +293,7 @@ export function layoutRoadmapSpine(
   return {
     steps: steps_,
     notes,
+    subtopics,
     groupHeaders,
     connectors: shiftedConnectors,
     width: maxX - minX + SIDE_PAD * 2,

@@ -5,9 +5,8 @@ import Drawer from "@mui/material/Drawer";
 import Box from "@mui/material/Box";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
-import { CloseIcon, CheckCircleIcon, FlagOutlinedIcon, TipsAndUpdatesOutlinedIcon } from "@/components/ui/icons";
+import { CloseIcon, FlagOutlinedIcon, TipsAndUpdatesOutlinedIcon } from "@/components/ui/icons";
 import { layout } from "@/theme/tokens";
 import { NodeDetailBody } from "./NodeDetailBody";
 import type { RoadmapNode } from "@/lib/queries/roadmaps";
@@ -17,22 +16,17 @@ import type { RoadmapNode } from "@/lib/queries/roadmaps";
  * exactly (click a box, a panel slides in with the detail) rather than
  * jumping the student straight to a module. Same content as the mobile list's
  * expanded row, via `NodeDetailBody`, so the two surfaces can't disagree.
+ *
+ * Pure content: why this topic matters, its sub-skills, and reference links —
+ * no progress state and no link into Problems/Practice (D18).
  */
 export function NodeSidePanel({
   node,
-  current,
-  roadmapRole,
-  roadmapId,
   onClose,
 }: {
   node: RoadmapNode | null;
-  current: boolean;
-  roadmapRole: string;
-  roadmapId: string;
   onClose: () => void;
 }) {
-  const done = node?.tracked && node.status === "done";
-
   return (
     <Drawer anchor="right" open={!!node} onClose={onClose} slotProps={{ paper: { sx: { width: { xs: "100%", sm: 420 } } } }}>
       {node && (
@@ -41,7 +35,6 @@ export function NodeSidePanel({
             <Stack direction="row" spacing={1} alignItems="center">
               {node.type === "checkpoint" && <FlagOutlinedIcon fontSize="small" sx={{ color: "text.secondary" }} />}
               {node.type === "note" && <TipsAndUpdatesOutlinedIcon fontSize="small" sx={{ color: "warning.main" }} />}
-              {done && <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />}
               <Typography variant="h6" fontWeight={700} sx={{ lineHeight: 1.3 }}>
                 {node.type === "note" ? "Note" : node.title}
               </Typography>
@@ -51,12 +44,8 @@ export function NodeSidePanel({
             </IconButton>
           </Stack>
 
-          {current && node.type !== "note" && (
-            <Chip size="small" color="primary" label="You are here" sx={{ mt: 1 }} />
-          )}
-
           <Box sx={{ mt: 2 }}>
-            <NodeDetailBody node={node} current={current} roadmapRole={roadmapRole} roadmapId={roadmapId} />
+            <NodeDetailBody node={node} />
           </Box>
         </Box>
       )}

@@ -10,6 +10,13 @@ const { tokenFor, get, put, Suite, purge, userId, db } = require('../harness');
 
 const HOUR = 3600_000;
 
+// A graph roadmap's steps (nodes minus notes, which are commentary rather
+// than a step) are the same thing a flat roadmap's milestones are — unify
+// here so the generic checks below don't need to assume either shape.
+const stepsOf = (detail) => (detail?.format === 'graph'
+  ? (detail?.nodes ?? []).filter((n) => n.type !== 'note')
+  : (detail?.milestones ?? []));
+
 module.exports = async function roadmapsSuite() {
   const s = new Suite('Roadmaps: content, progress & active choice');
 
@@ -56,13 +63,13 @@ module.exports = async function roadmapsSuite() {
   const first = roadmaps[0];
   const detailRes = await get(`/api/roadmaps/${first.id}`, TOKEN);
   const detail = detailRes.body?.data;
-  const milestones = detail?.milestones ?? [];
+  const milestones = stepsOf(detail);
   s.check('detail returns the milestones', detailRes.status === 200 && milestones.length === first.milestoneCount,
     `${milestones.length} vs ${first.milestoneCount}`);
 
   s.check('a milestone we cannot verify says so rather than reporting 0%',
     milestones.filter((m) => !m.tracked).every((m) => m.solved === undefined && m.percent === undefined
-      && ['reading', 'test'].includes(m.status)),
+      && ['reading', 'test', 'checkpoint'].includes(m.status)),
     milestones.filter((m) => !m.tracked).map((m) => m.status).join(', '));
 
   const tracked = milestones.filter((m) => m.tracked);
@@ -106,7 +113,7 @@ module.exports = async function roadmapsSuite() {
     const n = step.nextProblems.length;
 
     const after = (await get(`/api/roadmaps/${first.id}`, TOKEN)).body?.data;
-    const stepAfter = after.milestones.find((m) => m.id === step.id);
+    const stepAfter = stepsOf(after).find((m) => m.id === step.id);
 
     s.check('solving the next problems moves that milestone',
       stepAfter.solved === Math.min(n, stepAfter.target),
@@ -125,7 +132,7 @@ module.exports = async function roadmapsSuite() {
 
     // A wrong answer is not progress. This is the student dashboard rule (S3)
     // applied here: only Accepted counts.
-    const rejectedProblem = after.milestones.find((m) => m.tracked && m.nextProblems?.length)?.nextProblems?.[0];
+    const rejectedProblem = stepsOf(after).find((m) => m.tracked && m.nextProblems?.length)?.nextProblems?.[0];
     if (rejectedProblem) {
       const before = after.solved;
       await db().collection('submissions').add({
@@ -163,12 +170,11 @@ module.exports = async function roadmapsSuite() {
   s.check('the student can clear the choice', cleared.status === 200
     && (await get('/api/roadmaps', TOKEN)).body?.activeRoadmapId === null, JSON.stringify(cleared.body));
 
-  // ── A graph-shaped roadmap (S13) resolves the same way, structured
-  //    differently ──────────────────────────────────────────────────────────
-  // Every check above ran against `roadmaps[0]`, which is always the first
-  // (legacy, flat-list) roadmap in the file — none of it exercises the graph
-  // path at all. `java-developer` is the one roadmap authored as nodes/edges/
-  // groups so far; this block is the only coverage the graph resolver has.
+  // ── Node-type-specific graph coverage ───────────────────────────────────────
+  // The generic block above already exercises the graph resolver end to end
+  // (every roadmap is graph-shaped as of S13 Phase B) — this block specifically
+  // pins down `java-developer`'s note and checkpoint node, the two node types
+  // the generic block's roadmap (service-company-placement) does not contain.
   const graphRes = await get('/api/roadmaps/java-developer', TOKEN);
   const graph = graphRes.body?.data;
   s.check('a graph roadmap says so in its format field',

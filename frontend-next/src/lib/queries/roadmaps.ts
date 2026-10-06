@@ -51,6 +51,10 @@ export interface TrackedNode {
   why: string | null;
   reading: { label: string; url: string }[];
   mcq: string[] | null;
+  /** Short labelled sub-skills drawn as branch leaves beside this node on the
+   * canvas (e.g. "HashMap" under "Collections framework") — descriptive only,
+   * never a step of its own. */
+  subtopics: string[];
   tracked: true;
   status: "done" | "in_progress" | "not_started" | "unavailable";
   solved: number;
@@ -69,6 +73,7 @@ export interface UntrackedNode {
   why: string | null;
   reading: { label: string; url: string }[];
   mcq: string[] | null;
+  subtopics: string[];
   tracked: false;
   // "checkpoint" joins reading/test here: a project/mock-test marker we
   // cannot verify by running code, same "untracked, not 0%" rule, its own
@@ -184,47 +189,3 @@ export function useSetActiveRoadmap() {
   });
 }
 
-/**
- * Where a milestone sends the student: its module, or a filtered practice
- * list. `roadmapRole` and `milestoneTitle`, when given, ride along as query
- * params so Practice can show why the student landed there (S12) — dropped
- * silently by the receiving page when absent, so this is safe to call without
- * them too.
- */
-export function milestoneHref(m: Milestone, roadmapRole?: string, roadmapId?: string): string | null {
-  if (!m.tracked) return null;
-  if (m.link?.kind === "module") return `/app/courses/${m.link.courseId}?module=${m.link.moduleId}`;
-  if (m.link?.kind === "practice") {
-    const params = new URLSearchParams({ tag: m.link.tag });
-    if (roadmapRole) {
-      params.set("source", "roadmap");
-      params.set("from", roadmapRole);
-      if (roadmapId) params.set("rid", roadmapId);
-    }
-    return `/app/problems?${params.toString()}`;
-  }
-  return null;
-}
-
-/** Same as `milestoneHref`, for a graph node. A note never has somewhere to
- * go — it is commentary, not a step. */
-export function nodeHref(n: RoadmapNode, roadmapRole?: string, roadmapId?: string): string | null {
-  if (n.type === "note" || !n.tracked) return null;
-  if (n.link?.kind === "module") return `/app/courses/${n.link.courseId}?module=${n.link.moduleId}`;
-  if (n.link?.kind === "practice") {
-    const params = new URLSearchParams({ tag: n.link.tag });
-    if (roadmapRole) {
-      params.set("source", "roadmap");
-      params.set("from", roadmapRole);
-      if (roadmapId) params.set("rid", roadmapId);
-    }
-    return `/app/problems?${params.toString()}`;
-  }
-  return null;
-}
-
-/** Tests hub tab for an MCQ step: technical questions have their own tab. */
-export function mcqHref(mcq: string[] | null): string {
-  if (mcq?.includes("technical")) return "/app/tests?tab=technical";
-  return "/app/tests?tab=aptitude";
-}

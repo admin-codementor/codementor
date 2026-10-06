@@ -7,7 +7,6 @@ import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
 import ButtonBase from "@mui/material/ButtonBase";
 import {
-  CheckCircleIcon,
   RadioButtonUncheckedIcon,
   MenuBookOutlinedIcon,
   TimerOutlinedIcon,
@@ -29,18 +28,17 @@ type StepNode = Exclude<RoadmapNode, { type: "note" }>;
  * student never sees two different stories depending on their screen size.
  *
  * Notes render inline, right after the node they comment on (`attachTo`),
- * rather than as a numbered step — they carry no number and no progress,
- * same rule the graph's dashed box follows.
+ * rather than as a numbered step — they carry no number, same rule the
+ * graph's dashed box follows. Pure content map: no progress state (D18).
  */
 
-function StatusDot({ node, current }: { node: StepNode; current: boolean }) {
-  const done = node.tracked && node.status === "done";
-  const icon = done ? (
-    <CheckCircleIcon fontSize="small" />
-  ) : node.type === "checkpoint" ? (
+function StatusDot({ node }: { node: StepNode }) {
+  const icon = node.type === "checkpoint" ? (
     <FlagOutlinedIcon fontSize="small" />
+  ) : !node.tracked && node.status === "test" ? (
+    <TimerOutlinedIcon fontSize="small" />
   ) : !node.tracked ? (
-    node.status === "test" ? <TimerOutlinedIcon fontSize="small" /> : <MenuBookOutlinedIcon fontSize="small" />
+    <MenuBookOutlinedIcon fontSize="small" />
   ) : (
     <RadioButtonUncheckedIcon fontSize="small" />
   );
@@ -56,9 +54,9 @@ function StatusDot({ node, current }: { node: StepNode; current: boolean }) {
         display: "grid",
         placeItems: "center",
         zIndex: 1,
-        color: done ? "success.contrastText" : current ? "onPrimaryContainer" : "text.secondary",
-        backgroundColor: done ? "success.main" : current ? "primaryContainer" : "surfaceContainerHigh",
-        border: current && !done ? "2px solid var(--mui-palette-primary-main)" : "2px solid transparent",
+        color: "text.secondary",
+        backgroundColor: "surfaceContainerHigh",
+        border: "2px solid transparent",
       }}
     >
       {icon}
@@ -70,32 +68,21 @@ function NodeRow({
   node,
   index,
   last,
-  current,
   expanded,
   onToggle,
-  roadmapRole,
-  roadmapId,
 }: {
   node: StepNode;
   index: number;
   last: boolean;
-  current: boolean;
   expanded: boolean;
   onToggle: () => void;
-  roadmapRole: string;
-  roadmapId: string;
 }) {
-  const done = node.tracked && node.status === "done";
-
   return (
     <Box sx={{ display: "flex", gap: 2, position: "relative" }}>
       <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-        <StatusDot node={node} current={current} />
+        <StatusDot node={node} />
         {!last && (
-          <Box
-            aria-hidden
-            sx={{ flex: 1, width: 2, minHeight: 16, my: 0.5, backgroundColor: done ? "success.main" : "outlineVariant" }}
-          />
+          <Box aria-hidden sx={{ flex: 1, width: 2, minHeight: 16, my: 0.5, backgroundColor: "outlineVariant" }} />
         )}
       </Box>
 
@@ -107,7 +94,7 @@ function NodeRow({
         >
           <Stack direction="row" spacing={1} alignItems="center" sx={{ width: "100%" }}>
             <Box sx={{ minWidth: 0, flex: 1 }}>
-              <Typography variant="subtitle1" fontWeight={current ? 700 : 600} sx={{ lineHeight: 1.3, color: done ? "text.secondary" : "text.primary" }}>
+              <Typography variant="subtitle1" fontWeight={600} sx={{ lineHeight: 1.3 }}>
                 <Box component="span" sx={{ color: "text.secondary", mr: 1 }}>
                   {index + 1}.
                 </Box>
@@ -115,15 +102,7 @@ function NodeRow({
               </Typography>
             </Box>
 
-            {node.tracked ? (
-              node.status === "unavailable" ? (
-                <Chip size="small" variant="outlined" label="No problems yet" />
-              ) : (
-                <Typography variant="caption" fontWeight={600} color={done ? "success.main" : "text.secondary"} sx={{ whiteSpace: "nowrap" }}>
-                  {node.solved} / {node.target}
-                </Typography>
-              )
-            ) : (
+            {!node.tracked && (
               <Chip
                 size="small"
                 variant="outlined"
@@ -135,11 +114,9 @@ function NodeRow({
           </Stack>
         </ButtonBase>
 
-        {current && <Chip size="small" color="primary" label="You are here" sx={{ mt: 0.5, ml: 0.5 }} />}
-
         {expanded && (
           <Box sx={{ mt: 1.5 }}>
-            <NodeDetailBody node={node} current={current} roadmapRole={roadmapRole} roadmapId={roadmapId} />
+            <NodeDetailBody node={node} />
           </Box>
         )}
       </Box>
@@ -173,7 +150,7 @@ function NoteCard({ note }: { note: Extract<RoadmapNode, { type: "note" }> }) {
   );
 }
 
-export function GraphNodeList({ roadmap, roadmapId }: { roadmap: RoadmapGraphDetail; roadmapId: string }) {
+export function GraphNodeList({ roadmap }: { roadmap: RoadmapGraphDetail }) {
   const steps = roadmap.nodes.filter(
     (n): n is Exclude<RoadmapNode, { type: "note" }> => n.type !== "note",
   );
@@ -185,14 +162,7 @@ export function GraphNodeList({ roadmap, roadmapId }: { roadmap: RoadmapGraphDet
     notesByTarget.set(n.attachTo, list);
   }
 
-  const currentId = roadmap.currentMilestone?.id ?? null;
   const [expanded, setExpanded] = React.useState<Set<string>>(new Set());
-  const [openedFor, setOpenedFor] = React.useState<string | null>(null);
-  if (currentId && openedFor !== currentId) {
-    setOpenedFor(currentId);
-    setExpanded(new Set([currentId]));
-  }
-
   const toggle = (id: string) =>
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -209,11 +179,8 @@ export function GraphNodeList({ roadmap, roadmapId }: { roadmap: RoadmapGraphDet
             node={node}
             index={i}
             last={i === steps.length - 1 && !(notesByTarget.get(node.id)?.length)}
-            current={node.id === currentId}
             expanded={expanded.has(node.id)}
             onToggle={() => toggle(node.id)}
-            roadmapRole={roadmap.role}
-            roadmapId={roadmapId}
           />
           {notesByTarget.get(node.id)?.map((note) => <NoteCard key={note.id} note={note} />)}
         </React.Fragment>

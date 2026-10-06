@@ -5,6 +5,69 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-06 (Tue) — part 18
+**Area:** S13 — canvas reskin to a hand-rolled spine, Phase B (reauthor the 3 legacy roadmaps)
+**Did:**
+- User supplied a closer visual reference: a vertical spine with curved bezier branches (roadmap.sh's actual
+  balsamiq look), asked for it applied exactly, and to source new-role content from roadmap.sh directly
+  rather than invent it.
+- **Reskinned the graph canvas.** Replaced dagre's generic box-diagram auto-layout with a purpose-built
+  layout (`spineLayout.ts`): picks the critical path through a roadmap's nodes/edges and renders it as a
+  vertical spine, with any fan-out flattened onto branch leaves — curved SVG connectors under
+  absolutely-positioned MUI boxes, not a pan/zoom canvas library. **`@xyflow/react`, `dagre`,
+  `@types/dagre` removed entirely** — this is now plain SVG, no layout-engine dependency. Group labels
+  (deferred in Phase A) are drawn as inline section headers along the spine now, which the spine format
+  makes natural.
+- No backend or schema change — our nodes already track real solved-problem progress individually (unlike
+  the reference file's two-tier stage/topic-text split), so the spine IS the critical path, not a separate
+  descriptive layer on top.
+- **Phase B — reauthored the other 3 roadmaps** (Service-Company Placement, Python / Data Analyst, Web
+  Developer) from flat `milestones` onto `groups`/`nodes`/`edges`. Pure structural wrapper: every
+  milestone's own writing carried over unchanged via a one-off conversion script, not retyped by hand.
+  Each roadmap's existing capstone step ("ship a project", "explain your own code") became a `checkpoint`
+  node, matching the pattern `java-developer`'s `jd-11` already set. All 4 roadmaps are graph-shaped now.
+- Fixed a test-suite assumption the conversion broke: the generic roadmap checks read `roadmaps[0]` as
+  always flat-list-shaped (true before this change, since the first roadmap in the file was always legacy)
+  — updated to read either shape via a small `stepsOf()` helper, and extended the "cannot verify" status
+  list to include `checkpoint` alongside `reading`/`test`.
+**Verified:** clean `npm ci` after the dependency removal, `tsc` clean, lint unchanged (97 warnings/0
+errors), build passes, roadmap suite 32/32 (was silently broken to 4 failures mid-change, all traced to the
+test assumption above and fixed, not a resolver bug), live browser walk of all 4 roadmaps — spine render,
+group headers, note card, checkpoint styling, click-to-open and click-to-close the side panel.
+**Decisions:** D18 — the roadmap.sh reference file's visual approach (curved spine) adopted exactly; its
+91-role content library is Phase C's source list, not ingested directly (our nodes need real catalog-tag
+matches to track progress, which that file's descriptive text does not carry).
+**Next:** Phase C — author new roles in batches of 4–5, sourcing each from roadmap.sh directly per the
+user's instruction, starting with the batch already suggested in the plan (Product-Company Placement, Full
+Stack Web Developer, Frontend Developer, Backend Developer (Node.js), DSA Mastery).
+
+**Same-day correction — the roadmap page was still wrong.** User sent a screenshot of their own earlier
+reference site and pointed out the real complaint: "why are u showing and connecting problems to the
+roadmap.. see in roadmap we will show the full roadmap and resources not any problems." The reskin above
+got the *shape* right but kept the *behaviour* (solved counts, done/not-done colour, "Next up" problem list,
+buttons into Problems/Practice/Tests) — exactly what was wrong. Two questions settled it (D19): drop progress
+display entirely, and add the screenshot's branch-leaf sub-topics layer.
+**Did:**
+- Removed every progress/problem-link surface from the roadmap pages: per-node solved/target badges and
+  done/not-done node colour, the detail page's "Step X of Y / percent" card, the list page's `ProgressRing`
+  and Start/Continue/Review cue, the side panel's "Next up" problems and action buttons. Backend progress
+  math is untouched — Job-Ready Score, the dashboard tile and the public profile still read it; only the
+  roadmap pages stopped rendering it.
+- Added `subtopics: string[]` (3–6 short sub-skill labels, e.g. "HashMap"/"TreeMap" under "Collections
+  framework") to all 43 existing nodes across the 4 roadmaps, passed through by `resolveNode()` unchanged.
+  `spineLayout.ts`'s branch-leaf slot (built for real graph forks, unused until now since every roadmap is
+  still a single chain) now renders these as the branch boxes — no new visual mechanism needed.
+- Deleted `milestoneHref`/`nodeHref`/`mcqHref` from `lib/queries/roadmaps.ts` — orphaned once nothing linked
+  a roadmap node anywhere; leaving dead code that used to be the thing just corrected felt like the wrong
+  call to make silently.
+**Verified:** `tsc` clean, lint unchanged (97/0), build passes, roadmap suite still 32/32 (pure display
+change, confirms the correction didn't touch progress math), live browser walk of the spine with sub-topic
+chips rendering on both sides, side panel showing why + "Covers" chips + reference links with zero progress
+or problem-link UI, mobile list carrying the same content.
+**Branch:** `feat/home-page` (not pushed)
+
+---
+
 ## 2026-10-05 (Mon) — part 17
 **Area:** S13 Phase A — the roadmap graph renderer (foundation only)
 **Did:**
