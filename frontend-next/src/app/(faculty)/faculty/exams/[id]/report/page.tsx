@@ -26,6 +26,7 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
+import { typeScale } from "@/theme/tokens";
 import { ChartCard, ChartRow, KpiRow, KpiTile, Leaderboard, StackedBars } from "@/components/analytics";
 import { ExportButton, toCsv } from "@/components/analytics/ExportButton";
 import {
@@ -247,7 +248,7 @@ export default function ExamReportPage() {
                             <Chip
                               size="small"
                               label={`${a.proctor.total} flags`}
-                              sx={{ height: 20, fontSize: 11, ...RISK_STYLE[a.proctor.risk], bgcolor: RISK_STYLE[a.proctor.risk].bg, color: RISK_STYLE[a.proctor.risk].fg }}
+                              sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, ...RISK_STYLE[a.proctor.risk], bgcolor: RISK_STYLE[a.proctor.risk].bg, color: RISK_STYLE[a.proctor.risk].fg }}
                             />
                           ) : (
                             <Typography variant="caption" color="text.secondary">clean</Typography>
@@ -299,7 +300,7 @@ export default function ExamReportPage() {
                                   <Chip
                                     size="small"
                                     label={a.proctor?.risk}
-                                    sx={{ height: 20, fontSize: 11, textTransform: "capitalize", bgcolor: RISK_STYLE[a.proctor?.risk ?? "low"].bg, color: RISK_STYLE[a.proctor?.risk ?? "low"].fg }}
+                                    sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize", bgcolor: RISK_STYLE[a.proctor?.risk ?? "low"].bg, color: RISK_STYLE[a.proctor?.risk ?? "low"].fg }}
                                   />
                                 </TableCell>
                               </TableRow>

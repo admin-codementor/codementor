@@ -32,6 +32,7 @@ import { EmptyState } from "@/components/ui/States";
 import { SearchField } from "@/components/ui/SearchField";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
+import { radius, typeScale } from "@/theme/tokens";
 
 interface ModuleProblem { id: string; title: string; difficulty: string; tags: string[] }
 interface CourseModule { id: string; title: string; description: string; problems: ModuleProblem[] }
@@ -84,7 +85,7 @@ function ProblemPickerDialog({
       <DialogContent dividers>
         <Stack spacing={1.5}>
           <SearchField value={search} onChange={setSearch} placeholder="Search by title or tag" label="Search" />
-          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 340, overflowY: "auto" }}>
+          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, maxHeight: 340, overflowY: "auto" }}>
             {loading ? (
               <Stack spacing={1} sx={{ p: 1.5 }}>
                 {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={36} />)}
@@ -110,7 +111,7 @@ function ProblemPickerDialog({
                         <Typography variant="caption" color="text.secondary" noWrap>{p.tags.slice(0, 4).join(" · ")}</Typography>
                       )}
                     </Box>
-                    <Chip label={p.difficulty} size="small" sx={{ height: 18, fontSize: 10, textTransform: "capitalize", flexShrink: 0 }} />
+                    <Chip label={p.difficulty} size="small" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize", flexShrink: 0 }} />
                   </Stack>
                 );
               })
@@ -155,7 +156,7 @@ function ModuleCard({
               onChange={(e) => setTitle(e.target.value)}
               onBlur={() => { if (title.trim() && title.trim() !== module.title) onChange({ title: title.trim() }); else setTitle(module.title); }}
               size="small" variant="standard" disabled={!canEdit} fullWidth
-              slotProps={{ input: { disableUnderline: !canEdit, sx: { fontWeight: 700, fontSize: "1rem" } } }}
+              slotProps={{ input: { disableUnderline: !canEdit, sx: { fontWeight: 700, fontSize: typeScale.titleMedium.fontSize } } }}
             />
             {canEdit && (
               <Tooltip title="Delete module">
@@ -344,7 +345,7 @@ export default function CourseEditorPage() {
                 onChange={(e) => setTitle(e.target.value)}
                 onBlur={() => { if (title.trim() && title.trim() !== course.title) patchCourse({ title: title.trim() }); else setTitle(course.title); }}
                 size="small" variant="standard" disabled={!course.canEdit} fullWidth
-                slotProps={{ input: { disableUnderline: !course.canEdit, sx: { fontWeight: 700, fontSize: "1.25rem" } } }}
+                slotProps={{ input: { disableUnderline: !course.canEdit, sx: { fontWeight: 700, fontSize: typeScale.titleLarge.fontSize } } }}
               />
               <Chip
                 size="small" label={course.isPublished ? "Published" : "Draft"}

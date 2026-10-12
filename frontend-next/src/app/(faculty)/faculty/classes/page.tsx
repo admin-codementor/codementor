@@ -23,6 +23,7 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
+import { radius, typeScale } from "@/theme/tokens";
 import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 
@@ -97,7 +98,7 @@ function MembersDialog({ classroom, onClose }: { classroom: Classroom | null; on
                     alignItems="center"
                     sx={{
                       p: 1,
-                      borderRadius: 2,
+                      borderRadius: radius.md,
                       border: "1px solid",
                       borderColor: "outlineVariant",
                       textDecoration: "none",
@@ -105,7 +106,7 @@ function MembersDialog({ classroom, onClose }: { classroom: Classroom | null; on
                       ...interactiveSurfaceSx,
                     }}
                   >
-                    <Avatar sx={{ width: 32, height: 32, fontSize: 12, bgcolor: "primaryContainer", color: "onPrimaryContainer" }}>{initials(m.name)}</Avatar>
+                    <Avatar sx={{ width: 32, height: 32, fontSize: typeScale.labelMedium.fontSize, bgcolor: "primaryContainer", color: "onPrimaryContainer" }}>{initials(m.name)}</Avatar>
                     <Box sx={{ minWidth: 0 }}>
                       <Typography variant="body2" fontWeight={500} noWrap>{m.name}</Typography>
                       <Typography variant="caption" color="text.secondary" noWrap>{m.roll_no ? `${m.roll_no} · ` : ""}{m.email}</Typography>
@@ -254,7 +255,7 @@ export default function FacultyClassesPage() {
                     direction="row"
                     alignItems="center"
                     justifyContent="space-between"
-                    sx={{ flex: 1, px: 1.5, py: 1, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant" }}
+                    sx={{ flex: 1, px: 1.5, py: 1, borderRadius: radius.md, border: "1px solid", borderColor: "outlineVariant" }}
                   >
                     <Typography variant="caption" color="text.secondary">Join code</Typography>
                     <Typography variant="body2" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace", letterSpacing: "0.15em", color: "primary.main" }}>

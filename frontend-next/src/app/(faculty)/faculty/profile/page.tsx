@@ -33,6 +33,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { TwoFactorSetup } from "@/components/auth/TwoFactorSetup";
+import { typeScale } from "@/theme/tokens";
 
 interface FacultyStats {
   totalStudents: number;
@@ -154,7 +155,7 @@ export default function FacultyProfilePage() {
         <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
           <CardContent>
             <Stack direction="row" spacing={2.5} alignItems="flex-start" flexWrap="wrap" useFlexGap>
-              <Avatar sx={{ width: 64, height: 64, fontSize: 24, fontWeight: 700, bgcolor: isAdmin ? "tertiary" : "primary.main", color: isAdmin ? "onTertiary" : "primary.contrastText" }}>
+              <Avatar sx={{ width: 64, height: 64, fontSize: typeScale.headlineSmall.fontSize, fontWeight: 700, bgcolor: isAdmin ? "tertiary" : "primary.main", color: isAdmin ? "onTertiary" : "primary.contrastText" }}>
                 {initialsOf(user?.name)}
               </Avatar>
               <Box sx={{ flex: 1, minWidth: 0 }}>

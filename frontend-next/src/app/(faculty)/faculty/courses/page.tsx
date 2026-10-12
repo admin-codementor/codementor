@@ -23,6 +23,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { useToast } from "@/components/feedback/ToastProvider";
+import { typeScale } from "@/theme/tokens";
 
 interface CourseRow {
   id: string;
@@ -91,7 +92,7 @@ function CourseCard({ course, onClick }: { course: CourseRow; onClick: () => voi
               size="small"
               label={course.isPublished ? "Published" : "Draft"}
               sx={{
-                height: 20, fontSize: 10, fontWeight: 700, flexShrink: 0,
+                height: 20, fontSize: typeScale.labelSmall.fontSize, fontWeight: 700, flexShrink: 0,
                 bgcolor: course.isPublished ? "successContainer" : "surfaceContainerHigh",
                 color: course.isPublished ? "onSuccessContainer" : "onSurfaceVariant",
               }}
@@ -116,7 +117,7 @@ function CourseCard({ course, onClick }: { course: CourseRow; onClick: () => voi
               <Typography variant="caption" color="text.disabled">by {course.author}</Typography>
             )}
           </Stack>
-          {!course.canEdit && <Chip size="small" label="View only" sx={{ height: 18, fontSize: 10, alignSelf: "flex-start" }} />}
+          {!course.canEdit && <Chip size="small" label="View only" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, alignSelf: "flex-start" }} />}
         </Stack>
       </CardActionArea>
     </Card>

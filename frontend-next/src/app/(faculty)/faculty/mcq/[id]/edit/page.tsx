@@ -26,6 +26,7 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { AuthoringShell, CheckLine, type SaveState, type AuthoringStep } from "@/components/faculty/AuthoringShell";
+import { typeScale } from "@/theme/tokens";
 
 const CATEGORIES = ["aptitude", "technical", "verbal", "logical", "general"];
 
@@ -86,7 +87,7 @@ function QuestionCard({
           </Box>
           <Typography variant="caption" fontWeight={700} color="primary.main">Question {index + 1}</Typography>
           {!complete && (
-            <Chip label="Incomplete" size="small" sx={{ height: 18, fontSize: 10, bgcolor: "warningContainer", color: "onWarningContainer" }} />
+            <Chip label="Incomplete" size="small" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, bgcolor: "warningContainer", color: "onWarningContainer" }} />
           )}
           <Box sx={{ flex: 1 }} />
           <IconButton size="small" disabled={index === 0} onClick={() => onMove(-1)} aria-label={`Move question ${index + 1} up`}>
@@ -421,9 +422,9 @@ export default function McqBuilderPage() {
         <Stack spacing={2}>
           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
             <Typography variant="subtitle1" fontWeight={600}>{title || "Untitled test"}</Typography>
-            <Chip size="small" label={category} sx={{ height: 20, fontSize: 10, textTransform: "uppercase" }} />
-            <Chip size="small" label={`${duration} min`} sx={{ height: 20, fontSize: 10 }} />
-            <Chip size="small" label={`${totalMarks} marks`} sx={{ height: 20, fontSize: 10 }} />
+            <Chip size="small" label={category} sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, textTransform: "uppercase" }} />
+            <Chip size="small" label={`${duration} min`} sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize }} />
+            <Chip size="small" label={`${totalMarks} marks`} sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize }} />
           </Stack>
           <Divider />
           {completeQuestions.map((q, i) => (
@@ -489,7 +490,7 @@ export default function McqBuilderPage() {
 
         {!isPublished && completeQuestions.length === 0 && (
           <Alert severity="warning">
-            <AlertTitle sx={{ fontSize: 14 }}>Not ready</AlertTitle>
+            <AlertTitle>Not ready</AlertTitle>
             A test needs at least one complete question before it can be published.
           </Alert>
         )}

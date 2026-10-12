@@ -20,6 +20,7 @@ import api from "@/lib/api";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
 import { PlagiarismDiffModal } from "@/components/problem/PlagiarismDiffModal";
+import { radius } from "@/theme/tokens";
 
 interface PlagiarismPair {
   id: string;
@@ -239,7 +240,7 @@ export default function PlagiarismDetailPage() {
               </Stack>
               <Stack spacing={1}>
                 {studentStats.map((s) => (
-                  <Stack key={s.email} direction="row" spacing={1.5} alignItems="center" sx={{ p: 1, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant" }}>
+                  <Stack key={s.email} direction="row" spacing={1.5} alignItems="center" sx={{ p: 1, borderRadius: radius.md, border: "1px solid", borderColor: "outlineVariant" }}>
                     <Box sx={{ flex: 1, minWidth: 0 }}>
                       <Typography variant="body2" fontWeight={500} noWrap>{s.name}</Typography>
                       <Typography variant="caption" color="text.secondary" noWrap>{s.email}</Typography>

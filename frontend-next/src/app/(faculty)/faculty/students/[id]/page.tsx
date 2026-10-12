@@ -39,6 +39,7 @@ import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal, RevealGroup, RevealItem } from "@/components/ui/motion";
 import { CODING_PLATFORM_META } from "@/lib/codingPlatforms";
+import { radius } from "@/theme/tokens";
 import { StatusBanner, type StatusInfo } from "@/components/analytics/StatusFlag";
 import {
   CourseProgressCard, ExamHistoryCard, WeeklyProgressCard,
@@ -120,7 +121,7 @@ function TopicScoreRow({ item, tone }: { item: TopicScore; tone: "success" | "wa
         variant="determinate"
         value={item.acRate}
         color={tone}
-        sx={{ height: 6, borderRadius: 3, mb: 0.5 }}
+        sx={{ height: 6, borderRadius: radius.xs, mb: 0.5 }}
       />
       <Typography variant="caption" color="text.secondary">
         {item.reason}
@@ -143,18 +144,18 @@ export default function StudentProfilePage() {
 
   const [data, setData] = React.useState<StudentProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(false);
+  const [error, setError] = React.useState<unknown>(null);
 
   const load = React.useCallback(() => {
     setLoading(true);
-    setError(false);
+    setError(null);
     api
       .get(`/api/faculty/students/${studentId}/detail`)
       .then((r) => {
         if (r.data?.success) setData(r.data.data);
         else setError(true);
       })
-      .catch(() => setError(true))
+      .catch((e) => setError(e))
       .finally(() => setLoading(false));
   }, [studentId]);
 
@@ -188,8 +189,12 @@ export default function StudentProfilePage() {
         </Stack>
       )}
 
-      {!loading && error && (
-        <ErrorState onRetry={load} description="We couldn't load this student's profile. You may be outside your department scope." />
+      {!loading && Boolean(error) && (
+        <ErrorState
+          error={error}
+          onRetry={load}
+          description="We couldn't load this student's profile. You may be outside your department scope."
+        />
       )}
 
       {!loading && !error && data && (

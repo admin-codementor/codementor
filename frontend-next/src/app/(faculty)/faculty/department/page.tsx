@@ -29,7 +29,7 @@ import {
   ChartCard, ChartRow, ExportButton, KpiRow, KpiTile, Leaderboard, StackedBars, TrendLines, toCsv,
 } from "@/components/analytics";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
-import { shape } from "@/theme/tokens";
+import { shape, radius, typeScale } from "@/theme/tokens";
 import {
   CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, LocalFireDepartmentOutlinedIcon,
   TipsAndUpdatesOutlinedIcon, TrackChangesOutlinedIcon, WarningAmberIcon,
@@ -208,8 +208,8 @@ export default function DepartmentDashboardPage() {
                         <Typography variant="body2">{b.name}</Typography>
                         <Typography variant="caption" color="text.secondary">{b.count} · {pct}%</Typography>
                       </Stack>
-                      <Box sx={{ height: 8, borderRadius: 4, bgcolor: "surfaceContainerHighest", overflow: "hidden" }}>
-                        <Box sx={{ width: `${pct}%`, height: "100%", bgcolor: "primary.main", borderRadius: 4 }} />
+                      <Box sx={{ height: 8, borderRadius: radius.xs, bgcolor: "surfaceContainerHighest", overflow: "hidden" }}>
+                        <Box sx={{ width: `${pct}%`, height: "100%", bgcolor: "primary.main", borderRadius: radius.xs }} />
                       </Box>
                     </Box>
                   );
@@ -242,13 +242,13 @@ export default function DepartmentDashboardPage() {
               ) : (
                 <List disablePadding>
                   {open.students.map((s) => (
-                    <ListItemButton key={s.id} onClick={() => router.push(`/faculty/students/${s.id}`)} sx={{ borderRadius: 1 }}>
+                    <ListItemButton key={s.id} onClick={() => router.push(`/faculty/students/${s.id}`)} sx={{ borderRadius: radius.sm }}>
                       <ListItemText
                         primary={
                           <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                             <span>{s.name}</span>
-                            {s.roll_no && <Chip size="small" label={s.roll_no} sx={{ height: 18, fontSize: 10 }} />}
-                            {s.section && <Chip size="small" label={`Sec ${s.section}`} sx={{ height: 18, fontSize: 10 }} />}
+                            {s.roll_no && <Chip size="small" label={s.roll_no} sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize }} />}
+                            {s.section && <Chip size="small" label={`Sec ${s.section}`} sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize }} />}
                           </Stack>
                         }
                         secondary={s.reasons.length ? s.reasons.join(" · ") : "No concerns recorded"}

@@ -34,6 +34,7 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
+import { typeScale } from "@/theme/tokens";
 import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
@@ -419,11 +420,11 @@ export default function FacultyMcqPage() {
                 <Box sx={{ flex: 1, minWidth: 200 }}>
                   <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
                     <Typography variant="body2" fontWeight={500}>{t.title}</Typography>
-                    <Chip label={t.category} size="small" sx={{ height: 18, fontSize: 10, textTransform: "uppercase", bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }} />
+                    <Chip label={t.category} size="small" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "uppercase", bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }} />
                     <Chip
                       label={t.is_published ? "Published" : "Draft"}
                       size="small"
-                      sx={{ height: 18, fontSize: 10, fontWeight: 600, bgcolor: t.is_published ? "successContainer" : "surfaceContainerHigh", color: t.is_published ? "onSuccessContainer" : "onSurfaceVariant" }}
+                      sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600, bgcolor: t.is_published ? "successContainer" : "surfaceContainerHigh", color: t.is_published ? "onSuccessContainer" : "onSurfaceVariant" }}
                     />
                   </Stack>
                   <Typography variant="caption" color="text.secondary">
