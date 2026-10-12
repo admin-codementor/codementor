@@ -97,24 +97,41 @@ Audit Log. 26 page files total.
 
 ## 5. Phases
 
-### F0 — Design-system and error-handling parity (foundation, like Student's S0)
+### F0 — Design-system and error-handling parity (foundation, like Student's S0) — done, commit `6365caf`
 
-Bring Faculty/HOD pages up to the same bar Student pages already meet.
+Brought Faculty/HOD pages up to the same bar Student pages already meet.
 
-- Sweep all 26 `(faculty)` pages: replace raw numeric `borderRadius`/`fontSize` with tokens (109 instances),
-  adopt `SectionCard`/`PageContainer` on `problems/page.tsx`, `courses/page.tsx`, and any other page still on old
-  styling (full list from the audit, not reproduced here — file-by-file during implementation).
-  Lint rule from Student's S0 already blocks new raw values; this phase cleans up the pre-existing ones.
-- Replace `.catch(() => {})` in `audit-logs/page.tsx` and `students/[id]/page.tsx` with `ErrorState`.
-- Migrate `/faculty/analytics` onto the analytics kit (closes the Review_Feedback item 16 gap).
+- Swept all 26 `(faculty)` pages: replaced raw numeric `borderRadius`/`fontSize` with tokens (109 instances).
+  **Correction found during implementation**: `problems/page.tsx`/`courses/page.tsx` were NOT actually
+  inconsistent for lacking `SectionCard` — the other gallery-style list pages (`mcq`, `exams`, `classes`) don't
+  use it either, so that was never the established pattern this plan assumed. Left as-is.
+- Replaced `.catch(() => {})` in `audit-logs/page.tsx` and `students/[id]/page.tsx` with `ErrorState`.
+- **Did not** flip the `no-restricted-syntax` lint rule to `"error"` as originally planned — found raw
+  `fontSize` still present on already-"done" Student pages too, so Faculty/HOD wasn't actually the last
+  unswept persona. Flipping would have broken CI on untouched files.
 
-### F1 — Per-student analytics completeness (closes Review_Feedback item 9)
+### F1 — Migrate `/faculty/analytics` onto the analytics kit — done, commit `f12fdd0`
+
+(Closes the Review_Feedback item 16 gap; split out of F0 into its own reviewed PR since it touches a 737-line
+page with 9 specialized chart types — a materially different risk profile than a token sweep.)
+
+- 12 chart-wrapping `SectionCard`s → `ChartCard` (built-in title/subtitle/empty states) across the Pulse/
+  Cohorts/Problems tabs and the cohort/problem drill-downs. Tables (Top performers, Needs attention, Cohorts,
+  Problems struggling) correctly stay on `SectionCard` — `ChartCard` is for one chart's lifecycle, not a table.
+- **`KpiTile` needed no migration** — `Panels.tsx` already re-exported it from the shared kit; F0's assumption
+  that it needed porting was wrong.
+- `loading`/`error` props deliberately left unwired on every `ChartCard` (the page already gates all of that
+  behind one page-level skeleton, so both are always `false` by the time a chart renders) — only `empty`/
+  `emptyTitle` were real, useful wiring.
+- Swept `Panels.tsx`'s own raw tokens too (it sits outside F0's page-only glob, so F0 missed it).
+
+### F2 — Per-student analytics completeness (closes Review_Feedback item 9)
 
 Item 9 asked for: time spent, problems solved/attempted, accuracy, exam performance, course completion — most of
 this is already on `/faculty/students/[id]` per Phase 5. Audit exactly which sub-item is still missing or
 incomplete (e.g. "time spent" is proxy-only per FD2) and close only the real gaps, not the ones already shipped.
 
-### F2 — Badge/flag transparency
+### F3 — Badge/flag transparency
 
 Add a thresholds/formula explainer (CampusTrack pattern, §3 point 6) to wherever the status banner / badge ladder
 / "at-risk" flag is shown to faculty or HOD, so a flag is never unexplained.
@@ -123,7 +140,7 @@ Add a thresholds/formula explainer (CampusTrack pattern, §3 point 6) to whereve
 
 With the funnel/insights/badge-ladder/trend already built (Phase 7), this is a verification + gap-closing phase,
 not new construction: confirm department scoping is correct for a real multi-department dataset, confirm the
-badge ladder and thresholds (once F2 lands) apply identically on the HOD view, and close any specific item from
+badge ladder and thresholds (once F3 lands) apply identically on the HOD view, and close any specific item from
 `COMPETITOR_UX_RESEARCH.md`'s mapping table not already covered by §2 above (re-check against current code before
 starting — that table predates Phase 7 and is partly stale).
 
@@ -149,7 +166,7 @@ here is sequenced or bundled. Each row: what they have, what we have today, and 
 | G4 | **Per-unit/topic drill-down mini-dialog** | Clicking a chart icon next to any syllabus unit opens a small "pick a group, Fetch" dialog scoped to just that unit, with its own empty state. | Our per-student page shows per-unit completion inline already (Phase 5); no separate drill-down dialog. | **(a)** Skip — inline is arguably better UX than an extra click-through. **(b)** Add the same modal pattern for cases where the inline view gets too dense (e.g. a course with 15+ units). |
 | G5 | **Multi-faculty per class/group** | A CodeTantra group lists several named faculty (co-teach/TA/oversight), not one owner. | `classroom` has a single `facultyId` owner. | **(a)** Skip for now — no reported pain point from this gap. **(b)** Add a `co_faculty` list alongside the existing owner, additive and backward-compatible — read access for co-faculty, write access stays with the owner (or extend to co-faculty too, a sub-choice). |
 | G6 | **Report-type: Late Submissions / Reopen Requests** | Two of CodeTantra's dedicated report types. | We have no "late submission" or "reopen request" concept surfaced to faculty at all. | **(a)** Skip. **(b)** Add a simple filtered view on top of existing submission data (late = submitted after assignment due date, already stored) — no new data model needed for "late"; "reopen requests" would need a new concept (a student asking to resubmit after a deadline) we don't have. |
-| G7 | **Flag/badge threshold + formula transparency** | CampusTrack publishes exact score formulas and red/orange/green thresholds behind a one-click explainer, per platform (HackerRank, LeetCode, etc.) and per metric. | Already planned as **F2** in this doc (badge/flag transparency) — this confirms the pattern with a concrete example of *how much* detail to publish (exact formula, not just "based on activity"). | Already decided — F2 proceeds as planned, using this as the reference bar for how explicit the explainer should be. |
+| G7 | **Flag/badge threshold + formula transparency** | CampusTrack publishes exact score formulas and red/orange/green thresholds behind a one-click explainer, per platform (HackerRank, LeetCode, etc.) and per metric. | Already planned as **F3** in this doc (badge/flag transparency) — this confirms the pattern with a concrete example of *how much* detail to publish (exact formula, not just "based on activity"). | Already decided — F3 proceeds as planned, using this as the reference bar for how explicit the explainer should be. |
 | G8 | **Student-state funnel, badge ladder, 8-week trend, section comparison** | CampusTrack's richest HOD screens. | **Already shipped** (Phase 7, `/faculty/department`) — confirmed matching on this walkthrough, nothing new to build. | No action — already done. |
 | G9 | **Mentor mapping, mentor leaderboard, portfolio completeness, placement funnel, alumni** | Full CampusTrack features. | None. | Already decided (**FD1**) — deferred to the T&P persona phase; no new information from this walkthrough changes that (Course Analytics, Mentor Mapping, Alumni were all still empty/unpopulated for this department even on CampusTrack's own live system). |
 | G10 | **Department cross-institution leaderboard** | CampusTrack's "Department Leaderboard" screen. | None. | Already decided (**FD4**) — deferred to Admin phase. |
