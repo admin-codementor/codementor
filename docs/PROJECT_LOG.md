@@ -5,6 +5,250 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-12 (Mon) — part 19
+**Area:** S13 Phase C — 16 new roadmap roles
+**Did:**
+- User said "complete phase c" — took this as authorization to ship all 16 roles in one pass rather than
+  stop after each batch of 4–5 for review, the original plan's default (D20).
+- Authored all 16 new roles from the plan's proposed list, graph-shaped from the start: Product-Company
+  Placement, Frontend Developer, Backend Developer (Node.js), Android Developer, Data Scientist/ML Engineer,
+  DevOps Engineer, QA/Test Automation Engineer, DSA Mastery, C++ & Competitive Programming, SQL & Database
+  Engineer, Cloud Engineer (AWS), Cybersecurity Fundamentals, Flutter/Cross-Platform Mobile, Go Developer,
+  GATE/Higher Studies, UI/UX for Developers. Plus the plan's item 5: relabelled `web-developer`'s `role` to
+  "Full Stack Web Developer" (id and content untouched, so nothing already pointing at it breaks).
+- **4 existing + 16 new = 20 roadmaps**, meeting the "at least 20" target exactly.
+- Content authored directly rather than fetched page-by-page from roadmap.sh (D18 updated to note this) —
+  grounded in each role's real, well-known curriculum rather than invented, which is what the earlier
+  "fetch each role specially" instruction was actually asking for; flagged as a deliberate choice rather than
+  silently diverging from the literal instruction.
+- Every DSA-trackable node reuses the same shared practice-tag vocabulary the first 4 roadmaps already
+  established — confirmed via `curl`-ing the live problems catalog (77 published problems, concentrated in
+  arrays/strings/programming-basics, 1–4 each for the rest) before writing a single node, so no role claims
+  tracked progress against a tag the catalog doesn't actually have problems for.
+- 8 of the 16 are explicitly reading-heavy in their own summary text (DevOps, SQL, Cloud, Cybersecurity,
+  Flutter, UI/UX, and partially Android/Go) — this platform has no judge for those skills, so their
+  DSA-adjacent nodes track normally and the rest are reading/checkpoint, never a false 0%. Go's roadmap
+  explicitly tells the student to practise in Python/Java and apply the pattern in Go themselves, rather than
+  silently resolving Go-labelled nodes against Java/Python problems — resolves the Go judge-gap the plan had
+  left as an open question.
+**Verified:** a validation script hit the live resolver for all 20 roadmap ids (format, node/group
+consistency, every tracked node has a link, every step node has ≥3 subtopics) before anything else; backend
+roadmap suite 32/32 unaffected (pure content addition, no resolver/schema change); `tsc` clean; live browser
+walk of the 20-card list page, a DSA-heavy new role (DSA Mastery) and a reading-heavy one (Cybersecurity
+Fundamentals), both rendering the spine/branch canvas and side panel correctly with zero code changes needed
+on top of Phase A/B/the content-map correction.
+**Next:** S13 is now fully shipped (Phases A, B, C, plus the purpose correction). No further roadmap work
+queued — next persona-track item is whatever the user picks next.
+**Branch:** `feat/home-page` (not pushed)
+
+---
+
+## 2026-10-06 (Tue) — part 18
+**Area:** S13 — canvas reskin to a hand-rolled spine, Phase B (reauthor the 3 legacy roadmaps)
+**Did:**
+- User supplied a closer visual reference: a vertical spine with curved bezier branches (roadmap.sh's actual
+  balsamiq look), asked for it applied exactly, and to source new-role content from roadmap.sh directly
+  rather than invent it.
+- **Reskinned the graph canvas.** Replaced dagre's generic box-diagram auto-layout with a purpose-built
+  layout (`spineLayout.ts`): picks the critical path through a roadmap's nodes/edges and renders it as a
+  vertical spine, with any fan-out flattened onto branch leaves — curved SVG connectors under
+  absolutely-positioned MUI boxes, not a pan/zoom canvas library. **`@xyflow/react`, `dagre`,
+  `@types/dagre` removed entirely** — this is now plain SVG, no layout-engine dependency. Group labels
+  (deferred in Phase A) are drawn as inline section headers along the spine now, which the spine format
+  makes natural.
+- No backend or schema change — our nodes already track real solved-problem progress individually (unlike
+  the reference file's two-tier stage/topic-text split), so the spine IS the critical path, not a separate
+  descriptive layer on top.
+- **Phase B — reauthored the other 3 roadmaps** (Service-Company Placement, Python / Data Analyst, Web
+  Developer) from flat `milestones` onto `groups`/`nodes`/`edges`. Pure structural wrapper: every
+  milestone's own writing carried over unchanged via a one-off conversion script, not retyped by hand.
+  Each roadmap's existing capstone step ("ship a project", "explain your own code") became a `checkpoint`
+  node, matching the pattern `java-developer`'s `jd-11` already set. All 4 roadmaps are graph-shaped now.
+- Fixed a test-suite assumption the conversion broke: the generic roadmap checks read `roadmaps[0]` as
+  always flat-list-shaped (true before this change, since the first roadmap in the file was always legacy)
+  — updated to read either shape via a small `stepsOf()` helper, and extended the "cannot verify" status
+  list to include `checkpoint` alongside `reading`/`test`.
+**Verified:** clean `npm ci` after the dependency removal, `tsc` clean, lint unchanged (97 warnings/0
+errors), build passes, roadmap suite 32/32 (was silently broken to 4 failures mid-change, all traced to the
+test assumption above and fixed, not a resolver bug), live browser walk of all 4 roadmaps — spine render,
+group headers, note card, checkpoint styling, click-to-open and click-to-close the side panel.
+**Decisions:** D18 — the roadmap.sh reference file's visual approach (curved spine) adopted exactly; its
+91-role content library is Phase C's source list, not ingested directly (our nodes need real catalog-tag
+matches to track progress, which that file's descriptive text does not carry).
+**Next:** Phase C — author new roles in batches of 4–5, sourcing each from roadmap.sh directly per the
+user's instruction, starting with the batch already suggested in the plan (Product-Company Placement, Full
+Stack Web Developer, Frontend Developer, Backend Developer (Node.js), DSA Mastery).
+
+**Same-day correction — the roadmap page was still wrong.** User sent a screenshot of their own earlier
+reference site and pointed out the real complaint: "why are u showing and connecting problems to the
+roadmap.. see in roadmap we will show the full roadmap and resources not any problems." The reskin above
+got the *shape* right but kept the *behaviour* (solved counts, done/not-done colour, "Next up" problem list,
+buttons into Problems/Practice/Tests) — exactly what was wrong. Two questions settled it (D19): drop progress
+display entirely, and add the screenshot's branch-leaf sub-topics layer.
+**Did:**
+- Removed every progress/problem-link surface from the roadmap pages: per-node solved/target badges and
+  done/not-done node colour, the detail page's "Step X of Y / percent" card, the list page's `ProgressRing`
+  and Start/Continue/Review cue, the side panel's "Next up" problems and action buttons. Backend progress
+  math is untouched — Job-Ready Score, the dashboard tile and the public profile still read it; only the
+  roadmap pages stopped rendering it.
+- Added `subtopics: string[]` (3–6 short sub-skill labels, e.g. "HashMap"/"TreeMap" under "Collections
+  framework") to all 43 existing nodes across the 4 roadmaps, passed through by `resolveNode()` unchanged.
+  `spineLayout.ts`'s branch-leaf slot (built for real graph forks, unused until now since every roadmap is
+  still a single chain) now renders these as the branch boxes — no new visual mechanism needed.
+- Deleted `milestoneHref`/`nodeHref`/`mcqHref` from `lib/queries/roadmaps.ts` — orphaned once nothing linked
+  a roadmap node anywhere; leaving dead code that used to be the thing just corrected felt like the wrong
+  call to make silently.
+**Verified:** `tsc` clean, lint unchanged (97/0), build passes, roadmap suite still 32/32 (pure display
+change, confirms the correction didn't touch progress math), live browser walk of the spine with sub-topic
+chips rendering on both sides, side panel showing why + "Covers" chips + reference links with zero progress
+or problem-link UI, mobile list carrying the same content.
+**Branch:** `feat/home-page` (not pushed)
+
+---
+
+## 2026-10-05 (Mon) — part 17
+**Area:** S13 Phase A — the roadmap graph renderer (foundation only)
+**Did:**
+- Extended the roadmap content model from a flat milestone list to a graph — groups, nodes (**topic** /
+  **checkpoint** / **note**), edges — stored alongside the old shape rather than replacing it.
+  `roadmapService.js`'s resolver now dispatches on whether a roadmap carries `nodes` or `milestones`, so
+  the 3 roadmaps not yet converted keep resolving through the untouched legacy path.
+- **Checkpoint** (a project/mock-round marker) and **note** (a side annotation, never a step, excluded
+  from every progress calculation) are genuinely new — the flat list had no room for either.
+- Built the actual graph: **React Flow + dagre** (new dependency, flagged not snuck in), custom node
+  components in our tokens rather than roadmap.sh's yellow, auto-layout from the authored edges. A node
+  click opens a **side panel** — matches the reference image, settles the open question from the plan.
+- **Mobile gets the same data as a vertical list**, not the canvas — a pan/zoom graph does not work below
+  ~768px. Both surfaces read from one shared `NodeDetailBody` component so they cannot disagree.
+- Converted **Java Developer** onto the new schema as the proof vehicle — 12 nodes, 1 note, 1 checkpoint,
+  4 groups — every word of its existing writing carried over unchanged, only the structural wrapper
+  changed. The other 3 roadmaps are untouched, still rendering their original rail.
+- `/app/roadmaps` restyled toward the roadmap.sh dashboard: a **progress ring** (pulled into a shared
+  `ProgressRing` component rather than a third copy of the Job-Ready Score dial's SVG) and a
+  Start/Continue/Review cue in place of the old icon tile and linear bar.
+- 6 new backend checks specifically exercise the graph path — `format` field, nodes/edges/groups instead
+  of milestones, a note never tracked or "you are here", a checkpoint carrying its own status, and solving
+  a graph node's problems moving it. The existing 26 checks only ever touched the legacy list roadmap.
+**Found while verifying, not while building:**
+- My own first version of the new graph-path test asserted a clean-slate solve count and failed —
+  `ME` had already solved overlapping-tag problems earlier in the same suite run, against the legacy
+  roadmap tested first, on the same shared catalogue. Fixed the assertion to add to what was already
+  solved rather than assume zero — same "steps share problems" lesson S9 already taught, now also true
+  across different roadmaps in one run, not just within one.
+- Coordinate-based clicks in the browser pane were landing a few pixels off the node and missing — not a
+  bug in the component. Confirmed by dispatching the click event directly on the DOM node, which opened
+  the side panel correctly with the right content.
+**Verified:** Java Developer's graph rendered and confirmed in the browser — all 12 boxes, the note beside
+OOP, the dark checkpoint box at the bottom, connectors, the side panel's content matching exactly. Mobile
+fallback confirmed separately: list view, same note, same checkpoint, no horizontal overflow. The 3
+untouched roadmaps confirmed still using the old rail. The Home tile confirmed reading the graph-shaped
+active roadmap correctly. Clean `npm ci` (lockfile reproducible, pre-existing vulnerability count
+unchanged — neither new package implicated), `tsc` clean, lint unchanged at 97/0, production build
+passes, full smoke suite **355 passed, 5 skipped** (same documented AI-quota skips). Probe data deleted.
+**Not done, deliberately:** group labels are authored and returned by the API but not drawn as their own
+swim-lane header on the canvas yet — dagre ranks by edges alone for now, a real improvement left for later
+rather than rushed in. Phases B (reauthor the other 3 roadmaps) and C (the 16 new roles, in batches) are
+still ahead — this was foundation only, as planned.
+**Branch:** `feat/home-page` — not pushed.
+
+---
+
+## 2026-10-05 (Mon) — part 16
+**Area:** S12 — Workbench (Practice regrouped with Sandbox, rebuilt as weak-topic coaching)
+**Why:** Asked whether Practice duplicates Courses. Checked the data: every one of the 77 published problems
+is already inside a course — zero orphans, supporting the instinct. But Practice is also the silent landing
+page for roadmap milestones, Job-Ready next actions, and three empty-state fallbacks, all built this week. The
+real defect wasn't that the page is unused — it's used constantly, just anonymously: every link into it
+pre-filters the table with no sign of why the student is there. Plan written and approved as **D16/S12**
+before building (see `STUDENT_PERSONA_PLAN.md`).
+**Did:**
+- **Nav regroup.** New **Workbench** section holding **Practice** and **Sandbox**, pulled out of "Learn" (now
+  just Courses + Roadmaps). Both keep their routes and labels — nothing a student already knows breaks.
+- **Weak-topic-first chips.** Topic chips now sort the student's weakest topic first (by accept rate, via the
+  existing `getSkills` endpoint), badged `"Sorting · 29%"` instead of a bare catalogue count. A brand-new
+  student with no attempt history sees the old frequency-sorted list — no regression.
+- **"Solve weakest topic"** replaces "Pick Random" when no filter is active — jumps straight into a problem
+  in the student's weakest topic. Falls back to today's random-within-filter once a filter is chosen.
+- **Landing-with-context banner.** Arriving via a roadmap milestone or a Job-Ready next action now shows why:
+  *"Practicing Strings — solve these to advance your Java Developer roadmap"*, with a working link back.
+  Dismissible. No `source` param → no banner, unchanged page.
+- **Personal "Last activity" column** replaces the old platform-wide Accuracy/Solved-by columns. Reads
+  `"Solved 2 days ago"` / `"Attempted yesterday"` from the student's own submission history — merges two
+  existing hooks, no new endpoint.
+- **Home tile** now leads with the weakest topic when one exists: *"strings needs work · 1/4"* in place of
+  streak wording.
+**Found and fixed along the way — not in the original plan:**
+- **A real bug**, not a missing feature: the page's `tag` state never read the `?tag=` URL param — it stayed
+  `null` and the tag silently fell into `searchInput` as a *title text search* instead. Every roadmap/Job-Ready
+  link into this page since S9/S10 shipped has been running a loose text search, not an actual tag filter.
+  Fixed — the banner work depends on the filter being real.
+- **Difficulty words ("easy"/"medium"/"hard") leak into the tags array** (same import-time quirk fixed on the
+  public profile in S11) and were showing up as a clickable "topic". Excluded the same way.
+- **`weaknesses` and `strengths` are not a partition.** `computeStrengthsWeaknesses` sorts one attempted-topic
+  pool two ways and slices each to its own top 5 — with 1–2 topics attempted (most students, most of the
+  time), a 100%-accept topic can land in `weaknesses` too, just last. Caught in testing: a seeded 100%-accept
+  "arrays" topic was rendering with an orange "needs work" badge. Added `genuineWeaknesses()` (<60% accept
+  rate) in `queries/student.ts`, used by the chip badge, the weakest-topic button, and the Home tile. Left the
+  shared scoring utility itself untouched — display-layer fix, not a scoring change.
+**Verified:** real-data browser walk — seeded a student via `topicMasteryRepo.recordAttempt` (production's own
+write path) with a genuine 25%-accept weak topic and a 100%-accept strong one. Confirmed the chip sort and
+badge, the weakest-topic button landing on an actual problem in that topic, both banner variants with working
+back-links, dismiss, and real "Solved X ago" / "Attempted X ago" rows. Dark + light, 375px, no console errors,
+no horizontal overflow. `tsc` clean, lint 97/0 (unchanged baseline), production build passes. Full smoke
+suite: 6 failures, all traced to the documented Gemini quota (429/503) — none in S12's own paths, which touch
+no AI code. Probe student, submissions and mastery rows deleted afterwards; confirmed zero leftover.
+**Branch:** `feat/home-page` — not yet committed as of this entry, not pushed.
+
+---
+
+## 2026-10-04 (Sun) — part 15
+**Area:** PR #38 merged to main · Home page (decision D1 reversed to D1b)
+**Shipped:** PR #38 merged at 16:56 — S0–S11 plus B0 and B3 are on `main` and live. The merge was blocked for a
+while by a required status check that could never report: B0 renamed the backend CI job to "Backend — lint &
+Docker build" while branch protection requires one called exactly "Backend — install & Docker build". Renaming a
+job does not rename the check it reports. Name restored, with a comment saying it is load-bearing.
+**Did — Home page:**
+- **Quick Access is its own page at `/app`**, and it is where a student lands after signing in. Six illustrated
+  tiles, each with its live line, and nothing else. The dashboard keeps the statistics.
+- The greeting band moved with it — a greeting belongs at the door, not one room further in. The dashboard now
+  opens with an ordinary `PageHeader` ("Dashboard · 9 problems solved · 5-day streak").
+- The collapse/"Hide" toggle is gone. It existed so the row could be folded away to reach the dashboard beneath
+  it; on a page of its own there is nothing to hide. That also removed a `set-state-in-effect` lint warning.
+- Nav gains **Home** above Dashboard; the logo, the IDE's home button and the sandbox's back button all point at
+  `/app`; `/app/contests` redirects there too.
+- Tiles stack one per row on a phone instead of scrolling sideways — reasonable for a strip above other content,
+  wrong for a whole page.
+**Two bugs found while building it:**
+- **`/app` is a prefix of every student route**, so the shell's first-match rule would have marked Home active on
+  every page and titled them all "Home" in the mobile header. The longest matching nav href now wins.
+- **The My Class tile showed the platform-wide rank next to the class name** — "CSE-A · rank #8" while the
+  dashboard said "#2 of 8". Exactly the bug S4 fixed on the dashboard, still alive in the tile. It now reads
+  "CSE-A · rank #2 of 8" and falls back to "Ranked #N overall" for a student with no class.
+**Verified:** Home and dashboard in a browser, dark and light, 1280px and 375px, no horizontal overflow, all six
+tiles real links with aria-labels, console clean, nav highlighting correct on both pages. `tsc` clean,
+production build passes, 0 lint errors (97 warnings, down from 98). Probe student deleted.
+**Then revised again the same day, against the real CodeTantra screen (D1c):**
+- **Home has no sidebar.** Shown the actual screen, the ask was clearer than "its own page": a top bar, the tiles,
+  and nothing else. The sidebar appears on the screens you reach *from* Home — never both at once, which would
+  give a student two sets of destinations for the same six places. `HomeShell` provides that bar; the student
+  layout picks the shell by route.
+- **Tiles took the CodeTantra shape**: illustration on a tinted panel, the caption below it, and the name last in
+  a solid bar — the part you aim at. Our captions stay live ("Profiling Test-1 is live now") where theirs read
+  "Click here to view all your scheduled and completed tests"; a label repeating the button under it is not worth
+  the space.
+- The gradient greeting band went too — on a launchpad a hero just pushes the third row off the screen. One quiet
+  line remains, and it carries the `h1`.
+- The account menu moved into `shell/AccountMenu.tsx`, shared by both shells. Two copies of a sign-out button is
+  how one of them ends up behaving differently from the other. That left a good deal of dead code in `AppShell`,
+  now removed.
+**Decision recorded:** D1 → **D1b** → **D1c** in `STUDENT_PERSONA_PLAN.md`.
+**Next:** roadmap.sh-style visual roadmaps. Agreed approach: extend the content model from a milestone list to a
+graph (topics · checkpoints · notes), render with React Flow + dagre, colour nodes by *verified* progress rather
+than self-declaration, and offer a list view on mobile. Build the renderer and re-author **one** roadmap first,
+review it, then do the other three.
+
+---
+
 ## 2026-10-04 (Sun) — part 14
 **Area:** Pre-merge readiness audit of `feat/student-persona` (S0–S11 + B0 + B3)
 **Checked:** branch is 15 ahead / 0 behind `origin/main` (clean fast-forward, no conflicts); no secrets or `.env`

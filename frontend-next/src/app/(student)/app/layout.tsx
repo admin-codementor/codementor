@@ -1,9 +1,11 @@
 "use client";
 
 import * as React from "react";
-import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, AssignmentOutlinedIcon, TimerOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon, FormatListBulletedOutlinedIcon, HistoryOutlinedIcon, WaypointsIcon } from "@/components/ui/icons";
+import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, AssignmentOutlinedIcon, TimerOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon, FormatListBulletedOutlinedIcon, HistoryOutlinedIcon, WaypointsIcon, HomeOutlinedIcon } from "@/components/ui/icons";
+import { usePathname } from "next/navigation";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
+import { HomeShell } from "@/components/shell/HomeShell";
 
 // Grouped by what the student is doing — learning, graded work, then progress —
 // rather than by which feature built it.
@@ -14,12 +16,19 @@ import { AppShell, type NavItem } from "@/components/shell/AppShell";
 //                 class is a once-ever action that doesn't deserve a permanent slot.
 //   Submissions, Coding Profiles — tabs on Profile, via the avatar menu.
 // Exams and Aptitude merge into a single "Tests" hub in a later phase.
+// Practice is not folded into Courses (D16) — Courses is faculty-sequenced
+// order, Practice is self-directed and weak-topic-aware; different jobs.
 const NAV_ITEMS: NavItem[] = [
+  // Home is the landing page: six illustrated tiles and nothing else. The
+  // dashboard is a deliberate second click for the numbers.
+  { label: "Home", href: "/app", icon: <HomeOutlinedIcon /> },
   { label: "Dashboard", href: "/app/dashboard", icon: <SpaceDashboardOutlinedIcon /> },
   { label: "Courses", href: "/app/courses", icon: <MenuBookOutlinedIcon />, section: "Learn" },
-  { label: "Practice", href: "/app/problems", icon: <FormatListBulletedOutlinedIcon />, section: "Learn" },
   { label: "Roadmaps", href: "/app/roadmaps", icon: <WaypointsIcon />, section: "Learn" },
-  { label: "Sandbox", href: "/app/sandbox", icon: <CodeOutlinedIcon />, section: "Learn" },
+  // Workbench (D16): self-directed, weak-topic-aware solving and a free-form
+  // runner — grouped apart from Courses, which is faculty-sequenced order.
+  { label: "Practice", href: "/app/problems", icon: <FormatListBulletedOutlinedIcon />, section: "Workbench" },
+  { label: "Sandbox", href: "/app/sandbox", icon: <CodeOutlinedIcon />, section: "Workbench" },
   { label: "Assignments", href: "/app/assignments", icon: <AssignmentOutlinedIcon />, section: "Work" },
   { label: "Tests", href: "/app/tests", icon: <TimerOutlinedIcon />, section: "Work" },
   { label: "Mistakes", href: "/app/mistakes", icon: <HistoryOutlinedIcon />, section: "Progress" },
@@ -31,11 +40,21 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  // Home gets a top bar and no sidebar; everything reached from it gets the
+  // full shell. Never both at once — two sets of destinations for the same six
+  // places reads as a menu attached to a menu.
+  const isHome = pathname === "/app";
+
   return (
     <AuthGuard>
-      <AppShell navItems={NAV_ITEMS} profileHref="/app/profile">
-        {children}
-      </AppShell>
+      {isHome ? (
+        <HomeShell profileHref="/app/profile">{children}</HomeShell>
+      ) : (
+        <AppShell navItems={NAV_ITEMS} profileHref="/app/profile">
+          {children}
+        </AppShell>
+      )}
     </AuthGuard>
   );
 }

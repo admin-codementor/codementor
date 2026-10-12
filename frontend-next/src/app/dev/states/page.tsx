@@ -23,7 +23,7 @@ import {
   TableSkeleton,
   TextSkeleton,
 } from "@/components/ui/Skeletons";
-import { QuickAccess } from "@/components/student/quick-access/QuickAccess";
+import { QuickAccessGrid } from "@/components/student/quick-access/QuickAccessGrid";
 import { layout, radius } from "@/theme/tokens";
 import { MenuBookOutlinedIcon } from "@/components/ui/icons";
 
@@ -231,7 +231,7 @@ export default function StatesGallery() {
 
         {/* ── Quick Access tiles ───────────────────────────────────────── */}
         <SectionCard title="Quick access tiles — the dashboard entry row, with live lines">
-          <QuickAccess
+          <QuickAccessGrid
             stats={{ totalSubs: 48, acRate: 62, problemsSolved: 31, streak: 5, rank: 7, totalStudents: 180, classRank: 3, classSize: 61, rating: 1200 }}
             courses={[
               { id: "java", title: "Java Fundamentals", description: null, moduleCount: 6, problemCount: 40, solvedCount: 25, modules: [], nextModule: null, nextDue: null, overdueCount: 0 },

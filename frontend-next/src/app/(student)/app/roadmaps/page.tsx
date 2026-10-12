@@ -8,22 +8,19 @@ import CardActionArea from "@mui/material/CardActionArea";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import Chip from "@mui/material/Chip";
-import LinearProgress from "@mui/material/LinearProgress";
-import { WaypointsIcon, CheckCircleIcon } from "@/components/ui/icons";
+import { WaypointsIcon, ArrowForwardIcon } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { DataState } from "@/components/ui/DataState";
 import { CardGridSkeleton } from "@/components/ui/Skeletons";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { Reveal } from "@/components/ui/motion";
-import { radius, shape, layout } from "@/theme/tokens";
+import { layout } from "@/theme/tokens";
 import { useRoadmapsQuery, type RoadmapSummary } from "@/lib/queries/roadmaps";
 
 // Matches a loaded card closely enough that the grid does not jump.
-const CARD_HEIGHT = 230;
+const CARD_HEIGHT = 150;
 
 function RoadmapCard({ roadmap, active }: { roadmap: RoadmapSummary; active: boolean }) {
-  const done = roadmap.target > 0 && roadmap.solved >= roadmap.target;
-
   return (
     <Card
       variant="outlined"
@@ -39,40 +36,25 @@ function RoadmapCard({ roadmap, active }: { roadmap: RoadmapSummary; active: boo
         sx={{ p: layout.cardPadding, height: "100%", borderRadius: "inherit" }}
       >
         <Stack spacing={1.5} sx={{ height: "100%" }}>
-          <Stack direction="row" spacing={1.5} alignItems="flex-start">
-            <Box
-              aria-hidden
-              sx={{
-                width: 44,
-                height: 44,
-                flexShrink: 0,
-                borderRadius: `${shape.large}px`,
-                display: "grid",
-                placeItems: "center",
-                color: "onPrimaryContainer",
-                backgroundColor: "primaryContainer",
-              }}
-            >
-              <WaypointsIcon />
-            </Box>
+          <Stack direction="row" spacing={1.5} alignItems="center">
             <Box sx={{ minWidth: 0, flex: 1 }}>
               <Typography variant="subtitle1" fontWeight={700} sx={{ lineHeight: 1.3 }}>
                 {roadmap.role}
               </Typography>
               {roadmap.tagline && (
-                <Typography variant="caption" color="text.secondary">
+                <Typography variant="caption" color="text.secondary" noWrap sx={{ display: "block" }}>
                   {roadmap.tagline}
                 </Typography>
               )}
             </Box>
-            {active && <Chip size="small" color="primary" label="Following" />}
+            {active && <Chip size="small" color="primary" label="Following" icon={<WaypointsIcon />} />}
           </Stack>
 
           {roadmap.summary && (
             <Typography
               variant="body2"
               color="text.secondary"
-              sx={{ display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden" }}
+              sx={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" }}
             >
               {roadmap.summary}
             </Typography>
@@ -80,42 +62,16 @@ function RoadmapCard({ roadmap, active }: { roadmap: RoadmapSummary; active: boo
 
           <Box sx={{ flex: 1 }} />
 
-          <Box>
-            <Stack direction="row" justifyContent="space-between" alignItems="baseline" sx={{ mb: 0.5 }}>
-              <Typography variant="caption" color="text.secondary">
-                {done || !roadmap.currentStep
-                  ? `All ${roadmap.trackedCount} steps complete`
-                  : `Step ${roadmap.currentStep} of ${roadmap.trackedCount}`}
+          <Stack direction="row" alignItems="center" justifyContent="space-between" spacing={1}>
+            <Typography variant="caption" color="text.secondary">
+              {roadmap.milestoneCount} steps
+            </Typography>
+            <Stack direction="row" spacing={0.25} alignItems="center" sx={{ flexShrink: 0, color: "primary.main" }}>
+              <Typography variant="caption" fontWeight={600}>
+                View roadmap
               </Typography>
-              <Typography variant="caption" fontWeight={600} color={done ? "success.main" : "text.primary"}>
-                {roadmap.percent}%
-              </Typography>
+              <ArrowForwardIcon sx={{ fontSize: 14 }} />
             </Stack>
-            <LinearProgress
-              variant="determinate"
-              value={roadmap.percent}
-              color={done ? "success" : "primary"}
-              sx={{ height: 6, borderRadius: radius.full }}
-            />
-          </Box>
-
-          <Stack direction="row" spacing={0.75} alignItems="center" sx={{ minHeight: 20 }}>
-            {done ? (
-              <>
-                <CheckCircleIcon fontSize="small" sx={{ color: "success.main" }} />
-                <Typography variant="caption" color="success.main" fontWeight={600}>
-                  Every step complete
-                </Typography>
-              </>
-            ) : roadmap.currentMilestone ? (
-              <Typography variant="caption" color="text.secondary" noWrap>
-                Next: {roadmap.currentMilestone.title}
-              </Typography>
-            ) : (
-              <Typography variant="caption" color="text.secondary">
-                Reading and test steps only for now
-              </Typography>
-            )}
           </Stack>
         </Stack>
       </CardActionArea>
@@ -132,7 +88,7 @@ export default function RoadmapsPage() {
     <Box>
       <PageHeader
         title="Roadmaps"
-        subtitle="A path per career role, in order. Progress fills in from the problems you have already solved."
+        subtitle="A path per career role, with the topics and resources for each step."
       />
 
       <DataState

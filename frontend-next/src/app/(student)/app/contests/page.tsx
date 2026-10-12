@@ -10,5 +10,5 @@ import { redirect } from "next/navigation";
  * own piece of work with its own verification, not a footnote to this one.
  */
 export default function ContestsRemoved() {
-  redirect("/app/dashboard");
+  redirect("/app");
 }

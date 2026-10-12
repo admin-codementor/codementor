@@ -238,7 +238,7 @@ export default function SandboxPage() {
         }}
       >
         <Tooltip title="Back">
-          <IconButton size="small" component={NextLink} href="/app/dashboard" aria-label="Back to dashboard">
+          <IconButton size="small" component={NextLink} href="/app" aria-label="Back to home">
             <ChevronLeftIcon fontSize="small" />
           </IconButton>
         </Tooltip>

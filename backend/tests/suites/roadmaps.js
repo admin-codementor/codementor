@@ -10,6 +10,13 @@ const { tokenFor, get, put, Suite, purge, userId, db } = require('../harness');
 
 const HOUR = 3600_000;
 
+// A graph roadmap's steps (nodes minus notes, which are commentary rather
+// than a step) are the same thing a flat roadmap's milestones are — unify
+// here so the generic checks below don't need to assume either shape.
+const stepsOf = (detail) => (detail?.format === 'graph'
+  ? (detail?.nodes ?? []).filter((n) => n.type !== 'note')
+  : (detail?.milestones ?? []));
+
 module.exports = async function roadmapsSuite() {
   const s = new Suite('Roadmaps: content, progress & active choice');
 
@@ -56,13 +63,13 @@ module.exports = async function roadmapsSuite() {
   const first = roadmaps[0];
   const detailRes = await get(`/api/roadmaps/${first.id}`, TOKEN);
   const detail = detailRes.body?.data;
-  const milestones = detail?.milestones ?? [];
+  const milestones = stepsOf(detail);
   s.check('detail returns the milestones', detailRes.status === 200 && milestones.length === first.milestoneCount,
     `${milestones.length} vs ${first.milestoneCount}`);
 
   s.check('a milestone we cannot verify says so rather than reporting 0%',
     milestones.filter((m) => !m.tracked).every((m) => m.solved === undefined && m.percent === undefined
-      && ['reading', 'test'].includes(m.status)),
+      && ['reading', 'test', 'checkpoint'].includes(m.status)),
     milestones.filter((m) => !m.tracked).map((m) => m.status).join(', '));
 
   const tracked = milestones.filter((m) => m.tracked);
@@ -106,7 +113,7 @@ module.exports = async function roadmapsSuite() {
     const n = step.nextProblems.length;
 
     const after = (await get(`/api/roadmaps/${first.id}`, TOKEN)).body?.data;
-    const stepAfter = after.milestones.find((m) => m.id === step.id);
+    const stepAfter = stepsOf(after).find((m) => m.id === step.id);
 
     s.check('solving the next problems moves that milestone',
       stepAfter.solved === Math.min(n, stepAfter.target),
@@ -125,7 +132,7 @@ module.exports = async function roadmapsSuite() {
 
     // A wrong answer is not progress. This is the student dashboard rule (S3)
     // applied here: only Accepted counts.
-    const rejectedProblem = after.milestones.find((m) => m.tracked && m.nextProblems?.length)?.nextProblems?.[0];
+    const rejectedProblem = stepsOf(after).find((m) => m.tracked && m.nextProblems?.length)?.nextProblems?.[0];
     if (rejectedProblem) {
       const before = after.solved;
       await db().collection('submissions').add({
@@ -162,6 +169,65 @@ module.exports = async function roadmapsSuite() {
   const cleared = await put('/api/student/active-roadmap', TOKEN, { roadmapId: null });
   s.check('the student can clear the choice', cleared.status === 200
     && (await get('/api/roadmaps', TOKEN)).body?.activeRoadmapId === null, JSON.stringify(cleared.body));
+
+  // ── Node-type-specific graph coverage ───────────────────────────────────────
+  // The generic block above already exercises the graph resolver end to end
+  // (every roadmap is graph-shaped as of S13 Phase B) — this block specifically
+  // pins down `java-developer`'s note and checkpoint node, the two node types
+  // the generic block's roadmap (service-company-placement) does not contain.
+  const graphRes = await get('/api/roadmaps/java-developer', TOKEN);
+  const graph = graphRes.body?.data;
+  s.check('a graph roadmap says so in its format field',
+    graphRes.status === 200 && graph?.format === 'graph', `format ${graph?.format}`);
+
+  s.check('a graph roadmap returns nodes/edges/groups, not milestones',
+    Array.isArray(graph?.nodes) && Array.isArray(graph?.edges) && Array.isArray(graph?.groups)
+      && graph?.milestones === undefined,
+    JSON.stringify({ hasNodes: !!graph?.nodes, hasMilestones: graph?.milestones !== undefined }));
+
+  const noteNode = graph?.nodes?.find((n) => n.type === 'note');
+  s.check('a note node is never tracked and never "you are here"',
+    !!noteNode && noteNode.tracked === false && noteNode.status === 'note'
+      && graph.currentMilestone?.id !== noteNode.id,
+    JSON.stringify(noteNode));
+
+  const checkpointNode = graph?.nodes?.find((n) => n.type === 'checkpoint');
+  s.check('a checkpoint node is untracked with its own status, not folded into reading/test',
+    !!checkpointNode && checkpointNode.tracked === false && checkpointNode.status === 'checkpoint',
+    JSON.stringify(checkpointNode));
+
+  const graphTracked = (graph?.nodes ?? []).filter((n) => n.tracked);
+  s.check('the graph roadmap target is the sum of its tracked nodes, same arithmetic as the legacy path',
+    graph.target === graphTracked.reduce((n, x) => n + x.target, 0),
+    `${graph.target} vs ${graphTracked.reduce((n, x) => n + x.target, 0)}`);
+
+  // Same "solving moves progress" proof as the legacy block above, run once
+  // more against the graph shape so the resolver generalisation is actually
+  // checked, not just assumed from the legacy roadmap passing.
+  const graphStep = graphTracked.find((n) => n.nextProblems?.length > 0);
+  if (!graphStep) {
+    s.skip('solving a graph node\'s problems raises that node', 'no node resolved to any problem');
+  } else {
+    const now2 = Date.now();
+    for (const p of graphStep.nextProblems) {
+      await db().collection('submissions').add({
+        userId: ME, problemId: p.id, verdict: 'Accepted', language: 'python',
+        submittedAt: new Date(now2 - HOUR),
+      });
+    }
+    const n2 = graphStep.nextProblems.length;
+    const graphAfter = (await get('/api/roadmaps/java-developer', TOKEN)).body?.data;
+    const graphStepAfter = graphAfter.nodes.find((x) => x.id === graphStep.id);
+    // `ME` already solved problems earlier in this same suite run, against the
+    // legacy roadmap tested above — on a shared catalogue, some of those can
+    // land in this node's pool too (e.g. an "arrays" solve counts for more
+    // than one roadmap's Arrays node). The expectation has to add to whatever
+    // was already solved here, not assume a clean slate.
+    const expectedSolved = Math.min(graphStep.solved + n2, graphStepAfter.target);
+    s.check('solving a graph node\'s problems moves that node',
+      graphStepAfter.solved === expectedSolved,
+      `expected ${expectedSolved}, got ${graphStepAfter.solved}`);
+  }
 
   return s;
 };

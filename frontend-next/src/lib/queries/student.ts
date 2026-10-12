@@ -160,6 +160,25 @@ export interface SkillsData {
   weaknesses: SkillTopic[];
 }
 
+// Difficulty words ("easy"/"medium"/"hard") sometimes leak into a problem's
+// tags array — an import-time data quirk, not a real topic — so they can
+// surface as a "weak topic" purely by being a tag, not because the student is
+// actually weak at anything called "easy". Same exclusion as the public
+// profile's "strongest topics" list (S11); every caller of `weaknesses` /
+// `strengths` that drives UI copy should filter through this first.
+const NOT_A_REAL_TOPIC = new Set(["easy", "medium", "hard", "beginner", "intermediate", "advanced"]);
+export const realTopics = (topics: SkillTopic[]) =>
+  topics.filter((t) => !NOT_A_REAL_TOPIC.has(t.topic.toLowerCase()));
+
+// `weaknesses` and `strengths` are the same attempted-topic pool sorted two
+// ways and each sliced to its own top 5 — not a partition. With few topics
+// attempted (a new student, typically), a topic the student is actually good
+// at can appear in `weaknesses` too, just last. 60% is where "needs work" has
+// to stop being generous: below it, more attempts failed than passed.
+const NEEDS_WORK_BELOW = 60;
+export const genuineWeaknesses = (weaknesses: SkillTopic[]) =>
+  realTopics(weaknesses).filter((t) => t.acRate < NEEDS_WORK_BELOW);
+
 /** Strongest / focus-on topics — same scoring faculty see (needs 3+ attempts per topic). */
 export function useSkillsQuery() {
   return useQuery<SkillsData>({

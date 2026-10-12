@@ -6,7 +6,7 @@
     "copy-monaco": "node scripts/copy-monaco.mjs",
     "predev": "node scripts/copy-monaco.mjs",
     "prebuild": "node scripts/copy-monaco.mjs",
-    "dev": "next dev",
+    "dev": "next dev --webpack",
     "build": "next build",
     "start": "next start",
     "lint": "eslint"

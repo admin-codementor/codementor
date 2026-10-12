@@ -59,5 +59,5 @@ export const ROLE_LABEL: Record<Role, string> = {
 /** Default landing route for a role. Only students use the /app area; every
  * staff role (faculty, HOD, admin) lands in the faculty console. */
 export function homeForRole(role: Role | null | undefined): string {
-  return isStaff(role) ? "/faculty/dashboard" : "/app/dashboard";
+  return isStaff(role) ? "/faculty/dashboard" : "/app";
 }

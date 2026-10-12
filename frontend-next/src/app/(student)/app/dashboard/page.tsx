@@ -18,19 +18,17 @@ import Skeleton from "@mui/material/Skeleton";
 import Divider from "@mui/material/Divider";
 import Link from "@mui/material/Link";
 import { ArrowForwardIcon, CodeOutlinedIcon, LocalFireDepartmentOutlinedIcon, LeaderboardOutlinedIcon, TipsAndUpdatesOutlinedIcon, AssignmentOutlinedIcon, WarningAmberOutlinedIcon, CheckCircleOutlinedIcon, MenuBookOutlinedIcon, TimerOutlinedIcon, HistoryOutlinedIcon } from "@/components/ui/icons";
-import { getUser } from "@/lib/auth";
 import { languageName } from "@/lib/languages";
 import { Reveal } from "@/components/ui/motion";
+import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
-import { shape, hoverTransition, radius } from "@/theme/tokens";
+import { hoverTransition, radius } from "@/theme/tokens";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useAvailableExamsQuery, useDashboardQuery, useMistakesQuery } from "@/lib/queries/student";
-import { useRoadmapsQuery } from "@/lib/queries/roadmaps";
 import { ProblemOfTheDay } from "@/components/student/ProblemOfTheDay";
 import { ExamPerformance } from "@/components/student/ExamPerformance";
-import { QuickAccess } from "@/components/student/quick-access/QuickAccess";
 
 /** One deadline on the dashboard, whether it came from an assignment or an exam. */
 interface DueItem {
@@ -218,28 +216,14 @@ function DashboardSkeleton() {
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [name, setName] = React.useState("");
-  const [className, setClassName] = React.useState<string | null>(null);
   // Fixed per mount: reading the clock during render makes the output depend on
   // when React happens to re-render.
   const [renderedAt] = React.useState(() => Date.now());
 
-  React.useEffect(() => {
-    const user = getUser();
-    setName(user?.name?.split(" ")[0] ?? "");
-    // "CSE-A" reads as the student's class without another request.
-    setClassName(user?.department ? [user.department, user.section].filter(Boolean).join("-") : null);
-  }, []);
-
   const { data, isLoading, isError, error, refetch } = useDashboardQuery();
-  // Feeds the Tests tile. Its own failure must not take the dashboard down, so
-  // it stays a separate query and falls back to an empty list.
+  // Exams feed the "Due soon" list below. A failure here must not take the
+  // dashboard down, so it stays a separate query and falls back to empty.
   const { data: exams } = useAvailableExamsQuery();
-  // The roadmap tile needs only the followed one; a failure here leaves the tile
-  // on its "pick a path" wording rather than breaking the dashboard.
-  const { data: roadmapData } = useRoadmapsQuery();
-  const activeRoadmap =
-    roadmapData?.roadmaps.find((r) => r.id === roadmapData.activeRoadmapId) ?? null;
   // Teaser only — its failure must not affect the rest of the dashboard.
   const { data: mistakes } = useMistakesQuery();
 
@@ -315,45 +299,15 @@ export default function DashboardPage() {
     })
     .slice(0, 3);
 
-  const greeting = (() => {
-    const h = new Date().getHours();
-    if (h < 12) return "Good morning";
-    if (h < 17) return "Good afternoon";
-    return "Good evening";
-  })();
-
   return (
     <Box>
-      {/* ── Hero greeting — dashboard-only, not the shared PageHeader, so no
-          other page inherits this treatment. Same tonal-gradient + colored-
-          shadow technique as StatCard's icon tile, scaled up into a band. ── */}
-      <Box
-        sx={{
-          mb: 3,
-          p: { xs: 2.5, sm: 3.5 },
-          borderRadius: `${shape.extraLarge}px`,
-          color: "onPrimaryContainer",
-          background: "linear-gradient(135deg, var(--mui-palette-primaryContainer), color-mix(in srgb, var(--mui-palette-onPrimaryContainer) 12%, var(--mui-palette-primaryContainer)))",
-          boxShadow: "0 8px 24px color-mix(in srgb, var(--mui-palette-primaryContainer) 45%, transparent)",
-        }}
-      >
-        <Typography variant="h3" component="h1" fontWeight={700} sx={{ letterSpacing: "-0.01em" }}>
-          {name ? `${greeting}, ${name}!` : greeting + "!"}
-        </Typography>
-        <Typography variant="body1" sx={{ mt: 0.75, opacity: 0.85, maxWidth: 560 }}>
-          {isNewUser
-            ? "Ready to start your coding journey? Pick a problem and dive in."
-            : `You've solved ${stats.problemsSolved} problem${stats.problemsSolved !== 1 ? "s" : ""} and you're on a ${stats.streak}-day streak. Keep going!`}
-        </Typography>
-      </Box>
-
-      <QuickAccess
-        stats={stats}
-        courses={courses}
-        assignments={assignments}
-        exams={exams ?? []}
-        className={className}
-        activeRoadmap={activeRoadmap}
+      <PageHeader
+        title="Dashboard"
+        subtitle={
+          isNewUser
+            ? "Your progress will appear here once you start solving."
+            : `${stats.problemsSolved} problem${stats.problemsSolved !== 1 ? "s" : ""} solved · ${stats.streak}-day streak`
+        }
       />
 
       {/* ── Stats row ── */}

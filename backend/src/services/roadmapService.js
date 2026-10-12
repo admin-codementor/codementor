@@ -165,7 +165,7 @@ function resolveMilestone(milestone, catalog, solvedSet) {
  * The UI therefore reports the percentage and the step, never these two as "X of
  * Y problems" — that would contradict the student's own solved list.
  */
-function resolveRoadmap(roadmap, catalog, solvedSet, { includeMilestones = true } = {}) {
+function resolveLegacyRoadmap(roadmap, catalog, solvedSet, { includeMilestones = true } = {}) {
   const milestones = (roadmap.milestones || []).map((m) => resolveMilestone(m, catalog, solvedSet));
   const tracked = milestones.filter((m) => m.tracked && m.target > 0);
 
@@ -183,6 +183,7 @@ function resolveRoadmap(roadmap, catalog, solvedSet, { includeMilestones = true 
     tagline: roadmap.tagline || null,
     summary: roadmap.summary || null,
     forWho: roadmap.forWho || null,
+    format: 'list',
     milestoneCount: milestones.length,
     trackedCount: tracked.length,
     doneCount: tracked.filter((m) => m.status === 'done').length,
@@ -198,11 +199,137 @@ function resolveRoadmap(roadmap, catalog, solvedSet, { includeMilestones = true 
   return includeMilestones ? { ...summary, milestones } : summary;
 }
 
+/**
+ * A graph roadmap's single node, resolved the same way a milestone always was
+ * — `resolveMilestone` in every way that matters, just aware of the three node
+ * shapes a graph roadmap can contain instead of the one shape a flat list did:
+ *
+ *   topic      — has `practice`; tracked exactly like a legacy milestone.
+ *   checkpoint — a project/mock-test marker. Untracked (nothing to run against
+ *                Judge0 for "build a project"), rendered as its own shape so it
+ *                reads as a milestone marker rather than a lesson.
+ *   note       — a side annotation attached to another node (`attachTo`), never
+ *                a step in its own right: excluded from `tracked` and from ever
+ *                being "where you are", however many of them a roadmap has.
+ */
+function resolveNode(node, catalog, solvedSet) {
+  const base = {
+    id: node.id,
+    type: node.type || 'topic',
+    group: node.group || null,
+    title: node.title,
+    why: node.why || null,
+    reading: node.reading || [],
+    mcq: node.mcq || null,
+    attachTo: node.attachTo || null,
+    text: node.type === 'note' ? node.text || node.why || null : undefined,
+    // Short labelled sub-skills shown as branch leaves on the roadmap canvas
+    // (e.g. "HashMap", "TreeMap" under "Collections framework") — purely
+    // descriptive, authored content, never matched against the catalog.
+    subtopics: node.type === 'note' ? undefined : node.subtopics || [],
+  };
+
+  if (node.type === 'note') {
+    return { ...base, tracked: false, status: 'note' };
+  }
+
+  if (!node.practice) {
+    const status = node.mcq ? 'test' : node.type === 'checkpoint' ? 'checkpoint' : 'reading';
+    return { ...base, tracked: false, status };
+  }
+
+  const { problems, modules } = poolFor(node.practice, catalog);
+  const available = problems.length;
+  const target = Math.min(node.practice.count ?? available, available);
+  const solvedProblems = problems.filter((p) => solvedSet.has(p.id));
+  const solved = Math.min(solvedProblems.length, target);
+  const unsolved = problems.filter((p) => !solvedSet.has(p.id));
+
+  let status;
+  if (target === 0) status = 'unavailable';
+  else if (solved >= target) status = 'done';
+  else if (solvedProblems.length > 0) status = 'in_progress';
+  else status = 'not_started';
+
+  const nextModule =
+    modules.find((m) => (m.problemIds || []).some((id) => !solvedSet.has(id))) || modules[0] || null;
+
+  return {
+    ...base,
+    tracked: true,
+    status,
+    solved,
+    target,
+    available,
+    percent: target > 0 ? Math.round((solved / target) * 100) : 0,
+    nextProblems: unsolved.slice(0, 3).map((p) => ({ id: p.id, title: p.title, difficulty: p.difficulty })),
+    link: nextModule
+      ? { kind: 'module', courseId: nextModule.courseId, courseTitle: nextModule.courseTitle, moduleId: nextModule.id, moduleTitle: nextModule.title }
+      : (node.practice.tags || [])[0]
+        ? { kind: 'practice', tag: (node.practice.tags || [])[0] }
+        : null,
+  };
+}
+
+/**
+ * A graph-shaped roadmap (S13): nodes + edges + groups rather than a flat
+ * list. The aggregate math is identical to the legacy path — same weighting,
+ * same "you are here" rule — computed over nodes in authoring order rather
+ * than milestone order, so `currentStep` still reads as a sane "N of M" even
+ * though the graph itself may draw several nodes side by side.
+ */
+function resolveGraphRoadmap(roadmap, catalog, solvedSet, { includeMilestones = true } = {}) {
+  const nodes = (roadmap.nodes || []).map((n) => resolveNode(n, catalog, solvedSet));
+  // Notes are commentary, never a step — excluded from every "where am I"
+  // calculation, same reasoning as excluding them from `tracked` below.
+  const steps = nodes.filter((n) => n.type !== 'note');
+  const tracked = steps.filter((n) => n.tracked && n.target > 0);
+
+  const solved = tracked.reduce((n, s) => n + s.solved, 0);
+  const target = tracked.reduce((n, s) => n + s.target, 0);
+  const current = tracked.find((s) => s.status !== 'done') || null;
+
+  const summary = {
+    id: roadmap.id,
+    role: roadmap.role,
+    tagline: roadmap.tagline || null,
+    summary: roadmap.summary || null,
+    forWho: roadmap.forWho || null,
+    format: 'graph',
+    milestoneCount: steps.length,
+    trackedCount: tracked.length,
+    doneCount: tracked.filter((s) => s.status === 'done').length,
+    solved,
+    target,
+    percent: target > 0 ? Math.round((solved / target) * 100) : 0,
+    currentMilestone: current ? { id: current.id, title: current.title } : null,
+    currentStep: current ? tracked.indexOf(current) + 1 : null,
+  };
+
+  if (!includeMilestones) return summary;
+  return {
+    ...summary,
+    groups: roadmap.groups || [],
+    nodes,
+    edges: roadmap.edges || [],
+  };
+}
+
+/** Dispatches on shape: a roadmap authored as a graph (S13) carries `nodes`; an
+ * older flat one still carries `milestones`. Both resolve against the same
+ * catalog with the same matching rules — only the structural wrapper differs. */
+function resolveRoadmap(roadmap, catalog, solvedSet, opts = {}) {
+  return roadmap.nodes
+    ? resolveGraphRoadmap(roadmap, catalog, solvedSet, opts)
+    : resolveLegacyRoadmap(roadmap, catalog, solvedSet, opts);
+}
+
 module.exports = {
   normalizeTerm,
   tagMatches,
   moduleMatches,
   buildCatalog,
   resolveMilestone,
+  resolveNode,
   resolveRoadmap,
 };

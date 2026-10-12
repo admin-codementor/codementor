@@ -9,6 +9,10 @@ export interface ProblemsQueryParams {
   difficulty?: string;
   search?: string;
   tag?: string;
+  /** Skip the request entirely — for a query built conditionally (S12's
+   *  weakest-topic lookup only needs to run when there is a weak topic and no
+   *  filter already covers one). Defaults to enabled. */
+  enabled?: boolean;
 }
 
 export interface ProblemsQueryResult {
@@ -19,6 +23,7 @@ export interface ProblemsQueryResult {
 export function useProblemsQuery(params: ProblemsQueryParams) {
   return useQuery<ProblemsQueryResult>({
     queryKey: ["problems", params],
+    enabled: params.enabled !== false,
     queryFn: async () => {
       const query: Record<string, string | number> = { page: params.page, limit: 50 };
       if (params.search) query.search = params.search;

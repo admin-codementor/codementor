@@ -36,12 +36,86 @@ export interface UntrackedMilestone {
 
 export type Milestone = TrackedMilestone | UntrackedMilestone;
 
+// ── Graph-shaped roadmaps (S13) ──────────────────────────────────────────────
+// A roadmap authored as nodes/edges/groups rather than a flat list. The node
+// shapes mirror Tracked/UntrackedMilestone above (same resolver, same rules —
+// a node you cannot verify says so instead of reporting 0%) plus what a graph
+// specifically needs: which group it sits in, and for a note, what it is
+// commenting on rather than a step of its own.
+
+export interface TrackedNode {
+  id: string;
+  type: "topic" | "checkpoint";
+  group: string | null;
+  title: string;
+  why: string | null;
+  reading: { label: string; url: string }[];
+  mcq: string[] | null;
+  /** Short labelled sub-skills drawn as branch leaves beside this node on the
+   * canvas (e.g. "HashMap" under "Collections framework") — descriptive only,
+   * never a step of its own. */
+  subtopics: string[];
+  tracked: true;
+  status: "done" | "in_progress" | "not_started" | "unavailable";
+  solved: number;
+  target: number;
+  available: number;
+  percent: number;
+  nextProblems: { id: string; title: string; difficulty: string | null }[];
+  link: TrackedMilestone["link"];
+}
+
+export interface UntrackedNode {
+  id: string;
+  type: "topic" | "checkpoint";
+  group: string | null;
+  title: string;
+  why: string | null;
+  reading: { label: string; url: string }[];
+  mcq: string[] | null;
+  subtopics: string[];
+  tracked: false;
+  // "checkpoint" joins reading/test here: a project/mock-test marker we
+  // cannot verify by running code, same "untracked, not 0%" rule, its own
+  // shape so the graph draws it as a milestone marker rather than a lesson.
+  status: "reading" | "test" | "checkpoint";
+}
+
+/** A side annotation, never a step: excluded from progress and from ever
+ * being "you are here", however many a roadmap has. Points at the node it
+ * comments on via `attachTo` rather than sitting in the main flow. */
+export interface NoteNode {
+  id: string;
+  type: "note";
+  group: null;
+  attachTo: string;
+  text: string | null;
+  tracked: false;
+  status: "note";
+}
+
+export type RoadmapNode = TrackedNode | UntrackedNode | NoteNode;
+
+export interface RoadmapGroup {
+  id: string;
+  label: string;
+}
+
+export interface RoadmapEdge {
+  from: string;
+  to: string;
+}
+
 export interface RoadmapSummary {
   id: string;
   role: string;
   tagline: string | null;
   summary: string | null;
   forWho: string | null;
+  /** Which shape the detail response carries — a flat list (today's 3 roles)
+   * or a graph (S13's node/edge/group roles). Decides which renderer to use;
+   * never guess this from milestoneCount or anything else. */
+  format: "list" | "graph";
   milestoneCount: number;
   trackedCount: number;
   doneCount: number;
@@ -53,9 +127,19 @@ export interface RoadmapSummary {
   currentStep: number | null;
 }
 
-export interface RoadmapDetail extends RoadmapSummary {
+export interface RoadmapListDetail extends RoadmapSummary {
+  format: "list";
   milestones: Milestone[];
 }
+
+export interface RoadmapGraphDetail extends RoadmapSummary {
+  format: "graph";
+  groups: RoadmapGroup[];
+  nodes: RoadmapNode[];
+  edges: RoadmapEdge[];
+}
+
+export type RoadmapDetail = RoadmapListDetail | RoadmapGraphDetail;
 
 export const roadmapKeys = {
   all: ["roadmaps"] as const,
@@ -105,16 +189,3 @@ export function useSetActiveRoadmap() {
   });
 }
 
-/** Where a milestone sends the student: its module, or a filtered practice list. */
-export function milestoneHref(m: Milestone): string | null {
-  if (!m.tracked) return null;
-  if (m.link?.kind === "module") return `/app/courses/${m.link.courseId}?module=${m.link.moduleId}`;
-  if (m.link?.kind === "practice") return `/app/problems?tag=${encodeURIComponent(m.link.tag)}`;
-  return null;
-}
-
-/** Tests hub tab for an MCQ step: technical questions have their own tab. */
-export function mcqHref(mcq: string[] | null): string {
-  if (mcq?.includes("technical")) return "/app/tests?tab=technical";
-  return "/app/tests?tab=aptitude";
-}
