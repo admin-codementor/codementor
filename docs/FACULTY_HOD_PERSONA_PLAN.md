@@ -135,10 +135,13 @@ proxy (`activityHeatmap.length`, with a `helper` string stating it counts submis
 satisfying the "labelled clearly" condition Review_Feedback item 22 put on keeping the proxy instead of building
 real tracking).
 
-### F3 — Badge/flag transparency
+### F3 — Badge/flag transparency — done, commit `b7b9200`
 
-Add a thresholds/formula explainer (CampusTrack pattern, §3 point 6) to wherever the status banner / badge ladder
-/ "at-risk" flag is shown to faculty or HOD, so a flag is never unexplained.
+Found that reasons were already shown inline everywhere a flag appears (never a bare colour) — the real gap was
+that the full rule set was never stated together (exact 30%/5-sub/7-day thresholds, the 7 badge percentile
+cutoffs). Added a shared `ThresholdsDialog` (info button + dialog, mirrors `studentState.js`/
+`departmentAnalytics.js` constants exactly), wired next to the department funnel heading, the badge distribution
+card, and a student's status banner.
 
 ### H1 — HOD dashboard polish pass
 
