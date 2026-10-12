@@ -125,11 +125,15 @@ page with 9 specialized chart types — a materially different risk profile than
   `emptyTitle` were real, useful wiring.
 - Swept `Panels.tsx`'s own raw tokens too (it sits outside F0's page-only glob, so F0 missed it).
 
-### F2 — Per-student analytics completeness (closes Review_Feedback item 9)
+### F2 — Per-student analytics completeness (closes Review_Feedback item 9) — done, commit `6d17635`
 
-Item 9 asked for: time spent, problems solved/attempted, accuracy, exam performance, course completion — most of
-this is already on `/faculty/students/[id]` per Phase 5. Audit exactly which sub-item is still missing or
-incomplete (e.g. "time spent" is proxy-only per FD2) and close only the real gaps, not the ones already shipped.
+Audited `buildStudentProfile()` and the student profile page against item 9's 5 sub-items: 4 were already fully
+shipped (accuracy, exam performance, course completion with pending items, problems solved). Two real gaps
+closed — both additive, no new data model: **"Problems Attempted"** as its own stat (backend already computed
+`attemptedProblemIds`, just never returned its size), and **"Active Days (12 mo)"** as a labelled time-spent
+proxy (`activityHeatmap.length`, with a `helper` string stating it counts submission-days, not measured time —
+satisfying the "labelled clearly" condition Review_Feedback item 22 put on keeping the proxy instead of building
+real tracking).
 
 ### F3 — Badge/flag transparency
 
