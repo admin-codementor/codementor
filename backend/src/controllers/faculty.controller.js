@@ -1864,6 +1864,11 @@ async function buildStudentProfile(id, student) {
     totals: {
       total, accepted,
       solved: solvedProblemIds.size,
+      attempted: attemptedProblemIds.size,
+      // Days with any submission in the last 12 months — the labelled,
+      // submission-based proxy for "time spent" (FD2 in
+      // docs/FACULTY_HOD_PERSONA_PLAN.md: real session tracking is deferred).
+      activeDays: activityHeatmap.length,
       acRate: total ? Math.round((accepted / total) * 100) : 0,
     },
     learningCurve,

@@ -29,6 +29,7 @@ import {
   CheckCircleOutlineIcon,
   ErrorOutlineIcon,
   LinkOutlinedIcon,
+  AssignmentOutlinedIcon,
 } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -69,7 +70,7 @@ interface StudentProfile {
     lastLoginAt: string | null;
     joinedDate: string;
   };
-  totals: { total: number; accepted: number; solved: number; acRate: number };
+  totals: { total: number; accepted: number; solved: number; attempted: number; activeDays: number; acRate: number };
   learningCurve: { date: string; solved: number }[];
   topicBreakdown: { topic: string; solved: number; attempts: number }[];
   verdictBreakdown: { name: string; value: number }[];
@@ -223,6 +224,12 @@ export default function StudentProfilePage() {
               </RevealItem>
               <RevealItem>
                 <StatCard icon={<CodeOutlinedIcon />} label="Top Language" value={data.highlights.topLanguage ?? "—"} accent="secondary" />
+              </RevealItem>
+              <RevealItem>
+                <StatCard icon={<AssignmentOutlinedIcon />} label="Problems Attempted" value={data.totals.attempted} accent="tertiary" />
+              </RevealItem>
+              <RevealItem>
+                <StatCard icon={<HistoryOutlinedIcon />} label="Active Days (12 mo)" value={data.totals.activeDays} helper="Days with any submission, not measured time" accent="secondary" />
               </RevealItem>
               <RevealItem>
                 <StatCard icon={<HubOutlinedIcon />} label="External Solved" value={data.highlights.externalSolved} helper="Across synced platforms" accent="primary" />
