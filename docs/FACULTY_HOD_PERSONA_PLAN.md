@@ -134,7 +134,31 @@ for `/api/faculty/groups` CRUD and `/api/faculty/department` to `backend/tests/`
 
 ---
 
-## 6. Explicitly out of scope for this plan
+## 6. Feature pick-list — from the 2026-10-12 CodeTantra (faculty) + CampusTrack (HOD) walkthrough
+
+Srinivas logged into both live products directly; `docs/COMPETITOR_UX_RESEARCH.md` Parts 2 (CampusTrack HOD) and
+3 (CodeTantra Faculty) record everything seen, read-only, no student/staff names retained. This section turns
+those findings into **discrete, independent choices** — pick items one at a time as we go, in any order; nothing
+here is sequenced or bundled. Each row: what they have, what we have today, and the options.
+
+| # | Feature | They have | We have | Options |
+|---|---|---|---|---|
+| G1 | **Real time-on-platform tracking** | CodeTantra shows exact per-student time ("2 days 2 hrs") and per-course daily time-spent trend lines — proven to work at real-cohort scale (118+ students/course). | Submission-based proxy only (FD2, locked as "keep for now"). | **(a)** Keep FD2 as locked — this doesn't change the privacy-cost tradeoff, it just proves the engineering is tractable. **(b)** Revisit FD2 now that real-scale feasibility is confirmed elsewhere — build a lightweight heartbeat (e.g. ping while a problem/course page is open, batched not per-second) scoped to course/problem pages only (not sitewide). |
+| G2 | **A faculty report catalogue** | 12 distinct report types (Course Progress, Course Progress Time-based, Group-wise Users, Group-wise User Course, Summary, User Submission, User-wise, Late Submissions, Reopen Requests, Daily-wise, plus schedule/user-detail admin tools), picked by course/group/date. | A handful of fixed pages (`/faculty/analytics`, course analytics, department dashboard) — faculty can't choose a report, we chose for them. | **(a)** Leave as-is — our fixed pages already cover the same underlying questions (per F1's kit migration), just not as a pick-a-report menu. **(b)** Add a lightweight "Reports" entry point that's really just deep-links into existing pages with a course/group/date filter pre-applied — cheap, no new backend. **(c)** Build genuinely new report types (e.g. Late Submissions, Reopen Requests) we don't have at all today. |
+| G3 | **Platform-wide activity heatmap** | A year-view GitHub-style calendar (all courses combined) on the faculty home/courses landing page. | Nothing at the faculty landing (`faculty/dashboard`) — per-course trend charts only exist inside a course. | **(a)** Skip — department dashboard's 8-week trend already gives a similar "when is activity happening" signal at department scope. **(b)** Add a compact year-heatmap to `faculty/dashboard` scoped to that faculty's own classes/courses. |
+| G4 | **Per-unit/topic drill-down mini-dialog** | Clicking a chart icon next to any syllabus unit opens a small "pick a group, Fetch" dialog scoped to just that unit, with its own empty state. | Our per-student page shows per-unit completion inline already (Phase 5); no separate drill-down dialog. | **(a)** Skip — inline is arguably better UX than an extra click-through. **(b)** Add the same modal pattern for cases where the inline view gets too dense (e.g. a course with 15+ units). |
+| G5 | **Multi-faculty per class/group** | A CodeTantra group lists several named faculty (co-teach/TA/oversight), not one owner. | `classroom` has a single `facultyId` owner. | **(a)** Skip for now — no reported pain point from this gap. **(b)** Add a `co_faculty` list alongside the existing owner, additive and backward-compatible — read access for co-faculty, write access stays with the owner (or extend to co-faculty too, a sub-choice). |
+| G6 | **Report-type: Late Submissions / Reopen Requests** | Two of CodeTantra's dedicated report types. | We have no "late submission" or "reopen request" concept surfaced to faculty at all. | **(a)** Skip. **(b)** Add a simple filtered view on top of existing submission data (late = submitted after assignment due date, already stored) — no new data model needed for "late"; "reopen requests" would need a new concept (a student asking to resubmit after a deadline) we don't have. |
+| G7 | **Flag/badge threshold + formula transparency** | CampusTrack publishes exact score formulas and red/orange/green thresholds behind a one-click explainer, per platform (HackerRank, LeetCode, etc.) and per metric. | Already planned as **F2** in this doc (badge/flag transparency) — this confirms the pattern with a concrete example of *how much* detail to publish (exact formula, not just "based on activity"). | Already decided — F2 proceeds as planned, using this as the reference bar for how explicit the explainer should be. |
+| G8 | **Student-state funnel, badge ladder, 8-week trend, section comparison** | CampusTrack's richest HOD screens. | **Already shipped** (Phase 7, `/faculty/department`) — confirmed matching on this walkthrough, nothing new to build. | No action — already done. |
+| G9 | **Mentor mapping, mentor leaderboard, portfolio completeness, placement funnel, alumni** | Full CampusTrack features. | None. | Already decided (**FD1**) — deferred to the T&P persona phase; no new information from this walkthrough changes that (Course Analytics, Mentor Mapping, Alumni were all still empty/unpopulated for this department even on CampusTrack's own live system). |
+| G10 | **Department cross-institution leaderboard** | CampusTrack's "Department Leaderboard" screen. | None. | Already decided (**FD4**) — deferred to Admin phase. |
+
+**How to use this table**: bring up a row (or several) whenever you're ready to scope the next phase; we pick the
+option together and it becomes a new lettered phase (F3, F4, …) in §5, following the same one-phase-one-PR
+discipline as everything else in this plan.
+
+## 7. Explicitly out of scope for this plan
 
 Mentor mapping, portfolio completeness, placement readiness/analytics, alumni, labs, messages (needs T&P role —
 own future phase); cross-department leaderboard (Admin phase, FD4); real time-on-platform tracking (FD2, pending
