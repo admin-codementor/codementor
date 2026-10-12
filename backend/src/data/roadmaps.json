@@ -928,8 +928,8 @@
     },
     {
       "id": "web-developer",
-      "role": "Web Developer",
-      "tagline": "HTML, CSS, JavaScript, React, Node",
+      "role": "Full Stack Web Developer",
+      "tagline": "HTML, CSS, JavaScript, React, Node — the full-stack path",
       "summary": "The fastest route to something you can show someone. You build visible things early, which keeps motivation up, but the fundamentals still decide whether you pass the interview, so they stay in the path rather than being skipped.",
       "forWho": "Students aiming at frontend, full-stack or product-engineering roles.",
       "groups": [
@@ -1234,6 +1234,3823 @@
         {
           "from": "wd-10",
           "to": "wd-11"
+        }
+      ]
+    },
+    {
+      "id": "product-company-placement",
+      "role": "Product-Company Placement",
+      "tagline": "Amazon, Flipkart, product startups — harder DSA, a design round",
+      "summary": "The step up from a mass-recruiter drive: fewer, harder DSA rounds, a lightweight system-design question even at the SDE-1 level, and a behavioural round that actually gets read. This path assumes you can already write working code and focuses on what separates a pass from a reject at this tier.",
+      "forWho": "Students targeting product companies and well-funded startups, after or alongside Service-Company Placement.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Fast Fundamentals"
+        },
+        {
+          "id": "advanced-dsa",
+          "label": "Advanced DSA"
+        },
+        {
+          "id": "design",
+          "label": "Design & Behavioural"
+        },
+        {
+          "id": "prep",
+          "label": "Interview Prep"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "pcp-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Fundamentals, at interview speed",
+          "why": "A product company's online round assumes basics are already fast, not a learning step — time pressure is the actual test here.",
+          "practice": {
+            "modules": [
+              "basics"
+            ],
+            "tags": [
+              "programming basics"
+            ],
+            "count": 8
+          },
+          "subtopics": [
+            "Time Complexity",
+            "Space Complexity",
+            "Clean Syntax",
+            "Edge-Case Habits"
+          ]
+        },
+        {
+          "id": "pcp-2",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Arrays and strings, under time pressure",
+          "why": "The first filter round is almost always an array or string question with a strict time limit.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings"
+            ],
+            "tags": [
+              "arrays",
+              "strings"
+            ],
+            "count": 16
+          },
+          "subtopics": [
+            "In-place Updates",
+            "Prefix Sums",
+            "Two-pointer Scans",
+            "Edge Cases"
+          ]
+        },
+        {
+          "id": "pcp-3",
+          "type": "topic",
+          "group": "advanced-dsa",
+          "title": "Hashing and frequency problems",
+          "why": "The fastest way to turn an O(n²) brute force into O(n) — the single highest-leverage pattern in these interviews.",
+          "practice": {
+            "modules": [
+              "hashing"
+            ],
+            "tags": [
+              "hashing"
+            ],
+            "count": 4
+          },
+          "subtopics": [
+            "HashMap Lookups",
+            "HashSet",
+            "Frequency Counting",
+            "Grouping"
+          ]
+        },
+        {
+          "id": "pcp-4",
+          "type": "topic",
+          "group": "advanced-dsa",
+          "title": "Two pointers and sliding window",
+          "why": "Comes up whenever a question mentions subarray, pair, or window — recognise the pattern and the solution writes itself.",
+          "practice": {
+            "modules": [
+              "two pointers",
+              "sliding window"
+            ],
+            "tags": [
+              "two pointers",
+              "sliding window"
+            ],
+            "count": 6
+          },
+          "subtopics": [
+            "Fixed Window",
+            "Variable Window",
+            "Two-sum Variants",
+            "Subarray Sums"
+          ]
+        },
+        {
+          "id": "pcp-5",
+          "type": "topic",
+          "group": "advanced-dsa",
+          "title": "Binary search, including on the answer",
+          "why": "Past the obvious sorted-array case, product companies test binary-search-on-the-answer — a different skill from the textbook version.",
+          "practice": {
+            "modules": [
+              "searching"
+            ],
+            "tags": [
+              "binary search"
+            ],
+            "count": 3
+          },
+          "subtopics": [
+            "Classic Binary Search",
+            "Search on Answer",
+            "Rotated Arrays",
+            "Peak Finding"
+          ]
+        },
+        {
+          "id": "pcp-6",
+          "type": "topic",
+          "group": "advanced-dsa",
+          "title": "Trees and graphs, properly",
+          "why": "BFS and DFS are assumed knowledge here, not the finish line — expect a traversal plus a twist.",
+          "practice": {
+            "modules": [
+              "trees",
+              "graphs"
+            ],
+            "tags": [
+              "trees",
+              "graphs"
+            ],
+            "count": 5
+          },
+          "subtopics": [
+            "BFS / DFS",
+            "Binary Search Trees",
+            "Topological Sort",
+            "Shortest Path"
+          ]
+        },
+        {
+          "id": "pcp-7",
+          "type": "topic",
+          "group": "advanced-dsa",
+          "title": "Dynamic programming, the real kind",
+          "why": "2D DP and DP-on-trees separate this tier from a mass-recruiter drive. Aim for a correct state transition before optimising space.",
+          "practice": {
+            "modules": [
+              "dynamic programming"
+            ],
+            "tags": [
+              "dynamic programming"
+            ],
+            "count": 4
+          },
+          "subtopics": [
+            "2D DP",
+            "DP on Trees",
+            "Bitmask DP",
+            "Space Optimisation"
+          ]
+        },
+        {
+          "id": "pcp-8",
+          "type": "topic",
+          "group": "design",
+          "title": "System design basics",
+          "why": "Even an SDE-1 round at a product company asks one lightweight design question — you are not expected to design Netflix, just to reason about trade-offs out loud.",
+          "reading": [
+            {
+              "label": "System Design Primer",
+              "url": "https://github.com/donnemartin/system-design-primer"
+            }
+          ],
+          "subtopics": [
+            "Scalability",
+            "Load Balancing",
+            "Caching",
+            "Database Choice"
+          ]
+        },
+        {
+          "id": "pcp-9",
+          "type": "topic",
+          "group": "design",
+          "title": "The behavioural round",
+          "why": "This round is scored as rigorously as the coding one at most product companies — a vague answer here fails a candidate who cleared every DSA round.",
+          "reading": [
+            {
+              "label": "STAR method overview",
+              "url": "https://www.themuse.com/advice/star-interview-method"
+            }
+          ],
+          "subtopics": [
+            "STAR Method",
+            "Project Deep-dive",
+            "Why This Company",
+            "Questions to Ask"
+          ]
+        },
+        {
+          "id": "pcp-10",
+          "type": "checkpoint",
+          "group": "prep",
+          "title": "Run timed mock interviews before the real one",
+          "why": "The clock and a stranger watching you think changes everything. Simulate it before it happens for real.",
+          "subtopics": [
+            "45-min Timed Rounds",
+            "Think-aloud Practice",
+            "Peer Mocks",
+            "Post-mock Feedback"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "pcp-1",
+          "to": "pcp-2"
+        },
+        {
+          "from": "pcp-2",
+          "to": "pcp-3"
+        },
+        {
+          "from": "pcp-3",
+          "to": "pcp-4"
+        },
+        {
+          "from": "pcp-4",
+          "to": "pcp-5"
+        },
+        {
+          "from": "pcp-5",
+          "to": "pcp-6"
+        },
+        {
+          "from": "pcp-6",
+          "to": "pcp-7"
+        },
+        {
+          "from": "pcp-7",
+          "to": "pcp-8"
+        },
+        {
+          "from": "pcp-8",
+          "to": "pcp-9"
+        },
+        {
+          "from": "pcp-9",
+          "to": "pcp-10"
+        }
+      ]
+    },
+    {
+      "id": "frontend-developer",
+      "role": "Frontend Developer",
+      "tagline": "HTML, CSS, JavaScript, React — the narrower, faster path",
+      "summary": "Everything a frontend role actually tests, without the backend and database detour the full-stack path includes. For a student who already knows this is the direction and wants to get there faster.",
+      "forWho": "Students specifically targeting frontend or UI-engineering roles, not full-stack.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Foundations"
+        },
+        {
+          "id": "javascript",
+          "label": "JavaScript"
+        },
+        {
+          "id": "react",
+          "label": "React & Tooling"
+        },
+        {
+          "id": "shipping",
+          "label": "Shipping"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "fe-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Programming foundations",
+          "why": "Frameworks change every two years. Loops, functions and conditionals do not.",
+          "practice": {
+            "modules": [
+              "basics"
+            ],
+            "tags": [
+              "programming basics"
+            ],
+            "count": 8
+          },
+          "subtopics": [
+            "Loops",
+            "Functions",
+            "Conditionals",
+            "Variables"
+          ]
+        },
+        {
+          "id": "fe-2",
+          "type": "topic",
+          "group": "foundations",
+          "title": "HTML and CSS",
+          "why": "Semantic markup, the box model, flexbox and grid — most frustration here is one unread page of documentation.",
+          "reading": [
+            {
+              "label": "MDN: your first website",
+              "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Your_first_website"
+            },
+            {
+              "label": "MDN: CSS layout",
+              "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/CSS_layout"
+            }
+          ],
+          "subtopics": [
+            "Semantic HTML",
+            "Box Model",
+            "Flexbox",
+            "Grid"
+          ]
+        },
+        {
+          "id": "fe-3",
+          "type": "topic",
+          "group": "javascript",
+          "title": "JavaScript fundamentals",
+          "why": "Arrays and strings are where JavaScript is actually written: map, filter, reduce, split, join.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings"
+            ],
+            "tags": [
+              "arrays",
+              "strings"
+            ],
+            "count": 14
+          },
+          "reading": [
+            {
+              "label": "MDN: scripting first steps",
+              "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Core/Scripting"
+            }
+          ],
+          "subtopics": [
+            "map/filter/reduce",
+            "Array Methods",
+            "String Methods",
+            "ES6 Syntax"
+          ]
+        },
+        {
+          "id": "fe-4",
+          "type": "topic",
+          "group": "javascript",
+          "title": "The DOM and browser APIs",
+          "why": "Events, fetch, local storage — enough to make a page respond to a person without any framework at all.",
+          "reading": [
+            {
+              "label": "MDN: introduction to the DOM",
+              "url": "https://developer.mozilla.org/en-US/docs/Web/API/Document_Object_Model/Introduction"
+            }
+          ],
+          "subtopics": [
+            "Events",
+            "fetch API",
+            "Local Storage",
+            "DOM Traversal"
+          ]
+        },
+        {
+          "id": "fe-5",
+          "type": "topic",
+          "group": "javascript",
+          "title": "Data structures behind the UI",
+          "why": "Hash maps for lookups, stacks for undo and history — interviews ask these even for frontend roles.",
+          "practice": {
+            "modules": [
+              "hashing",
+              "stacks"
+            ],
+            "tags": [
+              "hashing",
+              "stack"
+            ],
+            "count": 4
+          },
+          "subtopics": [
+            "HashMap Lookups",
+            "Stack (Undo/History)",
+            "Queue",
+            "Set"
+          ]
+        },
+        {
+          "id": "fe-6",
+          "type": "topic",
+          "group": "react",
+          "title": "React",
+          "why": "Components, state and props — learn why re-renders happen before learning the hooks that work around them.",
+          "reading": [
+            {
+              "label": "React: Learn React",
+              "url": "https://react.dev/learn"
+            }
+          ],
+          "subtopics": [
+            "Components",
+            "State",
+            "Props",
+            "Re-renders"
+          ]
+        },
+        {
+          "id": "fe-7",
+          "type": "topic",
+          "group": "react",
+          "title": "Routing and forms",
+          "why": "A real app has more than one screen and takes input. Both are where most beginner React projects first break.",
+          "reading": [
+            {
+              "label": "React Router docs",
+              "url": "https://reactrouter.com/"
+            }
+          ],
+          "subtopics": [
+            "Client-side Routing",
+            "Controlled Inputs",
+            "Validation",
+            "Form Submission"
+          ]
+        },
+        {
+          "id": "fe-8",
+          "type": "topic",
+          "group": "react",
+          "title": "Build tooling and package managers",
+          "why": "Vite, npm, and why `node_modules` exists — invisible until the day it breaks your build.",
+          "reading": [
+            {
+              "label": "Vite: Getting Started",
+              "url": "https://vite.dev/guide/"
+            }
+          ],
+          "subtopics": [
+            "Vite",
+            "npm/pnpm",
+            "Environment Variables",
+            "Bundling Basics"
+          ]
+        },
+        {
+          "id": "fe-9",
+          "type": "topic",
+          "group": "shipping",
+          "title": "Git and the command line",
+          "why": "Branch, commit, merge, resolve a conflict — not optional, and quietly assessed from your first day.",
+          "reading": [
+            {
+              "label": "Git: branching and merging",
+              "url": "https://git-scm.com/book/en/v2/Git-Branching-Basic-Branching-and-Merging"
+            }
+          ],
+          "subtopics": [
+            "Branching",
+            "Commit",
+            "Merge",
+            "Conflict Resolution"
+          ]
+        },
+        {
+          "id": "fe-10",
+          "type": "checkpoint",
+          "group": "shipping",
+          "title": "Deploy it, then write about it",
+          "why": "A live URL and a readable README are worth more than a private repository with twice the code.",
+          "reading": [
+            {
+              "label": "MDN: publishing your website",
+              "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Your_first_website/Publishing_your_website"
+            }
+          ],
+          "subtopics": [
+            "Live Deployment",
+            "README",
+            "Lighthouse Score",
+            "Portfolio Link"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "fe-1",
+          "to": "fe-2"
+        },
+        {
+          "from": "fe-2",
+          "to": "fe-3"
+        },
+        {
+          "from": "fe-3",
+          "to": "fe-4"
+        },
+        {
+          "from": "fe-4",
+          "to": "fe-5"
+        },
+        {
+          "from": "fe-5",
+          "to": "fe-6"
+        },
+        {
+          "from": "fe-6",
+          "to": "fe-7"
+        },
+        {
+          "from": "fe-7",
+          "to": "fe-8"
+        },
+        {
+          "from": "fe-8",
+          "to": "fe-9"
+        },
+        {
+          "from": "fe-9",
+          "to": "fe-10"
+        }
+      ]
+    },
+    {
+      "id": "backend-developer-nodejs",
+      "role": "Backend Developer (Node.js)",
+      "tagline": "JavaScript/TypeScript, Express, REST APIs, databases",
+      "summary": "The JavaScript-stack counterpart to the Java Developer path. For students who already know JS from frontend work, or prefer one language across the stack.",
+      "forWho": "Students targeting backend or full-stack roles on a JavaScript/TypeScript stack.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Foundations"
+        },
+        {
+          "id": "dsa",
+          "label": "Data Structures & Algorithms"
+        },
+        {
+          "id": "backend",
+          "label": "Backend & APIs"
+        },
+        {
+          "id": "shipping",
+          "label": "Shipping"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "ndb-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "JavaScript fundamentals",
+          "why": "Closures, async/await, and the event loop — the parts of JS that backend work actually exercises.",
+          "practice": {
+            "modules": [
+              "basics"
+            ],
+            "tags": [
+              "programming basics"
+            ],
+            "count": 8
+          },
+          "subtopics": [
+            "Closures",
+            "async/await",
+            "Event Loop",
+            "Modules"
+          ]
+        },
+        {
+          "id": "ndb-2",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Arrays and strings",
+          "why": "The data every API request and response is built from, one way or another.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings"
+            ],
+            "tags": [
+              "arrays",
+              "strings"
+            ],
+            "count": 16
+          },
+          "subtopics": [
+            "Array Methods",
+            "String Parsing",
+            "Immutability",
+            "2D Arrays"
+          ]
+        },
+        {
+          "id": "ndb-3",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Hashing and maps",
+          "why": "Caching, deduplication, and lookup tables — used constantly in real backend code, not just interviews.",
+          "practice": {
+            "modules": [
+              "hashing"
+            ],
+            "tags": [
+              "hashing"
+            ],
+            "count": 4
+          },
+          "subtopics": [
+            "Map/Object",
+            "Caching",
+            "Deduplication",
+            "Set Operations"
+          ]
+        },
+        {
+          "id": "ndb-4",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Trees, graphs and dynamic programming",
+          "why": "Less common day-to-day, but still the interview filter for this role at most companies.",
+          "practice": {
+            "modules": [
+              "trees",
+              "graphs",
+              "dynamic programming"
+            ],
+            "tags": [
+              "trees",
+              "graphs",
+              "dynamic programming"
+            ],
+            "count": 6
+          },
+          "subtopics": [
+            "BFS / DFS",
+            "Binary Trees",
+            "Memoization",
+            "Tabulation"
+          ]
+        },
+        {
+          "id": "ndb-5",
+          "type": "topic",
+          "group": "backend",
+          "title": "Node.js and Express",
+          "why": "A server, a route, a JSON response — the actual job, once you can write one.",
+          "reading": [
+            {
+              "label": "MDN: Express and Node introduction",
+              "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Extensions/Server-side/Express_Nodejs/Introduction"
+            }
+          ],
+          "subtopics": [
+            "Express Routes",
+            "Middleware",
+            "Request/Response",
+            "Error Handling"
+          ]
+        },
+        {
+          "id": "ndb-6",
+          "type": "topic",
+          "group": "backend",
+          "title": "REST API design",
+          "why": "Resource naming, status codes, and versioning — the difference between an API other teams can use and one they complain about.",
+          "reading": [
+            {
+              "label": "REST API Tutorial",
+              "url": "https://restfulapi.net/"
+            }
+          ],
+          "subtopics": [
+            "Resource Naming",
+            "Status Codes",
+            "Pagination",
+            "Versioning"
+          ]
+        },
+        {
+          "id": "ndb-7",
+          "type": "topic",
+          "group": "backend",
+          "title": "Databases and ORMs",
+          "why": "Schemas, queries, and why you never concatenate user input into SQL.",
+          "reading": [
+            {
+              "label": "PostgreSQL: SQL Tutorial",
+              "url": "https://www.postgresql.org/docs/current/tutorial-sql.html"
+            }
+          ],
+          "subtopics": [
+            "Schemas",
+            "Parameterized Queries",
+            "Indexes",
+            "ORM Basics"
+          ]
+        },
+        {
+          "id": "ndb-8",
+          "type": "topic",
+          "group": "backend",
+          "title": "Authentication and security basics",
+          "why": "Hashing passwords, issuing tokens, and the handful of mistakes that account for most real breaches.",
+          "reading": [
+            {
+              "label": "OWASP Top Ten",
+              "url": "https://owasp.org/www-project-top-ten/"
+            }
+          ],
+          "subtopics": [
+            "Password Hashing",
+            "JWT",
+            "CORS",
+            "Input Validation"
+          ]
+        },
+        {
+          "id": "ndb-9",
+          "type": "topic",
+          "group": "shipping",
+          "title": "Testing and Git",
+          "why": "A backend without tests breaks silently. Branch, commit, merge — not optional here either.",
+          "reading": [
+            {
+              "label": "Jest: Getting Started",
+              "url": "https://jestjs.io/docs/getting-started"
+            }
+          ],
+          "subtopics": [
+            "Unit Tests",
+            "Integration Tests",
+            "Git Branching",
+            "Code Review"
+          ]
+        },
+        {
+          "id": "ndb-10",
+          "type": "checkpoint",
+          "group": "shipping",
+          "title": "Deploy a working API, then explain it",
+          "why": "A deployed service with three well-tested endpoints beats five half-built ones.",
+          "reading": [
+            {
+              "label": "Render: Deploy a Node app",
+              "url": "https://render.com/docs/deploy-node-express-app"
+            }
+          ],
+          "subtopics": [
+            "Deployment",
+            "Environment Config",
+            "API Documentation",
+            "Dependency Justification"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "ndb-1",
+          "to": "ndb-2"
+        },
+        {
+          "from": "ndb-2",
+          "to": "ndb-3"
+        },
+        {
+          "from": "ndb-3",
+          "to": "ndb-4"
+        },
+        {
+          "from": "ndb-4",
+          "to": "ndb-5"
+        },
+        {
+          "from": "ndb-5",
+          "to": "ndb-6"
+        },
+        {
+          "from": "ndb-6",
+          "to": "ndb-7"
+        },
+        {
+          "from": "ndb-7",
+          "to": "ndb-8"
+        },
+        {
+          "from": "ndb-8",
+          "to": "ndb-9"
+        },
+        {
+          "from": "ndb-9",
+          "to": "ndb-10"
+        }
+      ]
+    },
+    {
+      "id": "android-developer",
+      "role": "Android Developer",
+      "tagline": "Kotlin, Android SDK — DSA tracked, Android-specific nodes are reading",
+      "summary": "Kotlin and the Android SDK have no code-judge here, so those nodes are reading and checkpoints rather than tracked practice. The DSA spine underneath is identical to every other role, because the interview filter is too.",
+      "forWho": "Students targeting Android roles. Reading-heavy: the DSA nodes are tracked, the Android-specific ones are not.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Kotlin Foundations"
+        },
+        {
+          "id": "dsa",
+          "label": "Data Structures & Algorithms"
+        },
+        {
+          "id": "android",
+          "label": "Android SDK"
+        },
+        {
+          "id": "shipping",
+          "label": "Shipping"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "and-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Kotlin fundamentals",
+          "why": "Kotlin is the modern Android language — null safety and data classes are where it most differs from Java.",
+          "reading": [
+            {
+              "label": "Kotlin: Basic syntax",
+              "url": "https://kotlinlang.org/docs/basic-syntax.html"
+            }
+          ],
+          "subtopics": [
+            "Null Safety",
+            "Data Classes",
+            "Extension Functions",
+            "Coroutines Intro"
+          ]
+        },
+        {
+          "id": "and-2",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Arrays and strings",
+          "why": "Same interview filter every other role faces first, language aside.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings"
+            ],
+            "tags": [
+              "arrays",
+              "strings"
+            ],
+            "count": 14
+          },
+          "subtopics": [
+            "Array Operations",
+            "String Methods",
+            "Two-pointer Scans",
+            "Edge Cases"
+          ]
+        },
+        {
+          "id": "and-3",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Hashing, stacks and queues",
+          "why": "The standard-library structures every Android app's business logic quietly relies on.",
+          "practice": {
+            "modules": [
+              "hashing",
+              "stacks",
+              "queues"
+            ],
+            "tags": [
+              "hashing",
+              "stack"
+            ],
+            "count": 4
+          },
+          "subtopics": [
+            "HashMap",
+            "Stack",
+            "Queue",
+            "LRU Pattern"
+          ]
+        },
+        {
+          "id": "and-4",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Trees, graphs and dynamic programming",
+          "why": "Less directly relevant to app code, but still asked in the same interview as the Android-specific questions.",
+          "practice": {
+            "modules": [
+              "trees",
+              "graphs",
+              "dynamic programming"
+            ],
+            "tags": [
+              "trees",
+              "graphs",
+              "dynamic programming"
+            ],
+            "count": 5
+          },
+          "subtopics": [
+            "Binary Trees",
+            "BFS / DFS",
+            "Memoization",
+            "Tabulation"
+          ]
+        },
+        {
+          "id": "and-5",
+          "type": "topic",
+          "group": "android",
+          "title": "Activities, Fragments and the lifecycle",
+          "why": "The single most-asked conceptual Android question: what happens to your screen on rotation, and why.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "Android: Activity lifecycle",
+              "url": "https://developer.android.com/guide/components/activities/activity-lifecycle"
+            }
+          ],
+          "subtopics": [
+            "Activity Lifecycle",
+            "Fragments",
+            "Configuration Changes",
+            "State Restoration"
+          ]
+        },
+        {
+          "id": "and-6",
+          "type": "topic",
+          "group": "android",
+          "title": "Jetpack Compose",
+          "why": "Google's current recommended UI toolkit — declarative, and increasingly what interviews expect over the old View system.",
+          "reading": [
+            {
+              "label": "Android: Jetpack Compose basics",
+              "url": "https://developer.android.com/jetpack/compose/tutorial"
+            }
+          ],
+          "subtopics": [
+            "Composable Functions",
+            "State Hoisting",
+            "Recomposition",
+            "Modifiers"
+          ]
+        },
+        {
+          "id": "and-7",
+          "type": "topic",
+          "group": "android",
+          "title": "Networking and local storage",
+          "why": "Retrofit for the network call, Room for what survives after the app closes — most real apps need both.",
+          "reading": [
+            {
+              "label": "Android: Save data in a local database",
+              "url": "https://developer.android.com/training/data-storage/room"
+            }
+          ],
+          "subtopics": [
+            "Retrofit",
+            "Room Database",
+            "Coroutines for IO",
+            "Offline-first Pattern"
+          ]
+        },
+        {
+          "id": "and-8",
+          "type": "topic",
+          "group": "android",
+          "title": "App architecture",
+          "why": "MVVM and a ViewModel that survives rotation — the difference between a demo app and a maintainable one.",
+          "reading": [
+            {
+              "label": "Android: Guide to app architecture",
+              "url": "https://developer.android.com/topic/architecture"
+            }
+          ],
+          "subtopics": [
+            "MVVM",
+            "ViewModel",
+            "LiveData / StateFlow",
+            "Repository Pattern"
+          ]
+        },
+        {
+          "id": "and-9",
+          "type": "checkpoint",
+          "group": "shipping",
+          "title": "Publish one app, then prepare to defend it",
+          "why": "A real app on a real device, with a Play Store listing draft even if never actually published, beats a dozen tutorial clones.",
+          "reading": [
+            {
+              "label": "Android: Prepare for release",
+              "url": "https://developer.android.com/studio/publish/preparing"
+            }
+          ],
+          "subtopics": [
+            "Signed Build",
+            "Play Store Listing",
+            "Crash-free Testing",
+            "README"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "and-1",
+          "to": "and-2"
+        },
+        {
+          "from": "and-2",
+          "to": "and-3"
+        },
+        {
+          "from": "and-3",
+          "to": "and-4"
+        },
+        {
+          "from": "and-4",
+          "to": "and-5"
+        },
+        {
+          "from": "and-5",
+          "to": "and-6"
+        },
+        {
+          "from": "and-6",
+          "to": "and-7"
+        },
+        {
+          "from": "and-7",
+          "to": "and-8"
+        },
+        {
+          "from": "and-8",
+          "to": "and-9"
+        }
+      ]
+    },
+    {
+      "id": "data-scientist-ml-engineer",
+      "role": "Data Scientist / ML Engineer",
+      "tagline": "Python, statistics, scikit-learn, model evaluation",
+      "summary": "Builds on the same Python foundation Python / Data Analyst uses, then goes further into actual model training and evaluation — the next step for a student who has already done the analyst path and wants the ML-engineering side.",
+      "forWho": "Students aiming at data scientist, ML engineer, or applied-ML roles, ideally after or alongside Python / Data Analyst.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Python & Data Foundations"
+        },
+        {
+          "id": "algorithms",
+          "label": "Algorithms"
+        },
+        {
+          "id": "ml",
+          "label": "Machine Learning"
+        },
+        {
+          "id": "shipping",
+          "label": "Shipping"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsml-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Python and NumPy/pandas",
+          "why": "Vectorised operations over DataFrames — the baseline every ML library is built on top of.",
+          "practice": {
+            "modules": [
+              "basics"
+            ],
+            "tags": [
+              "programming basics"
+            ],
+            "count": 8
+          },
+          "reading": [
+            {
+              "label": "NumPy: the absolute basics",
+              "url": "https://numpy.org/doc/stable/user/absolute_beginners.html"
+            }
+          ],
+          "subtopics": [
+            "DataFrames",
+            "Vectorisation",
+            "Filtering",
+            "GroupBy"
+          ]
+        },
+        {
+          "id": "dsml-2",
+          "type": "topic",
+          "group": "algorithms",
+          "title": "Arrays, strings and hashing",
+          "why": "The same interview filter every role faces, in Python this time.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings",
+              "hashing"
+            ],
+            "tags": [
+              "arrays",
+              "strings",
+              "hashing"
+            ],
+            "count": 14
+          },
+          "subtopics": [
+            "List Operations",
+            "Dictionary Grouping",
+            "Set Operations",
+            "Counting Patterns"
+          ]
+        },
+        {
+          "id": "dsml-3",
+          "type": "topic",
+          "group": "algorithms",
+          "title": "Sorting, searching and recursion",
+          "why": "Top-N and ranking questions are common in both the DSA round and the actual job.",
+          "practice": {
+            "modules": [
+              "searching",
+              "sorting",
+              "dynamic programming"
+            ],
+            "tags": [
+              "binary search",
+              "sorting",
+              "dynamic programming"
+            ],
+            "count": 6
+          },
+          "subtopics": [
+            "Sorting Keys",
+            "Binary Search",
+            "Recursive Functions",
+            "Memoization"
+          ]
+        },
+        {
+          "id": "dsml-4",
+          "type": "topic",
+          "group": "ml",
+          "title": "Statistics for ML",
+          "why": "Bias-variance, distributions, and what a p-value does and does not say — the theory every model-evaluation question assumes.",
+          "mcq": [
+            "aptitude"
+          ],
+          "reading": [
+            {
+              "label": "StatQuest: Statistics fundamentals",
+              "url": "https://www.youtube.com/@statquest"
+            }
+          ],
+          "subtopics": [
+            "Bias-Variance",
+            "Distributions",
+            "Hypothesis Testing",
+            "Confidence Intervals"
+          ]
+        },
+        {
+          "id": "dsml-5",
+          "type": "topic",
+          "group": "ml",
+          "title": "scikit-learn and model training",
+          "why": "Fit, predict, score — the three calls almost every classical ML workflow comes down to.",
+          "reading": [
+            {
+              "label": "scikit-learn: Getting Started",
+              "url": "https://scikit-learn.org/stable/getting_started.html"
+            }
+          ],
+          "subtopics": [
+            "Train/Test Split",
+            "Fit & Predict",
+            "Cross-Validation",
+            "Hyperparameters"
+          ]
+        },
+        {
+          "id": "dsml-6",
+          "type": "topic",
+          "group": "ml",
+          "title": "Model evaluation",
+          "why": "Accuracy lies on imbalanced data. Precision, recall and the confusion matrix are what interviewers actually probe.",
+          "reading": [
+            {
+              "label": "scikit-learn: Model evaluation",
+              "url": "https://scikit-learn.org/stable/modules/model_evaluation.html"
+            }
+          ],
+          "subtopics": [
+            "Confusion Matrix",
+            "Precision/Recall",
+            "ROC-AUC",
+            "Overfitting"
+          ]
+        },
+        {
+          "id": "dsml-7",
+          "type": "topic",
+          "group": "ml",
+          "title": "Neural network basics",
+          "why": "Not expected to train one from scratch at interview level, but expected to explain what a layer and a gradient actually do.",
+          "reading": [
+            {
+              "label": "3Blue1Brown: Neural networks",
+              "url": "https://www.3blue1brown.com/topics/neural-networks"
+            }
+          ],
+          "subtopics": [
+            "Layers",
+            "Backpropagation",
+            "Activation Functions",
+            "Gradient Descent"
+          ]
+        },
+        {
+          "id": "dsml-8",
+          "type": "checkpoint",
+          "group": "shipping",
+          "title": "One end-to-end project, then defend it",
+          "why": "A clean notebook with a real dataset, a trained model, and an honestly-reported accuracy is worth more than five tutorial copies.",
+          "reading": [
+            {
+              "label": "Kaggle: Datasets",
+              "url": "https://www.kaggle.com/datasets"
+            }
+          ],
+          "subtopics": [
+            "Data Cleaning",
+            "Model Training",
+            "Evaluation Write-up",
+            "Reproducibility"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "dsml-1",
+          "to": "dsml-2"
+        },
+        {
+          "from": "dsml-2",
+          "to": "dsml-3"
+        },
+        {
+          "from": "dsml-3",
+          "to": "dsml-4"
+        },
+        {
+          "from": "dsml-4",
+          "to": "dsml-5"
+        },
+        {
+          "from": "dsml-5",
+          "to": "dsml-6"
+        },
+        {
+          "from": "dsml-6",
+          "to": "dsml-7"
+        },
+        {
+          "from": "dsml-7",
+          "to": "dsml-8"
+        }
+      ]
+    },
+    {
+      "id": "devops-engineer",
+      "role": "DevOps Engineer",
+      "tagline": "Linux, Docker, CI/CD, cloud basics — reading-heavy",
+      "summary": "None of this is code-judged here, so the whole path is reading and checkpoints rather than tracked practice. The value is a clear order to learn it in, not a progress bar.",
+      "forWho": "Students targeting DevOps, SRE or platform-engineering roles. Fully reading-heavy: no tracked nodes on this platform today.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Linux & Scripting"
+        },
+        {
+          "id": "containers",
+          "label": "Containers & Orchestration"
+        },
+        {
+          "id": "cicd",
+          "label": "CI/CD & Cloud"
+        },
+        {
+          "id": "shipping",
+          "label": "Shipping"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dvo-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Linux fundamentals",
+          "why": "Every production server a DevOps engineer touches is Linux. The shell is not optional background knowledge here.",
+          "reading": [
+            {
+              "label": "Linux Journey",
+              "url": "https://linuxjourney.com/"
+            }
+          ],
+          "subtopics": [
+            "File System",
+            "Permissions",
+            "Process Management",
+            "Package Managers"
+          ]
+        },
+        {
+          "id": "dvo-2",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Shell scripting",
+          "why": "Automating a repeated task is the job description in one sentence.",
+          "reading": [
+            {
+              "label": "Bash scripting tutorial",
+              "url": "https://ryanstutorials.net/bash-scripting-tutorial/"
+            }
+          ],
+          "subtopics": [
+            "Bash Basics",
+            "Variables & Loops",
+            "Cron Jobs",
+            "Error Handling"
+          ]
+        },
+        {
+          "id": "dvo-3",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Networking basics",
+          "why": "DNS, load balancers, and what actually happens between a request and a response — debugging without this is guessing.",
+          "reading": [
+            {
+              "label": "MDN: How the Web works",
+              "url": "https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Web_standards/How_the_web_works"
+            }
+          ],
+          "subtopics": [
+            "DNS",
+            "Load Balancing",
+            "HTTP/HTTPS",
+            "Firewalls"
+          ]
+        },
+        {
+          "id": "dvo-4",
+          "type": "topic",
+          "group": "containers",
+          "title": "Docker",
+          "why": "\"Works on my machine\" stops being an excuse once the image is the unit of deployment.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "Docker: Get Started",
+              "url": "https://docs.docker.com/get-started/"
+            }
+          ],
+          "subtopics": [
+            "Images",
+            "Containers",
+            "Dockerfile",
+            "Volumes"
+          ]
+        },
+        {
+          "id": "dvo-5",
+          "type": "topic",
+          "group": "containers",
+          "title": "Kubernetes basics",
+          "why": "Not expected to run a cluster solo on day one, but expected to know what a pod, a deployment and a service actually are.",
+          "reading": [
+            {
+              "label": "Kubernetes: Basics tutorial",
+              "url": "https://kubernetes.io/docs/tutorials/kubernetes-basics/"
+            }
+          ],
+          "subtopics": [
+            "Pods",
+            "Deployments",
+            "Services",
+            "ConfigMaps"
+          ]
+        },
+        {
+          "id": "dvo-6",
+          "type": "topic",
+          "group": "cicd",
+          "title": "CI/CD pipelines",
+          "why": "A pipeline that runs tests and deploys on merge is what separates a hobby project from a production workflow.",
+          "reading": [
+            {
+              "label": "GitHub Actions: Quickstart",
+              "url": "https://docs.github.com/en/actions/quickstart"
+            }
+          ],
+          "subtopics": [
+            "Pipeline Stages",
+            "GitHub Actions",
+            "Build Artifacts",
+            "Rollbacks"
+          ]
+        },
+        {
+          "id": "dvo-7",
+          "type": "topic",
+          "group": "cicd",
+          "title": "Infrastructure as Code",
+          "why": "Clicking buttons in a cloud console does not scale or survive an audit. Terraform does both.",
+          "reading": [
+            {
+              "label": "Terraform: Get Started",
+              "url": "https://developer.hashicorp.com/terraform/tutorials"
+            }
+          ],
+          "subtopics": [
+            "Terraform Basics",
+            "State Files",
+            "Modules",
+            "Plan/Apply"
+          ]
+        },
+        {
+          "id": "dvo-8",
+          "type": "topic",
+          "group": "cicd",
+          "title": "Cloud fundamentals (AWS)",
+          "why": "AWS is the most commonly asked-about cloud in Indian hiring. EC2, S3 and IAM cover most interview questions.",
+          "reading": [
+            {
+              "label": "AWS: Cloud Practitioner Essentials",
+              "url": "https://aws.amazon.com/training/digital/aws-cloud-practitioner-essentials/"
+            }
+          ],
+          "subtopics": [
+            "EC2",
+            "S3",
+            "IAM",
+            "VPC Basics"
+          ]
+        },
+        {
+          "id": "dvo-9",
+          "type": "topic",
+          "group": "cicd",
+          "title": "Monitoring and logging",
+          "why": "If nobody is paged before the customer notices, the monitoring does not count.",
+          "reading": [
+            {
+              "label": "Prometheus: Overview",
+              "url": "https://prometheus.io/docs/introduction/overview/"
+            }
+          ],
+          "subtopics": [
+            "Metrics",
+            "Logs",
+            "Alerting",
+            "Dashboards"
+          ]
+        },
+        {
+          "id": "dvo-10",
+          "type": "checkpoint",
+          "group": "shipping",
+          "title": "Automate one real deployment, then explain it",
+          "why": "A project with a Dockerfile, a CI pipeline, and a one-command deploy beats a resume line that says \"familiar with DevOps tools.\"",
+          "subtopics": [
+            "End-to-end Pipeline",
+            "Documented Setup",
+            "Failure Recovery",
+            "README"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "dvo-1",
+          "to": "dvo-2"
+        },
+        {
+          "from": "dvo-2",
+          "to": "dvo-3"
+        },
+        {
+          "from": "dvo-3",
+          "to": "dvo-4"
+        },
+        {
+          "from": "dvo-4",
+          "to": "dvo-5"
+        },
+        {
+          "from": "dvo-5",
+          "to": "dvo-6"
+        },
+        {
+          "from": "dvo-6",
+          "to": "dvo-7"
+        },
+        {
+          "from": "dvo-7",
+          "to": "dvo-8"
+        },
+        {
+          "from": "dvo-8",
+          "to": "dvo-9"
+        },
+        {
+          "from": "dvo-9",
+          "to": "dvo-10"
+        }
+      ]
+    },
+    {
+      "id": "qa-test-automation-engineer",
+      "role": "QA / Test Automation Engineer",
+      "tagline": "Testing fundamentals, Selenium/Playwright, API testing",
+      "summary": "Scripting nodes are tracked against the same catalog every other role uses; the testing-tool nodes are reading, since there is no automated-testing judge here. A realistic path for a student who likes breaking things more than building them.",
+      "forWho": "Students targeting QA, SDET or test-automation roles.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Scripting Foundations"
+        },
+        {
+          "id": "testing",
+          "label": "Testing Fundamentals"
+        },
+        {
+          "id": "automation",
+          "label": "Automation Tooling"
+        },
+        {
+          "id": "shipping",
+          "label": "Shipping"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "qa-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Programming foundations",
+          "why": "Automation is code. Loops, functions and conditionals are not optional for this role either.",
+          "practice": {
+            "modules": [
+              "basics"
+            ],
+            "tags": [
+              "programming basics"
+            ],
+            "count": 8
+          },
+          "subtopics": [
+            "Loops",
+            "Functions",
+            "Conditionals",
+            "Variables"
+          ]
+        },
+        {
+          "id": "qa-2",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Arrays, strings and data handling",
+          "why": "Test data generation and assertion checks are array and string problems in disguise.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings"
+            ],
+            "tags": [
+              "arrays",
+              "strings"
+            ],
+            "count": 12
+          },
+          "subtopics": [
+            "Array Operations",
+            "String Assertions",
+            "Data Generation",
+            "Edge Cases"
+          ]
+        },
+        {
+          "id": "qa-3",
+          "type": "topic",
+          "group": "testing",
+          "title": "Testing fundamentals",
+          "why": "Unit, integration, and end-to-end are different questions answered by different tests — conflating them wastes effort on both sides.",
+          "reading": [
+            {
+              "label": "Martin Fowler: Test Pyramid",
+              "url": "https://martinfowler.com/bliki/TestPyramid.html"
+            }
+          ],
+          "subtopics": [
+            "Test Pyramid",
+            "Unit vs Integration vs E2E",
+            "Test Cases",
+            "Bug Reports"
+          ]
+        },
+        {
+          "id": "qa-4",
+          "type": "topic",
+          "group": "testing",
+          "title": "Manual testing and bug reporting",
+          "why": "Before automating anything, a QA engineer is judged on how clearly they can describe what went wrong and how to reproduce it.",
+          "reading": [
+            {
+              "label": "A Guide to Writing Bug Reports",
+              "url": "https://betterprogramming.pub/a-guide-to-writing-a-great-bug-report-9e65f8f4db1d"
+            }
+          ],
+          "subtopics": [
+            "Reproduction Steps",
+            "Severity Levels",
+            "Regression Testing",
+            "Exploratory Testing"
+          ]
+        },
+        {
+          "id": "qa-5",
+          "type": "topic",
+          "group": "automation",
+          "title": "Selenium / Playwright basics",
+          "why": "Browser automation is the core SDET skill — finding an element and clicking it reliably is harder than it sounds.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "Playwright: Getting Started",
+              "url": "https://playwright.dev/docs/intro"
+            }
+          ],
+          "subtopics": [
+            "Locators",
+            "Waits",
+            "Page Object Model",
+            "Assertions"
+          ]
+        },
+        {
+          "id": "qa-6",
+          "type": "topic",
+          "group": "automation",
+          "title": "API testing",
+          "why": "Faster and more stable than UI tests, and most bugs are caught here before they ever reach the browser.",
+          "reading": [
+            {
+              "label": "Postman: API testing basics",
+              "url": "https://learning.postman.com/docs/writing-scripts/test-scripts/"
+            }
+          ],
+          "subtopics": [
+            "REST API Basics",
+            "Postman/Newman",
+            "Status Code Checks",
+            "Schema Validation"
+          ]
+        },
+        {
+          "id": "qa-7",
+          "type": "topic",
+          "group": "automation",
+          "title": "CI integration for test suites",
+          "why": "A test suite nobody runs automatically on every change is a test suite that quietly goes stale.",
+          "reading": [
+            {
+              "label": "GitHub Actions: Quickstart",
+              "url": "https://docs.github.com/en/actions/quickstart"
+            }
+          ],
+          "subtopics": [
+            "CI Pipelines",
+            "Parallel Test Runs",
+            "Flaky Test Handling",
+            "Test Reports"
+          ]
+        },
+        {
+          "id": "qa-8",
+          "type": "checkpoint",
+          "group": "shipping",
+          "title": "Build one automated test suite, then defend it",
+          "why": "A small, real test suite against a real app — explain what it catches and what it deliberately does not.",
+          "subtopics": [
+            "Suite Coverage",
+            "CI Integration",
+            "Maintainability",
+            "README"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "qa-1",
+          "to": "qa-2"
+        },
+        {
+          "from": "qa-2",
+          "to": "qa-3"
+        },
+        {
+          "from": "qa-3",
+          "to": "qa-4"
+        },
+        {
+          "from": "qa-4",
+          "to": "qa-5"
+        },
+        {
+          "from": "qa-5",
+          "to": "qa-6"
+        },
+        {
+          "from": "qa-6",
+          "to": "qa-7"
+        },
+        {
+          "from": "qa-7",
+          "to": "qa-8"
+        }
+      ]
+    },
+    {
+      "id": "dsa-mastery",
+      "role": "DSA Mastery / Technical Interview Prep",
+      "tagline": "Pure problem-solving, any branch, any target role",
+      "summary": "Language-agnostic, role-agnostic — the \"I don't know what role yet, just make me interview-ready\" option. Every pattern that shows up across every other roadmap's DSA sections, in one deliberately ordered path, taken further than any single role-roadmap goes.",
+      "forWho": "Any student who wants deep DSA practice independent of a specific target role.",
+      "groups": [
+        {
+          "id": "basics",
+          "label": "Basics"
+        },
+        {
+          "id": "linear",
+          "label": "Linear Structures"
+        },
+        {
+          "id": "nonlinear",
+          "label": "Trees, Graphs & Hashing"
+        },
+        {
+          "id": "advanced",
+          "label": "Advanced Patterns"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "dsa-1",
+          "type": "topic",
+          "group": "basics",
+          "title": "Arrays and strings",
+          "why": "The most common question shape in any interview, in any company tier.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings"
+            ],
+            "tags": [
+              "arrays",
+              "strings"
+            ],
+            "count": 20
+          },
+          "subtopics": [
+            "Traversal",
+            "In-place Updates",
+            "Prefix Sums",
+            "Edge Cases"
+          ]
+        },
+        {
+          "id": "dsa-2",
+          "type": "topic",
+          "group": "basics",
+          "title": "Searching and sorting",
+          "why": "Binary search turns a brute-force timeout into a pass. Know which sort to reach for, and why.",
+          "practice": {
+            "modules": [
+              "searching",
+              "sorting"
+            ],
+            "tags": [
+              "binary search",
+              "sorting"
+            ],
+            "count": 6
+          },
+          "subtopics": [
+            "Binary Search",
+            "Merge Sort",
+            "Quick Sort",
+            "Search on Answer"
+          ]
+        },
+        {
+          "id": "dsa-3",
+          "type": "topic",
+          "group": "linear",
+          "title": "Two pointers and sliding window",
+          "why": "The two patterns behind most subarray and pair questions.",
+          "practice": {
+            "modules": [
+              "two pointers",
+              "sliding window"
+            ],
+            "tags": [
+              "two pointers",
+              "sliding window"
+            ],
+            "count": 6
+          },
+          "subtopics": [
+            "Fixed Window",
+            "Variable Window",
+            "Two-sum Variants",
+            "Subarray Sums"
+          ]
+        },
+        {
+          "id": "dsa-4",
+          "type": "topic",
+          "group": "linear",
+          "title": "Linked lists, stacks and queues",
+          "why": "Implement each one by hand once. After that you understand what the standard library is doing for you.",
+          "practice": {
+            "modules": [
+              "linked list",
+              "stacks",
+              "queues"
+            ],
+            "tags": [
+              "linked list",
+              "stack"
+            ],
+            "count": 5
+          },
+          "subtopics": [
+            "Singly Linked List",
+            "Stack (LIFO)",
+            "Queue (FIFO)",
+            "Deque"
+          ]
+        },
+        {
+          "id": "dsa-5",
+          "type": "topic",
+          "group": "nonlinear",
+          "title": "Hashing",
+          "why": "The single highest-leverage idea on this list: it collapses most nested-loop solutions into one pass.",
+          "practice": {
+            "modules": [
+              "hashing"
+            ],
+            "tags": [
+              "hashing"
+            ],
+            "count": 4
+          },
+          "subtopics": [
+            "HashMap",
+            "HashSet",
+            "Frequency Counting",
+            "Collision Handling"
+          ]
+        },
+        {
+          "id": "dsa-6",
+          "type": "topic",
+          "group": "nonlinear",
+          "title": "Trees",
+          "why": "Traversals and depth first — most interviews start and a large share stop here.",
+          "practice": {
+            "modules": [
+              "trees"
+            ],
+            "tags": [
+              "trees"
+            ],
+            "count": 3
+          },
+          "subtopics": [
+            "Binary Trees",
+            "BST",
+            "DFS Traversals",
+            "Tree Height"
+          ]
+        },
+        {
+          "id": "dsa-7",
+          "type": "topic",
+          "group": "nonlinear",
+          "title": "Graphs",
+          "why": "BFS, DFS, and the two searches cover most graph questions you will actually be asked.",
+          "practice": {
+            "modules": [
+              "graphs"
+            ],
+            "tags": [
+              "graphs"
+            ],
+            "count": 2
+          },
+          "subtopics": [
+            "BFS",
+            "DFS",
+            "Shortest Path",
+            "Topological Sort"
+          ]
+        },
+        {
+          "id": "dsa-8",
+          "type": "topic",
+          "group": "advanced",
+          "title": "Recursion and backtracking",
+          "why": "Breaking a problem into a smaller version of itself — the habit behind most \"hard\" questions once you see it.",
+          "practice": {
+            "modules": [
+              "dynamic programming"
+            ],
+            "tags": [
+              "backtracking"
+            ],
+            "count": 1
+          },
+          "subtopics": [
+            "Base Cases",
+            "Backtracking Template",
+            "Subsets/Permutations",
+            "Pruning"
+          ]
+        },
+        {
+          "id": "dsa-9",
+          "type": "topic",
+          "group": "advanced",
+          "title": "Dynamic programming",
+          "why": "Recognising overlapping subproblems — aim for a correct memo table before you chase elegance.",
+          "practice": {
+            "modules": [
+              "dynamic programming"
+            ],
+            "tags": [
+              "dynamic programming"
+            ],
+            "count": 3
+          },
+          "subtopics": [
+            "Memoization",
+            "Tabulation",
+            "Knapsack Pattern",
+            "DP on Strings"
+          ]
+        },
+        {
+          "id": "dsa-10",
+          "type": "checkpoint",
+          "group": "advanced",
+          "title": "Timed mock rounds",
+          "why": "Solving a problem at your own pace and solving it in 25 minutes with someone watching are different skills. Practise the second one deliberately.",
+          "subtopics": [
+            "Timed Practice",
+            "Think-aloud",
+            "Peer Mocks",
+            "Weak-pattern Review"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "dsa-1",
+          "to": "dsa-2"
+        },
+        {
+          "from": "dsa-2",
+          "to": "dsa-3"
+        },
+        {
+          "from": "dsa-3",
+          "to": "dsa-4"
+        },
+        {
+          "from": "dsa-4",
+          "to": "dsa-5"
+        },
+        {
+          "from": "dsa-5",
+          "to": "dsa-6"
+        },
+        {
+          "from": "dsa-6",
+          "to": "dsa-7"
+        },
+        {
+          "from": "dsa-7",
+          "to": "dsa-8"
+        },
+        {
+          "from": "dsa-8",
+          "to": "dsa-9"
+        },
+        {
+          "from": "dsa-9",
+          "to": "dsa-10"
+        }
+      ]
+    },
+    {
+      "id": "cpp-competitive-programming",
+      "role": "C++ & Competitive Programming",
+      "tagline": "STL, time complexity, contest-style problem solving",
+      "summary": "A distinct culture from mass-recruiter placement prep: contest ratings, the STL, and a faster, more ruthless kind of problem-solving. For the students already active on Codeforces or CodeChef, or who want to be.",
+      "forWho": "Students interested in competitive programming specifically, usually alongside — not instead of — a placement-focused roadmap.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "C++ Foundations"
+        },
+        {
+          "id": "stl",
+          "label": "STL & Complexity"
+        },
+        {
+          "id": "patterns",
+          "label": "Contest Patterns"
+        },
+        {
+          "id": "practice",
+          "label": "Contest Practice"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "cpp-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "C++ syntax and fast I/O",
+          "why": "`cin`/`cout` without sync is slow enough to time out a contest solution that is otherwise correct — the first lesson every competitive programmer learns the hard way.",
+          "practice": {
+            "modules": [
+              "basics"
+            ],
+            "tags": [
+              "programming basics"
+            ],
+            "count": 8
+          },
+          "reading": [
+            {
+              "label": "cppreference: Input/output",
+              "url": "https://en.cppreference.com/w/cpp/io"
+            }
+          ],
+          "subtopics": [
+            "Fast I/O",
+            "Data Types",
+            "Pointers",
+            "References"
+          ]
+        },
+        {
+          "id": "cpp-2",
+          "type": "topic",
+          "group": "stl",
+          "title": "Arrays, vectors and strings",
+          "why": "`std::vector` and `std::string` are what you actually write in a contest, not raw arrays.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings"
+            ],
+            "tags": [
+              "arrays",
+              "strings"
+            ],
+            "count": 16
+          },
+          "subtopics": [
+            "vector",
+            "string",
+            "Two-pointer Scans",
+            "Prefix Sums"
+          ]
+        },
+        {
+          "id": "cpp-3",
+          "type": "topic",
+          "group": "stl",
+          "title": "STL containers",
+          "why": "`map`, `set`, `priority_queue` — knowing which container fits a problem shape is half the battle in a timed contest.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "cppreference: Containers",
+              "url": "https://en.cppreference.com/w/cpp/container"
+            }
+          ],
+          "subtopics": [
+            "map/unordered_map",
+            "set/unordered_set",
+            "priority_queue",
+            "pair/tuple"
+          ]
+        },
+        {
+          "id": "cpp-4",
+          "type": "topic",
+          "group": "stl",
+          "title": "Time and space complexity under a strict limit",
+          "why": "A 2-second time limit means roughly 10^8 operations — estimating this before you code saves a wasted submission.",
+          "reading": [
+            {
+              "label": "Competitive Programmer's Handbook: Time complexity",
+              "url": "https://cses.fi/book/book.pdf"
+            }
+          ],
+          "subtopics": [
+            "Big-O Estimation",
+            "TLE Debugging",
+            "Space Trade-offs",
+            "Constant Factor"
+          ]
+        },
+        {
+          "id": "cpp-5",
+          "type": "topic",
+          "group": "patterns",
+          "title": "Two pointers, sliding window and binary search",
+          "why": "The three patterns that solve the majority of Div 2 A-C problems once recognised.",
+          "practice": {
+            "modules": [
+              "two pointers",
+              "sliding window",
+              "searching"
+            ],
+            "tags": [
+              "two pointers",
+              "sliding window",
+              "binary search"
+            ],
+            "count": 6
+          },
+          "subtopics": [
+            "Two Pointers",
+            "Sliding Window",
+            "Binary Search on Answer",
+            "Monotonic Stack"
+          ]
+        },
+        {
+          "id": "cpp-6",
+          "type": "topic",
+          "group": "patterns",
+          "title": "Graphs and trees",
+          "why": "BFS, DFS, and basic shortest-path algorithms — the standard Div 2 D/E territory.",
+          "practice": {
+            "modules": [
+              "trees",
+              "graphs"
+            ],
+            "tags": [
+              "trees",
+              "graphs"
+            ],
+            "count": 5
+          },
+          "subtopics": [
+            "BFS / DFS",
+            "Dijkstra",
+            "Union-Find",
+            "Tree DP"
+          ]
+        },
+        {
+          "id": "cpp-7",
+          "type": "topic",
+          "group": "patterns",
+          "title": "Dynamic programming",
+          "why": "Where most contestants plateau — recognising the state and transition is a trained skill, not a flash of insight.",
+          "practice": {
+            "modules": [
+              "dynamic programming"
+            ],
+            "tags": [
+              "dynamic programming"
+            ],
+            "count": 4
+          },
+          "subtopics": [
+            "1D/2D DP",
+            "Bitmask DP",
+            "Digit DP",
+            "DP Optimisation"
+          ]
+        },
+        {
+          "id": "cpp-8",
+          "type": "checkpoint",
+          "group": "practice",
+          "title": "Rate yourself on Codeforces or CodeChef",
+          "why": "A contest rating is an honest, external benchmark — virtual-participate in old contests to build the habit before rating is on the line.",
+          "reading": [
+            {
+              "label": "Codeforces",
+              "url": "https://codeforces.com/"
+            },
+            {
+              "label": "CodeChef",
+              "url": "https://www.codechef.com/"
+            }
+          ],
+          "subtopics": [
+            "Virtual Contests",
+            "Upsolving",
+            "Rating Tracking",
+            "Editorial Reading"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "cpp-1",
+          "to": "cpp-2"
+        },
+        {
+          "from": "cpp-2",
+          "to": "cpp-3"
+        },
+        {
+          "from": "cpp-3",
+          "to": "cpp-4"
+        },
+        {
+          "from": "cpp-4",
+          "to": "cpp-5"
+        },
+        {
+          "from": "cpp-5",
+          "to": "cpp-6"
+        },
+        {
+          "from": "cpp-6",
+          "to": "cpp-7"
+        },
+        {
+          "from": "cpp-7",
+          "to": "cpp-8"
+        }
+      ]
+    },
+    {
+      "id": "sql-database-engineer",
+      "role": "SQL & Database Engineer",
+      "tagline": "SQL, schema design, indexing, transactions — reading-heavy",
+      "summary": "No SQL judge on this platform yet, so every node here is reading and self-practice rather than tracked. Still the single most reliably-asked non-language-specific skill across every other technical interview.",
+      "forWho": "Students who want to go deep on databases specifically, or need it as a weak area across other roadmaps. Fully reading-heavy: no tracked nodes on this platform today.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "SQL Foundations"
+        },
+        {
+          "id": "design",
+          "label": "Schema Design"
+        },
+        {
+          "id": "performance",
+          "label": "Performance"
+        },
+        {
+          "id": "practice",
+          "label": "Practice"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "sql-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "SELECT, WHERE and filtering",
+          "why": "The query you write most often, and the one that is graded most strictly for correctness on edge cases.",
+          "reading": [
+            {
+              "label": "PostgreSQL: SQL Tutorial",
+              "url": "https://www.postgresql.org/docs/current/tutorial-sql.html"
+            }
+          ],
+          "subtopics": [
+            "SELECT",
+            "WHERE",
+            "ORDER BY",
+            "LIMIT"
+          ]
+        },
+        {
+          "id": "sql-2",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Joins",
+          "why": "The question asked in almost every analyst and backend interview — INNER vs LEFT is not a minor detail.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "PostgreSQL: Joins",
+              "url": "https://www.postgresql.org/docs/current/queries-table-expressions.html#QUERIES-JOIN"
+            }
+          ],
+          "subtopics": [
+            "INNER JOIN",
+            "LEFT JOIN",
+            "Self Join",
+            "Multiple Joins"
+          ]
+        },
+        {
+          "id": "sql-3",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Aggregation and GROUP BY",
+          "why": "COUNT, SUM, AVG with GROUP BY and HAVING — where most SQL interview questions actually live.",
+          "reading": [
+            {
+              "label": "PostgreSQL: Aggregate functions",
+              "url": "https://www.postgresql.org/docs/current/functions-aggregate.html"
+            }
+          ],
+          "subtopics": [
+            "GROUP BY",
+            "HAVING",
+            "Aggregate Functions",
+            "Nested Aggregation"
+          ]
+        },
+        {
+          "id": "sql-4",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Subqueries and window functions",
+          "why": "The question that separates \"knows basic SQL\" from \"can actually write analytical queries.\"",
+          "reading": [
+            {
+              "label": "PostgreSQL: Window functions",
+              "url": "https://www.postgresql.org/docs/current/tutorial-window.html"
+            }
+          ],
+          "subtopics": [
+            "Subqueries",
+            "ROW_NUMBER",
+            "RANK",
+            "Partition By"
+          ]
+        },
+        {
+          "id": "sql-5",
+          "type": "topic",
+          "group": "design",
+          "title": "Schema design and normalization",
+          "why": "A well-normalized schema prevents entire categories of bugs before a line of application code is written.",
+          "reading": [
+            {
+              "label": "Database normalization explained",
+              "url": "https://www.guru99.com/database-normalization.html"
+            }
+          ],
+          "subtopics": [
+            "1NF/2NF/3NF",
+            "Primary/Foreign Keys",
+            "Relationships",
+            "Denormalization Trade-offs"
+          ]
+        },
+        {
+          "id": "sql-6",
+          "type": "topic",
+          "group": "design",
+          "title": "Transactions and ACID",
+          "why": "What actually happens if the power cuts mid-write — and why a banking app cannot afford to guess.",
+          "reading": [
+            {
+              "label": "PostgreSQL: Transactions",
+              "url": "https://www.postgresql.org/docs/current/tutorial-transactions.html"
+            }
+          ],
+          "subtopics": [
+            "ACID",
+            "Isolation Levels",
+            "Deadlocks",
+            "Rollback"
+          ]
+        },
+        {
+          "id": "sql-7",
+          "type": "topic",
+          "group": "performance",
+          "title": "Indexing and query performance",
+          "why": "An unindexed query that works fine on 100 rows can take down production at 10 million.",
+          "reading": [
+            {
+              "label": "Use the Index, Luke",
+              "url": "https://use-the-index-luke.com/"
+            }
+          ],
+          "subtopics": [
+            "B-Tree Index",
+            "EXPLAIN",
+            "N+1 Problem",
+            "Composite Indexes"
+          ]
+        },
+        {
+          "id": "sql-8",
+          "type": "checkpoint",
+          "group": "practice",
+          "title": "Write and explain 20 real queries",
+          "why": "Pick a public dataset, write the queries a real analyst would be asked for, and be ready to explain why each one is correct and efficient.",
+          "reading": [
+            {
+              "label": "data.gov.in open datasets",
+              "url": "https://data.gov.in/"
+            }
+          ],
+          "subtopics": [
+            "Real Dataset",
+            "Query Variety",
+            "EXPLAIN Walkthrough",
+            "Written Notes"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "sql-1",
+          "to": "sql-2"
+        },
+        {
+          "from": "sql-2",
+          "to": "sql-3"
+        },
+        {
+          "from": "sql-3",
+          "to": "sql-4"
+        },
+        {
+          "from": "sql-4",
+          "to": "sql-5"
+        },
+        {
+          "from": "sql-5",
+          "to": "sql-6"
+        },
+        {
+          "from": "sql-6",
+          "to": "sql-7"
+        },
+        {
+          "from": "sql-7",
+          "to": "sql-8"
+        }
+      ]
+    },
+    {
+      "id": "cloud-engineer-aws",
+      "role": "Cloud Engineer (AWS)",
+      "tagline": "AWS core services, IAM, networking — reading-heavy",
+      "summary": "No cloud-console judge here, so this path is reading and the free-tier console itself, not tracked practice. Scoped to what actually gets asked in entry-level cloud interviews in India, not AWS's full certification syllabus.",
+      "forWho": "Students targeting cloud/infrastructure roles, or preparing for AWS Cloud Practitioner / Solutions Architect Associate. Fully reading-heavy: no tracked nodes on this platform today.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Cloud Foundations"
+        },
+        {
+          "id": "core",
+          "label": "Core Services"
+        },
+        {
+          "id": "networking",
+          "label": "Networking & Security"
+        },
+        {
+          "id": "practice",
+          "label": "Hands-on Practice"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "cld-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "What is cloud computing",
+          "why": "IaaS vs PaaS vs SaaS, and why \"the cloud\" is just someone else's data center with an API — the mental model every other node builds on.",
+          "reading": [
+            {
+              "label": "AWS: What is Cloud Computing",
+              "url": "https://aws.amazon.com/what-is-cloud-computing/"
+            }
+          ],
+          "subtopics": [
+            "IaaS/PaaS/SaaS",
+            "Regions & AZs",
+            "Shared Responsibility",
+            "Pay-as-you-go"
+          ]
+        },
+        {
+          "id": "cld-2",
+          "type": "topic",
+          "group": "core",
+          "title": "EC2 and compute",
+          "why": "Launching and sizing a virtual machine correctly is the single most common first task in a cloud role.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "AWS: EC2 User Guide",
+              "url": "https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/concepts.html"
+            }
+          ],
+          "subtopics": [
+            "Instance Types",
+            "AMIs",
+            "Auto Scaling",
+            "Elastic IP"
+          ]
+        },
+        {
+          "id": "cld-3",
+          "type": "topic",
+          "group": "core",
+          "title": "S3 and storage",
+          "why": "Object storage, not a file system — the distinction trips up almost everyone the first time.",
+          "reading": [
+            {
+              "label": "AWS: S3 User Guide",
+              "url": "https://docs.aws.amazon.com/AmazonS3/latest/userguide/Welcome.html"
+            }
+          ],
+          "subtopics": [
+            "Buckets & Objects",
+            "Storage Classes",
+            "Versioning",
+            "Lifecycle Policies"
+          ]
+        },
+        {
+          "id": "cld-4",
+          "type": "topic",
+          "group": "core",
+          "title": "RDS and managed databases",
+          "why": "Running your own database server on a VM is almost never the right default once a managed option exists.",
+          "reading": [
+            {
+              "label": "AWS: RDS User Guide",
+              "url": "https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html"
+            }
+          ],
+          "subtopics": [
+            "Managed vs Self-hosted",
+            "Multi-AZ",
+            "Read Replicas",
+            "Backups"
+          ]
+        },
+        {
+          "id": "cld-5",
+          "type": "topic",
+          "group": "networking",
+          "title": "VPC and networking",
+          "why": "Subnets, route tables and security groups — the layer every other AWS service sits inside.",
+          "reading": [
+            {
+              "label": "AWS: VPC User Guide",
+              "url": "https://docs.aws.amazon.com/vpc/latest/userguide/what-is-amazon-vpc.html"
+            }
+          ],
+          "subtopics": [
+            "Subnets",
+            "Route Tables",
+            "Security Groups",
+            "NAT Gateway"
+          ]
+        },
+        {
+          "id": "cld-6",
+          "type": "topic",
+          "group": "networking",
+          "title": "IAM and security",
+          "why": "The least-privilege principle, and the single most commonly misconfigured thing in real AWS incidents.",
+          "reading": [
+            {
+              "label": "AWS: IAM User Guide",
+              "url": "https://docs.aws.amazon.com/IAM/latest/UserGuide/introduction.html"
+            }
+          ],
+          "subtopics": [
+            "Users & Roles",
+            "Policies",
+            "Least Privilege",
+            "MFA"
+          ]
+        },
+        {
+          "id": "cld-7",
+          "type": "topic",
+          "group": "practice",
+          "title": "Serverless basics (Lambda)",
+          "why": "Pay-per-execution, no server to patch — increasingly the first thing a small team reaches for.",
+          "reading": [
+            {
+              "label": "AWS: Lambda Developer Guide",
+              "url": "https://docs.aws.amazon.com/lambda/latest/dg/welcome.html"
+            }
+          ],
+          "subtopics": [
+            "Functions",
+            "Triggers",
+            "Cold Starts",
+            "API Gateway"
+          ]
+        },
+        {
+          "id": "cld-8",
+          "type": "checkpoint",
+          "group": "practice",
+          "title": "Build one project on the AWS free tier",
+          "why": "A static site on S3, an API on Lambda, or a VM running something real — the free tier is generous enough to actually build with, not just read about.",
+          "reading": [
+            {
+              "label": "AWS Free Tier",
+              "url": "https://aws.amazon.com/free/"
+            }
+          ],
+          "subtopics": [
+            "Free Tier Limits",
+            "Cost Monitoring",
+            "Teardown Discipline",
+            "Architecture Diagram"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "cld-1",
+          "to": "cld-2"
+        },
+        {
+          "from": "cld-2",
+          "to": "cld-3"
+        },
+        {
+          "from": "cld-3",
+          "to": "cld-4"
+        },
+        {
+          "from": "cld-4",
+          "to": "cld-5"
+        },
+        {
+          "from": "cld-5",
+          "to": "cld-6"
+        },
+        {
+          "from": "cld-6",
+          "to": "cld-7"
+        },
+        {
+          "from": "cld-7",
+          "to": "cld-8"
+        }
+      ]
+    },
+    {
+      "id": "cybersecurity-fundamentals",
+      "role": "Cybersecurity Fundamentals",
+      "tagline": "Networking, OWASP Top 10, basic pentesting — reading-heavy",
+      "summary": "No exploit-grading judge here, so this is reading, labs on the student's own machine, and checkpoints rather than tracked practice. Scoped to the fundamentals that show up in both interviews and real incident reports, not a full red-team curriculum.",
+      "forWho": "Students targeting security roles, or wanting security literacy alongside a development path. Fully reading-heavy: no tracked nodes on this platform today.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Networking & Linux"
+        },
+        {
+          "id": "websec",
+          "label": "Web Security"
+        },
+        {
+          "id": "offensive",
+          "label": "Offensive Basics"
+        },
+        {
+          "id": "practice",
+          "label": "Practice"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "sec-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Networking fundamentals",
+          "why": "You cannot secure, or attack, what you don't understand at the packet level.",
+          "reading": [
+            {
+              "label": "Professor Messer: Networking Basics",
+              "url": "https://www.professormesser.com/"
+            }
+          ],
+          "subtopics": [
+            "TCP/IP",
+            "DNS",
+            "Ports & Protocols",
+            "Packet Capture"
+          ]
+        },
+        {
+          "id": "sec-2",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Linux for security work",
+          "why": "Nearly every security tool assumes a Linux shell, usually Kali or Parrot OS.",
+          "reading": [
+            {
+              "label": "Linux Journey",
+              "url": "https://linuxjourney.com/"
+            }
+          ],
+          "subtopics": [
+            "Shell Basics",
+            "File Permissions",
+            "Kali Linux",
+            "Log Files"
+          ]
+        },
+        {
+          "id": "sec-3",
+          "type": "topic",
+          "group": "websec",
+          "title": "OWASP Top 10",
+          "why": "The single most commonly referenced list in both web security interviews and real incident write-ups.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "OWASP Top Ten",
+              "url": "https://owasp.org/www-project-top-ten/"
+            }
+          ],
+          "subtopics": [
+            "SQL Injection",
+            "XSS",
+            "Broken Auth",
+            "Security Misconfiguration"
+          ]
+        },
+        {
+          "id": "sec-4",
+          "type": "topic",
+          "group": "websec",
+          "title": "Authentication and session security",
+          "why": "Most real breaches are a credential or session problem, not a zero-day exploit.",
+          "reading": [
+            {
+              "label": "OWASP: Authentication Cheat Sheet",
+              "url": "https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html"
+            }
+          ],
+          "subtopics": [
+            "Password Hashing",
+            "Session Tokens",
+            "MFA",
+            "OAuth Basics"
+          ]
+        },
+        {
+          "id": "sec-5",
+          "type": "topic",
+          "group": "websec",
+          "title": "Cryptography basics",
+          "why": "Not expected to implement a cipher — expected to know why a known-broken one is still shipped in old code.",
+          "reading": [
+            {
+              "label": "Crypto 101 (free book)",
+              "url": "https://www.crypto101.io/"
+            }
+          ],
+          "subtopics": [
+            "Symmetric vs Asymmetric",
+            "Hashing vs Encryption",
+            "TLS/HTTPS",
+            "Common Weaknesses"
+          ]
+        },
+        {
+          "id": "sec-6",
+          "type": "topic",
+          "group": "offensive",
+          "title": "Reconnaissance and scanning",
+          "why": "The first phase of any real penetration test, and the one most CTF challenges also start with.",
+          "reading": [
+            {
+              "label": "Nmap: Reference Guide",
+              "url": "https://nmap.org/book/man.html"
+            }
+          ],
+          "subtopics": [
+            "Nmap",
+            "Service Enumeration",
+            "OSINT",
+            "Footprinting"
+          ]
+        },
+        {
+          "id": "sec-7",
+          "type": "topic",
+          "group": "offensive",
+          "title": "Common vulnerabilities, hands-on",
+          "why": "Reading about SQL injection and actually triggering one in a legal lab are different levels of understanding.",
+          "reading": [
+            {
+              "label": "OWASP Juice Shop (practice lab)",
+              "url": "https://owasp.org/www-project-juice-shop/"
+            },
+            {
+              "label": "TryHackMe",
+              "url": "https://tryhackme.com/"
+            }
+          ],
+          "subtopics": [
+            "Juice Shop Labs",
+            "Burp Suite Basics",
+            "Manual Testing",
+            "Reporting Findings"
+          ]
+        },
+        {
+          "id": "sec-8",
+          "type": "checkpoint",
+          "group": "practice",
+          "title": "Complete a beginner CTF track, then write it up",
+          "why": "TryHackMe or picoCTF's beginner paths, solved and documented — a concrete, verifiable claim beats \"interested in security\" on a resume.",
+          "reading": [
+            {
+              "label": "picoCTF",
+              "url": "https://picoctf.org/"
+            }
+          ],
+          "subtopics": [
+            "CTF Track Completion",
+            "Writeups",
+            "Tools Used",
+            "Lessons Learned"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "sec-1",
+          "to": "sec-2"
+        },
+        {
+          "from": "sec-2",
+          "to": "sec-3"
+        },
+        {
+          "from": "sec-3",
+          "to": "sec-4"
+        },
+        {
+          "from": "sec-4",
+          "to": "sec-5"
+        },
+        {
+          "from": "sec-5",
+          "to": "sec-6"
+        },
+        {
+          "from": "sec-6",
+          "to": "sec-7"
+        },
+        {
+          "from": "sec-7",
+          "to": "sec-8"
+        }
+      ]
+    },
+    {
+      "id": "flutter-cross-platform-mobile",
+      "role": "Flutter / Cross-Platform Mobile",
+      "tagline": "Dart, Flutter widgets, one codebase for iOS and Android — reading-heavy",
+      "summary": "No Flutter judge here, so this path is reading and the student's own emulator, not tracked practice. For a student who wants one app shipping to both app stores rather than choosing Android or iOS specifically.",
+      "forWho": "Students targeting cross-platform mobile roles, or wanting one app on both stores without learning Kotlin and Swift separately. Fully reading-heavy: no tracked nodes on this platform today.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Dart Foundations"
+        },
+        {
+          "id": "widgets",
+          "label": "Flutter Widgets"
+        },
+        {
+          "id": "state",
+          "label": "State & Data"
+        },
+        {
+          "id": "shipping",
+          "label": "Shipping"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "flt-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Dart fundamentals",
+          "why": "Flutter is written in Dart — null safety and async/await look familiar from other languages, but Dart has its own rules worth learning properly first.",
+          "reading": [
+            {
+              "label": "Dart: Language tour",
+              "url": "https://dart.dev/language"
+            }
+          ],
+          "subtopics": [
+            "Null Safety",
+            "async/await",
+            "Classes & Mixins",
+            "Collections"
+          ]
+        },
+        {
+          "id": "flt-2",
+          "type": "topic",
+          "group": "widgets",
+          "title": "Widgets and layout",
+          "why": "Everything in Flutter is a widget — understanding the tree is understanding the framework.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "Flutter: Introduction to widgets",
+              "url": "https://docs.flutter.dev/ui/widgets-intro"
+            }
+          ],
+          "subtopics": [
+            "Widget Tree",
+            "Stateless vs Stateful",
+            "Layout Widgets",
+            "Styling"
+          ]
+        },
+        {
+          "id": "flt-3",
+          "type": "topic",
+          "group": "widgets",
+          "title": "Navigation and routing",
+          "why": "A real app has more than one screen — Navigator 2.0 is where most beginners first get stuck.",
+          "reading": [
+            {
+              "label": "Flutter: Navigation basics",
+              "url": "https://docs.flutter.dev/ui/navigation"
+            }
+          ],
+          "subtopics": [
+            "Navigator",
+            "Named Routes",
+            "Passing Data",
+            "Deep Links"
+          ]
+        },
+        {
+          "id": "flt-4",
+          "type": "topic",
+          "group": "state",
+          "title": "State management",
+          "why": "setState works for a toy app and falls apart at real scale — knowing when to reach for Provider or Riverpod matters.",
+          "reading": [
+            {
+              "label": "Flutter: State management options",
+              "url": "https://docs.flutter.dev/data-and-backend/state-mgmt/options"
+            }
+          ],
+          "subtopics": [
+            "setState",
+            "Provider",
+            "Riverpod",
+            "When to Reach for Each"
+          ]
+        },
+        {
+          "id": "flt-5",
+          "type": "topic",
+          "group": "state",
+          "title": "Networking and local storage",
+          "why": "An API call and something that survives an app restart — most real apps need both from day one.",
+          "reading": [
+            {
+              "label": "Flutter: Networking",
+              "url": "https://docs.flutter.dev/data-and-backend/networking"
+            }
+          ],
+          "subtopics": [
+            "http/dio Package",
+            "JSON Parsing",
+            "SharedPreferences",
+            "SQLite (sqflite)"
+          ]
+        },
+        {
+          "id": "flt-6",
+          "type": "topic",
+          "group": "state",
+          "title": "Platform-specific code",
+          "why": "\"Write once\" is mostly true — knowing the handful of cases where it is not saves a debugging afternoon.",
+          "reading": [
+            {
+              "label": "Flutter: Platform channels",
+              "url": "https://docs.flutter.dev/platform-integration/platform-channels"
+            }
+          ],
+          "subtopics": [
+            "Platform Channels",
+            "iOS vs Android Quirks",
+            "Permissions",
+            "Native Plugins"
+          ]
+        },
+        {
+          "id": "flt-7",
+          "type": "topic",
+          "group": "shipping",
+          "title": "Testing in Flutter",
+          "why": "Widget tests catch a broken layout before a user does, far cheaper than a one-star review.",
+          "reading": [
+            {
+              "label": "Flutter: Testing",
+              "url": "https://docs.flutter.dev/testing/overview"
+            }
+          ],
+          "subtopics": [
+            "Widget Tests",
+            "Unit Tests",
+            "Integration Tests",
+            "Golden Tests"
+          ]
+        },
+        {
+          "id": "flt-8",
+          "type": "checkpoint",
+          "group": "shipping",
+          "title": "Ship one app to both stores (or prepare to)",
+          "why": "A real app, built and signed for both Android and iOS even if never actually published, is the concrete proof this path asks for.",
+          "reading": [
+            {
+              "label": "Flutter: Build and release",
+              "url": "https://docs.flutter.dev/deployment/android"
+            }
+          ],
+          "subtopics": [
+            "Signed Builds",
+            "App Store Listing",
+            "Crash-free Testing",
+            "README"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "flt-1",
+          "to": "flt-2"
+        },
+        {
+          "from": "flt-2",
+          "to": "flt-3"
+        },
+        {
+          "from": "flt-3",
+          "to": "flt-4"
+        },
+        {
+          "from": "flt-4",
+          "to": "flt-5"
+        },
+        {
+          "from": "flt-5",
+          "to": "flt-6"
+        },
+        {
+          "from": "flt-6",
+          "to": "flt-7"
+        },
+        {
+          "from": "flt-7",
+          "to": "flt-8"
+        }
+      ]
+    },
+    {
+      "id": "go-developer",
+      "role": "Go Developer",
+      "tagline": "Goroutines, channels, Go's standard library — reading-heavy",
+      "summary": "Go is not enabled for submission on this platform yet, so the DSA nodes here route through a language you can actually submit — practise the algorithm in Python or Java, then apply it in Go yourself. The Go-specific nodes are reading.",
+      "forWho": "Students specifically targeting Go roles (increasingly common in backend/infra hiring). DSA nodes route through another submittable language; Go-specific nodes are reading.",
+      "groups": [
+        {
+          "id": "foundations",
+          "label": "Go Foundations"
+        },
+        {
+          "id": "dsa",
+          "label": "DSA (via Python/Java)"
+        },
+        {
+          "id": "concurrency",
+          "label": "Concurrency & Stdlib"
+        },
+        {
+          "id": "shipping",
+          "label": "Shipping"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "go-1",
+          "type": "topic",
+          "group": "foundations",
+          "title": "Go syntax and tooling",
+          "why": "Go's syntax is deliberately small — most of it can be learned in a day, which is the language's whole design philosophy.",
+          "reading": [
+            {
+              "label": "A Tour of Go",
+              "url": "https://go.dev/tour/welcome/1"
+            }
+          ],
+          "subtopics": [
+            "Syntax Basics",
+            "go.mod",
+            "Error Handling",
+            "gofmt"
+          ]
+        },
+        {
+          "id": "go-2",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Arrays, slices and strings",
+          "why": "This platform cannot judge Go submissions yet — practise the pattern in Python or Java here, then re-implement it in Go yourself to build the muscle memory.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "strings"
+            ],
+            "tags": [
+              "arrays",
+              "strings"
+            ],
+            "count": 12
+          },
+          "subtopics": [
+            "Slices vs Arrays",
+            "String Handling",
+            "Two-pointer Scans",
+            "Edge Cases"
+          ]
+        },
+        {
+          "id": "go-3",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Maps, hashing and structs",
+          "why": "Same note as above: practise the algorithm in a submittable language, apply the pattern in Go's own map/struct syntax afterward.",
+          "practice": {
+            "modules": [
+              "hashing"
+            ],
+            "tags": [
+              "hashing"
+            ],
+            "count": 4
+          },
+          "subtopics": [
+            "map Type",
+            "Structs",
+            "Frequency Counting",
+            "Method Receivers"
+          ]
+        },
+        {
+          "id": "go-4",
+          "type": "topic",
+          "group": "dsa",
+          "title": "Trees, graphs and dynamic programming",
+          "why": "Same routing: the algorithm pattern transfers directly even though the submission happens in another language here.",
+          "practice": {
+            "modules": [
+              "trees",
+              "graphs",
+              "dynamic programming"
+            ],
+            "tags": [
+              "trees",
+              "graphs",
+              "dynamic programming"
+            ],
+            "count": 6
+          },
+          "subtopics": [
+            "BFS / DFS",
+            "Binary Trees",
+            "Memoization",
+            "Tabulation"
+          ]
+        },
+        {
+          "id": "go-5",
+          "type": "topic",
+          "group": "concurrency",
+          "title": "Goroutines and channels",
+          "why": "The reason teams pick Go for backend services — concurrency that is readable, not a tangle of callbacks.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "A Tour of Go: Concurrency",
+              "url": "https://go.dev/tour/concurrency/1"
+            }
+          ],
+          "subtopics": [
+            "Goroutines",
+            "Channels",
+            "select",
+            "sync.WaitGroup"
+          ]
+        },
+        {
+          "id": "go-6",
+          "type": "topic",
+          "group": "concurrency",
+          "title": "The standard library",
+          "why": "net/http and encoding/json cover most of what a Go backend service actually needs, with zero external dependencies.",
+          "reading": [
+            {
+              "label": "Go: Standard library documentation",
+              "url": "https://pkg.go.dev/std"
+            }
+          ],
+          "subtopics": [
+            "net/http",
+            "encoding/json",
+            "context Package",
+            "Error Wrapping"
+          ]
+        },
+        {
+          "id": "go-7",
+          "type": "topic",
+          "group": "concurrency",
+          "title": "Building a REST API in Go",
+          "why": "A server, a route, a JSON response — the same job every backend role asks for, in Go's own idiom.",
+          "reading": [
+            {
+              "label": "Go: Writing Web Applications",
+              "url": "https://go.dev/doc/articles/wiki/"
+            }
+          ],
+          "subtopics": [
+            "Routing",
+            "Middleware",
+            "JSON Encoding",
+            "Error Responses"
+          ]
+        },
+        {
+          "id": "go-8",
+          "type": "checkpoint",
+          "group": "shipping",
+          "title": "Ship one Go service, then defend it",
+          "why": "A small, deployed Go API with goroutines actually doing something concurrent — not a hello-world handler.",
+          "subtopics": [
+            "Deployment",
+            "Concurrency Justification",
+            "Benchmarks",
+            "README"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "go-1",
+          "to": "go-2"
+        },
+        {
+          "from": "go-2",
+          "to": "go-3"
+        },
+        {
+          "from": "go-3",
+          "to": "go-4"
+        },
+        {
+          "from": "go-4",
+          "to": "go-5"
+        },
+        {
+          "from": "go-5",
+          "to": "go-6"
+        },
+        {
+          "from": "go-6",
+          "to": "go-7"
+        },
+        {
+          "from": "go-7",
+          "to": "go-8"
+        }
+      ]
+    },
+    {
+      "id": "gate-higher-studies",
+      "role": "GATE / Higher Studies",
+      "tagline": "Algorithms, complexity theory, core CS — for GATE or an MS application",
+      "summary": "Mostly algorithms, complexity and core CS theory — genuinely DSA-trackable, and reuses the same GATE / Higher Studies track already defined for the Job-Ready Score. For students choosing GATE, an MS, or a research path over direct placement.",
+      "forWho": "Students preparing for GATE or applying to MS programs instead of, or alongside, campus placement.",
+      "groups": [
+        {
+          "id": "programming",
+          "label": "Programming & DSA"
+        },
+        {
+          "id": "theory",
+          "label": "CS Theory"
+        },
+        {
+          "id": "gate",
+          "label": "GATE-specific"
+        },
+        {
+          "id": "practice",
+          "label": "Practice"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "gate-1",
+          "type": "topic",
+          "group": "programming",
+          "title": "Programming fundamentals",
+          "why": "GATE's CS paper assumes fluent C-style programming — not the focus of the exam, but a prerequisite for everything that is.",
+          "practice": {
+            "modules": [
+              "basics"
+            ],
+            "tags": [
+              "programming basics"
+            ],
+            "count": 8
+          },
+          "subtopics": [
+            "Pointers",
+            "Recursion",
+            "Arrays",
+            "Time Complexity"
+          ]
+        },
+        {
+          "id": "gate-2",
+          "type": "topic",
+          "group": "programming",
+          "title": "Data structures",
+          "why": "Arrays, linked lists, trees and graphs make up a large, reliably-scored section of the GATE CS paper every year.",
+          "practice": {
+            "modules": [
+              "arrays",
+              "linked list",
+              "trees",
+              "graphs"
+            ],
+            "tags": [
+              "arrays",
+              "linked list",
+              "trees",
+              "graphs"
+            ],
+            "count": 10
+          },
+          "subtopics": [
+            "Arrays & Lists",
+            "Trees",
+            "Graphs",
+            "Hashing"
+          ]
+        },
+        {
+          "id": "gate-3",
+          "type": "topic",
+          "group": "programming",
+          "title": "Algorithm design and analysis",
+          "why": "Asymptotic analysis, greedy, divide-and-conquer and DP — the single highest-weightage topic area on the GATE CS syllabus.",
+          "practice": {
+            "modules": [
+              "dynamic programming"
+            ],
+            "tags": [
+              "dynamic programming"
+            ],
+            "count": 3
+          },
+          "mcq": [
+            "technical"
+          ],
+          "subtopics": [
+            "Asymptotic Analysis",
+            "Greedy",
+            "Divide & Conquer",
+            "Dynamic Programming"
+          ]
+        },
+        {
+          "id": "gate-4",
+          "type": "topic",
+          "group": "theory",
+          "title": "Theory of computation",
+          "why": "Finite automata, regular languages and Turing machines — abstract, but a fixed, learnable share of every GATE paper.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "GeeksforGeeks: Theory of Computation",
+              "url": "https://www.geeksforgeeks.org/theory-of-computation-automata-tutorials/"
+            }
+          ],
+          "subtopics": [
+            "Finite Automata",
+            "Regular Languages",
+            "Context-Free Grammars",
+            "Turing Machines"
+          ]
+        },
+        {
+          "id": "gate-5",
+          "type": "topic",
+          "group": "theory",
+          "title": "Operating systems",
+          "why": "Processes, scheduling, deadlocks and memory management — asked in both GATE and almost every systems interview.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "OSTEP (free textbook)",
+              "url": "https://pages.cs.wisc.edu/~remzi/OSTEP/"
+            }
+          ],
+          "subtopics": [
+            "Process Scheduling",
+            "Deadlocks",
+            "Memory Management",
+            "File Systems"
+          ]
+        },
+        {
+          "id": "gate-6",
+          "type": "topic",
+          "group": "theory",
+          "title": "Computer networks and DBMS",
+          "why": "The OSI model and relational algebra round out the core CS theory GATE actually tests, alongside every other technical interview.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "PostgreSQL: SQL Tutorial",
+              "url": "https://www.postgresql.org/docs/current/tutorial-sql.html"
+            }
+          ],
+          "subtopics": [
+            "OSI Model",
+            "TCP/IP",
+            "Relational Algebra",
+            "Normalization"
+          ]
+        },
+        {
+          "id": "gate-7",
+          "type": "topic",
+          "group": "gate",
+          "title": "Engineering mathematics and aptitude",
+          "why": "A fixed, predictable share of GATE marks that is pure practice, not conceptual difficulty — the easiest marks to lock in early.",
+          "mcq": [
+            "aptitude"
+          ],
+          "subtopics": [
+            "Linear Algebra",
+            "Probability",
+            "Discrete Mathematics",
+            "General Aptitude"
+          ]
+        },
+        {
+          "id": "gate-8",
+          "type": "checkpoint",
+          "group": "practice",
+          "title": "Full-length timed mock papers",
+          "why": "GATE is a 3-hour exam against the clock — practising untimed teaches the syllabus but not the exam itself.",
+          "subtopics": [
+            "Previous-year Papers",
+            "Timed Mocks",
+            "Section-wise Review",
+            "Weak-area Tracking"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "gate-1",
+          "to": "gate-2"
+        },
+        {
+          "from": "gate-2",
+          "to": "gate-3"
+        },
+        {
+          "from": "gate-3",
+          "to": "gate-4"
+        },
+        {
+          "from": "gate-4",
+          "to": "gate-5"
+        },
+        {
+          "from": "gate-5",
+          "to": "gate-6"
+        },
+        {
+          "from": "gate-6",
+          "to": "gate-7"
+        },
+        {
+          "from": "gate-7",
+          "to": "gate-8"
+        }
+      ]
+    },
+    {
+      "id": "ui-ux-for-developers",
+      "role": "UI/UX for Developers",
+      "tagline": "Design principles, Figma, usability — reading-heavy",
+      "summary": "No design-judge here, so this is reading and the student's own Figma file, not tracked practice. Not a path to becoming a dedicated designer — for a developer who wants their own frontend work to stop looking like a developer built it.",
+      "forWho": "Developers who want to ship better-looking, more usable interfaces themselves, not become a dedicated designer. Fully reading-heavy: no tracked nodes on this platform today.",
+      "groups": [
+        {
+          "id": "principles",
+          "label": "Design Principles"
+        },
+        {
+          "id": "tools",
+          "label": "Tools"
+        },
+        {
+          "id": "process",
+          "label": "Process"
+        },
+        {
+          "id": "practice",
+          "label": "Practice"
+        }
+      ],
+      "nodes": [
+        {
+          "id": "uiux-1",
+          "type": "topic",
+          "group": "principles",
+          "title": "Visual design fundamentals",
+          "why": "Contrast, alignment, repetition and proximity — four rules that fix most of what makes a developer-built UI look wrong.",
+          "reading": [
+            {
+              "label": "Refactoring UI (free excerpt)",
+              "url": "https://www.refactoringui.com/"
+            }
+          ],
+          "subtopics": [
+            "Contrast",
+            "Alignment",
+            "Repetition",
+            "Proximity"
+          ]
+        },
+        {
+          "id": "uiux-2",
+          "type": "topic",
+          "group": "principles",
+          "title": "Typography and color",
+          "why": "A type scale and a constrained palette, consistently applied, look more deliberate than a dozen font sizes and colours ever will.",
+          "reading": [
+            {
+              "label": "MDN: Typography handbook",
+              "url": "https://practicaltypography.com/"
+            }
+          ],
+          "subtopics": [
+            "Type Scale",
+            "Font Pairing",
+            "Color Theory",
+            "Accessibility Contrast"
+          ]
+        },
+        {
+          "id": "uiux-3",
+          "type": "topic",
+          "group": "principles",
+          "title": "Layout and spacing systems",
+          "why": "An 8px spacing grid is the single highest-leverage habit for making an interface feel intentional instead of ad hoc.",
+          "reading": [
+            {
+              "label": "Material Design: Layout",
+              "url": "https://m3.material.io/foundations/layout/understanding-layout/overview"
+            }
+          ],
+          "subtopics": [
+            "Spacing Scale",
+            "Grid Systems",
+            "Responsive Breakpoints",
+            "Whitespace"
+          ]
+        },
+        {
+          "id": "uiux-4",
+          "type": "topic",
+          "group": "tools",
+          "title": "Figma fundamentals",
+          "why": "The industry-standard design tool — enough fluency to receive a handoff, or mock up your own screen before coding it.",
+          "mcq": [
+            "technical"
+          ],
+          "reading": [
+            {
+              "label": "Figma: Learn the basics",
+              "url": "https://help.figma.com/hc/en-us/sections/4405269443991-Figma-basics"
+            }
+          ],
+          "subtopics": [
+            "Frames & Components",
+            "Auto Layout",
+            "Design Tokens",
+            "Dev Mode / Handoff"
+          ]
+        },
+        {
+          "id": "uiux-5",
+          "type": "topic",
+          "group": "process",
+          "title": "Usability principles",
+          "why": "Nielsen's heuristics are old, still correct, and the fastest way to catch an unusable flow before a real user does.",
+          "reading": [
+            {
+              "label": "Nielsen Norman Group: 10 Usability Heuristics",
+              "url": "https://www.nngroup.com/articles/ten-usability-heuristics/"
+            }
+          ],
+          "subtopics": [
+            "Nielsen's Heuristics",
+            "Error Prevention",
+            "Feedback & Affordance",
+            "Cognitive Load"
+          ]
+        },
+        {
+          "id": "uiux-6",
+          "type": "topic",
+          "group": "process",
+          "title": "User flows and wireframing",
+          "why": "Sketching the flow before touching a design tool catches a confusing journey while it is still cheap to fix.",
+          "reading": [
+            {
+              "label": "Balsamiq: Wireframing basics",
+              "url": "https://balsamiq.com/learn/"
+            }
+          ],
+          "subtopics": [
+            "User Flows",
+            "Low-fidelity Wireframes",
+            "Information Architecture",
+            "Journey Mapping"
+          ]
+        },
+        {
+          "id": "uiux-7",
+          "type": "topic",
+          "group": "process",
+          "title": "Accessibility for developers",
+          "why": "Keyboard navigation and screen-reader support are not optional extras — and are frequently asked about directly in frontend interviews now.",
+          "reading": [
+            {
+              "label": "web.dev: Accessibility",
+              "url": "https://web.dev/learn/accessibility"
+            }
+          ],
+          "subtopics": [
+            "Keyboard Navigation",
+            "ARIA Basics",
+            "Color Contrast",
+            "Screen Reader Testing"
+          ]
+        },
+        {
+          "id": "uiux-8",
+          "type": "checkpoint",
+          "group": "practice",
+          "title": "Redesign one real screen, then explain every decision",
+          "why": "Pick a genuinely ugly screen — one of your own old projects works well — and redesign it, ready to justify every choice against the principles above.",
+          "subtopics": [
+            "Before/After",
+            "Design Rationale",
+            "Figma File",
+            "Accessibility Check"
+          ]
+        }
+      ],
+      "edges": [
+        {
+          "from": "uiux-1",
+          "to": "uiux-2"
+        },
+        {
+          "from": "uiux-2",
+          "to": "uiux-3"
+        },
+        {
+          "from": "uiux-3",
+          "to": "uiux-4"
+        },
+        {
+          "from": "uiux-4",
+          "to": "uiux-5"
+        },
+        {
+          "from": "uiux-5",
+          "to": "uiux-6"
+        },
+        {
+          "from": "uiux-6",
+          "to": "uiux-7"
+        },
+        {
+          "from": "uiux-7",
+          "to": "uiux-8"
         }
       ]
     }

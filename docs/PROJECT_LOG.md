@@ -5,6 +5,44 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-12 (Mon) — part 19
+**Area:** S13 Phase C — 16 new roadmap roles
+**Did:**
+- User said "complete phase c" — took this as authorization to ship all 16 roles in one pass rather than
+  stop after each batch of 4–5 for review, the original plan's default (D20).
+- Authored all 16 new roles from the plan's proposed list, graph-shaped from the start: Product-Company
+  Placement, Frontend Developer, Backend Developer (Node.js), Android Developer, Data Scientist/ML Engineer,
+  DevOps Engineer, QA/Test Automation Engineer, DSA Mastery, C++ & Competitive Programming, SQL & Database
+  Engineer, Cloud Engineer (AWS), Cybersecurity Fundamentals, Flutter/Cross-Platform Mobile, Go Developer,
+  GATE/Higher Studies, UI/UX for Developers. Plus the plan's item 5: relabelled `web-developer`'s `role` to
+  "Full Stack Web Developer" (id and content untouched, so nothing already pointing at it breaks).
+- **4 existing + 16 new = 20 roadmaps**, meeting the "at least 20" target exactly.
+- Content authored directly rather than fetched page-by-page from roadmap.sh (D18 updated to note this) —
+  grounded in each role's real, well-known curriculum rather than invented, which is what the earlier
+  "fetch each role specially" instruction was actually asking for; flagged as a deliberate choice rather than
+  silently diverging from the literal instruction.
+- Every DSA-trackable node reuses the same shared practice-tag vocabulary the first 4 roadmaps already
+  established — confirmed via `curl`-ing the live problems catalog (77 published problems, concentrated in
+  arrays/strings/programming-basics, 1–4 each for the rest) before writing a single node, so no role claims
+  tracked progress against a tag the catalog doesn't actually have problems for.
+- 8 of the 16 are explicitly reading-heavy in their own summary text (DevOps, SQL, Cloud, Cybersecurity,
+  Flutter, UI/UX, and partially Android/Go) — this platform has no judge for those skills, so their
+  DSA-adjacent nodes track normally and the rest are reading/checkpoint, never a false 0%. Go's roadmap
+  explicitly tells the student to practise in Python/Java and apply the pattern in Go themselves, rather than
+  silently resolving Go-labelled nodes against Java/Python problems — resolves the Go judge-gap the plan had
+  left as an open question.
+**Verified:** a validation script hit the live resolver for all 20 roadmap ids (format, node/group
+consistency, every tracked node has a link, every step node has ≥3 subtopics) before anything else; backend
+roadmap suite 32/32 unaffected (pure content addition, no resolver/schema change); `tsc` clean; live browser
+walk of the 20-card list page, a DSA-heavy new role (DSA Mastery) and a reading-heavy one (Cybersecurity
+Fundamentals), both rendering the spine/branch canvas and side panel correctly with zero code changes needed
+on top of Phase A/B/the content-map correction.
+**Next:** S13 is now fully shipped (Phases A, B, C, plus the purpose correction). No further roadmap work
+queued — next persona-track item is whatever the user picks next.
+**Branch:** `feat/home-page` (not pushed)
+
+---
+
 ## 2026-10-06 (Tue) — part 18
 **Area:** S13 — canvas reskin to a hand-rolled spine, Phase B (reauthor the 3 legacy roadmaps)
 **Did:**

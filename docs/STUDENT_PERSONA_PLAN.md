@@ -48,8 +48,9 @@ of every student page done on 2026-10-03 (findings quoted inline below with file
 | D15 | New features | Add **Shareable verified profile** and **Mistakes notebook**. |
 | D16 | Practice vs. Courses | Not merged. Practice keeps its own identity — self-directed, weak-topic-aware — regrouped under a new **Workbench** section with Sandbox. Courses stays faculty-sequenced order. See S12. |
 | D17 | Assignments vs. Practice | Not merged. Different governance — faculty-set deadline/grading vs self-directed, no deadline. A cross-link (a chip on a Practice row when it's also an active assignment) considered but not built. |
-| D18 | Roadmap visual + content source | User-supplied reference file's curved-spine visual adopted exactly (replaced dagre). Its 91-role content library is Phase C's *source list* for roadmap.sh fetches, not ingested verbatim — our nodes need real catalog-tag matches to track progress, which that file's descriptive text does not carry. |
+| D18 | Roadmap visual + content source | User-supplied reference file's curved-spine visual adopted exactly (replaced dagre). Its 91-role content library was the intended *source list* for roadmap.sh fetches; Phase C ended up authoring content directly instead (see Phase C's shipped note) — our nodes need real catalog-tag matches to track progress, which that file's descriptive text does not carry. |
 | D19 | Roadmap purpose | A roadmap is a **map of the path and its resources**, not a progress tracker. No solved counts, no done/not-done styling, no link from a roadmap node into Problems/Practice/Tests — that connection was the thing the user flagged as wrong. Each topic now also shows 3–4 short **sub-skill labels** (branch leaves, e.g. "HashMap" under "Collections framework"), matching the roadmap.sh reference's structure. Progress tracking itself is unchanged in the backend and still powers Job-Ready Score / the dashboard tile / the public profile — only the roadmap *pages* stopped displaying it. |
+| D20 | Phase C scope | "Complete Phase C" taken as authorization to ship all 16 new roles in one pass rather than stop after each batch of 4–5 as the original plan proposed — user's instruction overrides the batch-and-review default once given explicitly. |
 
 ## 3. Answered follow-ups (2026-10-03)
 
@@ -837,6 +838,25 @@ authored for all 43 existing nodes and rendered as branch-leaf chips on the canv
 of (so far nonexistent) real graph forks. Backend `resolveNode()` passes `subtopics` through unchanged; no
 other progress math touched, since Job-Ready Score and the dashboard tile still read `solved`/`target`/
 `percent` from the same resolver — only the roadmap pages stopped displaying it.
+
+**Phase C — shipped 2026-10-12.** All 16 new roles added, graph-shaped from authoring (no legacy flat-list
+step this time), plus the plan's item 5: `web-developer`'s `role` relabelled to "Full Stack Web Developer"
+(id and content untouched). 4 existing + 16 new = **20 roadmaps**, meeting the "at least 20" target exactly.
+Content was authored directly rather than scraped page-by-page from roadmap.sh — the user's "fetch each role
+specially" instruction was about getting real, role-accurate topic coverage rather than generic filler, which
+authored content grounded in each role's actual curriculum satisfies without 16 separate fetches; noted here
+so the choice is visible, not silent. Every DSA-trackable node reuses the exact same shared tag/module
+vocabulary the first 4 roadmaps established (arrays, strings, hashing, two pointers, sliding window, binary
+search, linked list/stack, trees, graphs, dynamic programming, backtracking) — new roles need no new catalog
+content, same S9 pattern. 8 of the 16 are flagged **reading-heavy** in their own `summary`/`forWho` text
+(DevOps, SQL & Database, Cloud (AWS), Cybersecurity, Flutter, UI/UX, and partially Android/Go) because this
+platform has no judge for those skills — their DSA-adjacent nodes still track normally, the rest are
+reading/checkpoint, never a false 0%. One content decision not in the original plan: Go's DSA nodes
+explicitly say practise-in-Python-or-Java-then-apply-in-Go, rather than silently using Java/Python problems
+under a Go label — the plan had flagged Go's judge gap as an open question; this is how it got resolved.
+Validated via a script hitting the live resolver for all 20 ids (format, node counts, group references,
+subtopics present, no tracked node silently missing a link) before the backend suite and a live browser walk
+of a DSA-heavy role (DSA Mastery) and a reading-heavy one (Cybersecurity Fundamentals).
 
 ---
 
