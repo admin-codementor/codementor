@@ -28,7 +28,7 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ExportButton, toCsv } from "@/components/analytics";
+import { ExportButton, toCsv, ChartCard } from "@/components/analytics";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
@@ -38,6 +38,7 @@ import {
   TestCaseHeatmap, ItemAnalysisScatter, RankedBars, RiskChips, VerdictDonut,
 } from "@/components/faculty/analytics/Panels";
 import { SwapFade } from "@/components/ui/motion";
+import { radius, typeScale } from "@/theme/tokens";
 
 // Only needed once a cohort/problem is drilled into — dynamically imported so
 // @nivo/radar and @nivo/funnel aren't in the bundle for every analytics page load.
@@ -379,14 +380,17 @@ export default function FacultyAnalyticsPage() {
 
               {/* ── Distribution first: the headline number hides the shape ── */}
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
-                <SectionCard title="How many problems each student has solved">
-                  {overview.solvedDistribution && (
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
+                <ChartCard
+                  title="How many problems each student has solved"
+                  height={240}
+                  subtitle={overview.solvedDistribution && (
+                    <>
                       Median {overview.solvedDistribution.median} · mean {overview.solvedDistribution.mean} · range {overview.solvedDistribution.min}–{overview.solvedDistribution.max}.
                       {overview.solvedDistribution.median === 0 && " Half the cohort has solved nothing — the mean alone would hide that."}
                       {" Click a bar to list the students in it."}
-                    </Typography>
+                    </>
                   )}
+                >
                   <DistributionChart
                     histogram={overview.solvedHistogram}
                     label="Problems solved"
@@ -405,7 +409,7 @@ export default function FacultyAnalyticsPage() {
                     const to = solvedBucket.bucket.includes("-") ? Number(solvedBucket.bucket.split("-")[1]) : solvedBucket.from;
                     const matches = overview.studentScatter.filter((s) => s.solved >= solvedBucket.from && s.solved <= to);
                     return (
-                      <Box sx={{ mt: 1.5, p: 1.5, borderRadius: 2, bgcolor: "surfaceContainerHigh" }}>
+                      <Box sx={{ mt: 1.5, p: 1.5, borderRadius: radius.md, bgcolor: "surfaceContainerHigh" }}>
                         <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 1 }}>
                           <Typography variant="caption" fontWeight={600}>
                             {matches.length} student{matches.length === 1 ? "" : "s"} solved {solvedBucket.bucket}
@@ -419,7 +423,7 @@ export default function FacultyAnalyticsPage() {
                             <Link
                               key={s.id} component="button" type="button" underline="hover"
                               onClick={() => router.push(`/faculty/students/${s.id}`)}
-                              sx={{ textAlign: "left", fontSize: 13, color: "text.primary" }}
+                              sx={{ textAlign: "left", fontSize: typeScale.bodyMedium.fontSize, color: "text.primary" }}
                             >
                               {s.name} <Typography component="span" variant="caption" color="text.secondary">— {s.solved} solved</Typography>
                             </Link>
@@ -428,45 +432,42 @@ export default function FacultyAnalyticsPage() {
                       </Box>
                     );
                   })()}
-                </SectionCard>
+                </ChartCard>
 
-                <SectionCard title="Effort vs. success — one dot per student">
-                  <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                    Bottom-right means grinding without success; top-left means efficient. Click a dot to open that student.
-                  </Typography>
+                <ChartCard
+                  title="Effort vs. success — one dot per student"
+                  height={320}
+                  subtitle="Bottom-right means grinding without success; top-left means efficient. Click a dot to open that student."
+                >
                   <StudentScatter points={overview.studentScatter} onPick={(id) => router.push(`/faculty/students/${id}`)} />
-                </SectionCard>
+                </ChartCard>
               </Box>
 
-              <SectionCard title="When the work actually happens">
-                <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                  Submissions by day of week and hour — useful for scheduling labs and spotting all-nighters before a deadline.
-                </Typography>
+              <ChartCard
+                title="When the work actually happens"
+                height={260}
+                subtitle="Submissions by day of week and hour — useful for scheduling labs and spotting all-nighters before a deadline."
+              >
                 <ActivityHeatmap grid={overview.activityByDayHour} />
-              </SectionCard>
+              </ChartCard>
 
-              <SectionCard title={overview.daily.length > 45 ? "Activity over time — weekly totals" : "Activity over time"}>
-                {overview.daily.length > 1 ? (
-                  <>
-                    {overview.daily.length > 45 && (
-                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                        Grouped into weeks — daily counts this small zigzag too much to show a trend.
-                      </Typography>
-                    )}
-                    <TrendChart daily={overview.daily} />
-                  </>
-                ) : (
-                  <Typography variant="body2" color="text.secondary">Not enough days in this period to plot a trend.</Typography>
-                )}
-              </SectionCard>
+              <ChartCard
+                title={overview.daily.length > 45 ? "Activity over time — weekly totals" : "Activity over time"}
+                height={280}
+                subtitle={overview.daily.length > 45 ? "Grouped into weeks — daily counts this small zigzag too much to show a trend." : undefined}
+                empty={overview.daily.length <= 1}
+                emptyTitle="Not enough days in this period to plot a trend."
+              >
+                <TrendChart daily={overview.daily} />
+              </ChartCard>
 
               <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
-                <SectionCard title="Verdicts">
+                <ChartCard title="Verdicts" height={220} empty={overview.verdicts.length === 0} emptyTitle="No data yet.">
                   <VerdictDonut rows={overview.verdicts} />
-                </SectionCard>
-                <SectionCard title="Languages used">
+                </ChartCard>
+                <ChartCard title="Languages used" height={220} empty={overview.languages.length === 0} emptyTitle="No data yet.">
                   <RankedBars rows={overview.languages as unknown as Record<string, string | number>[]} valueKey="subs" indexKey="name" colorIndex={1} />
-                </SectionCard>
+                </ChartCard>
               </Box>
             </Stack>
           )}
@@ -557,29 +558,29 @@ export default function FacultyAnalyticsPage() {
               </SectionCard>
 
               {/* ── MCQ item analysis ── */}
-              <SectionCard
+              <ChartCard
                 title="MCQ question quality"
+                height={320}
                 action={
                   <TextField select size="small" label="Test" value={testId} onChange={(e) => loadItemAnalysis(e.target.value)} sx={{ minWidth: 220 }}>
                     <MenuItem value="">Choose a test…</MenuItem>
                     {tests.map((t) => <MenuItem key={t.id} value={t.id}>{t.title} ({t.attempt_count})</MenuItem>)}
                   </TextField>
                 }
-              >
-                {tests.length === 0 ? (
-                  <Typography variant="body2" color="text.secondary">No MCQ test has submitted attempts yet.</Typography>
-                ) : !itemData ? (
-                  <Typography variant="body2" color="text.secondary">
-                    Pick a test to see which questions actually separate strong students from weak ones.
-                  </Typography>
-                ) : (
+                subtitle={itemData ? (
                   <>
-                    <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                      {`${(itemData as { attempts: number }).attempts} attempts. `}
-                      Questions low on the vertical axis don&apos;t distinguish who knows the material — everyone answers them
-                      the same way, so they add length without adding information.
-                      {(itemData as { problematic: number }).problematic > 0 && ` ${(itemData as { problematic: number }).problematic} flagged.`}
-                    </Typography>
+                    {`${(itemData as { attempts: number }).attempts} attempts. `}
+                    Questions low on the vertical axis don&apos;t distinguish who knows the material — everyone answers them
+                    the same way, so they add length without adding information.
+                    {(itemData as { problematic: number }).problematic > 0 && ` ${(itemData as { problematic: number }).problematic} flagged.`}
+                  </>
+                ) : undefined}
+                empty={tests.length === 0 || !itemData}
+                emptyTitle={tests.length === 0 ? "No MCQ test has submitted attempts yet." : "Pick a test to see which questions matter"}
+                emptyDescription={tests.length === 0 ? undefined : "Pick a test above to see which questions actually separate strong students from weak ones."}
+              >
+                {itemData && (
+                  <>
                     <ItemAnalysisScatter items={(itemData as { items: never[] }).items} />
                     <Stack spacing={0.5} sx={{ mt: 1 }}>
                       {((itemData as { items: { position: number; question_text: string; flag: string | null }[] }).items)
@@ -592,7 +593,7 @@ export default function FacultyAnalyticsPage() {
                     </Stack>
                   </>
                 )}
-              </SectionCard>
+              </ChartCard>
             </Stack>
           )}
         </Stack>
@@ -628,15 +629,18 @@ function CohortView({ data, loading, onStudent }: { data: Record<string, unknown
       </Box>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
-        <SectionCard title="Spread of problems solved">
+        <ChartCard title="Spread of problems solved" height={240}>
           <DistributionChart histogram={d.solvedHistogram} label="Problems solved" />
-        </SectionCard>
-        <SectionCard title="Topic mastery">
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-            Share of attempts that ended in a solve, per topic — the shape shows where to spend the next lecture.
-          </Typography>
+        </ChartCard>
+        <ChartCard
+          title="Topic mastery"
+          height={300}
+          subtitle="Share of attempts that ended in a solve, per topic — the shape shows where to spend the next lecture."
+          empty={d.topicMastery.length < 3}
+          emptyTitle="Needs at least three topics with activity."
+        >
           <TopicRadar topics={d.topicMastery} />
-        </SectionCard>
+        </ChartCard>
       </Box>
 
       <SectionCard title="Students — those needing attention first">
@@ -702,36 +706,41 @@ function ProblemView({ data, loading }: { data: Record<string, unknown> | null; 
       </Box>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
-        <SectionCard title="Funnel">
-          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-            Separates &quot;nobody tried it&quot; from &quot;everybody tried and failed&quot; — a single solve-rate number can&apos;t.
-          </Typography>
+        <ChartCard
+          title="Funnel"
+          height={260}
+          subtitle={'Separates "nobody tried it" from "everybody tried and failed" — a single solve-rate number can\'t.'}
+        >
           <FunnelChart stages={d.funnel} />
-        </SectionCard>
-        <SectionCard title="Attempts needed to solve">
-          {d.summary.attemptsToSolve ? (
+        </ChartCard>
+        <ChartCard
+          title="Attempts needed to solve"
+          height={240}
+          subtitle={d.summary.attemptsToSolve ? (
             <>
-              <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1 }}>
-                Median {d.summary.attemptsToSolve.median}, up to {d.summary.attemptsToSolve.max}.
-                {d.summary.neededMultipleAttempts > 0 && ` ${d.summary.neededMultipleAttempts} students needed more than one go.`}
-              </Typography>
-              <DistributionChart histogram={d.attemptsHistogram} label="Attempts before solving" />
+              Median {d.summary.attemptsToSolve.median}, up to {d.summary.attemptsToSolve.max}.
+              {d.summary.neededMultipleAttempts > 0 && ` ${d.summary.neededMultipleAttempts} students needed more than one go.`}
             </>
-          ) : <Typography variant="body2" color="text.secondary">Nobody has solved this yet.</Typography>}
-        </SectionCard>
+          ) : undefined}
+          empty={!d.summary.attemptsToSolve}
+          emptyTitle="Nobody has solved this yet."
+        >
+          <DistributionChart histogram={d.attemptsHistogram} label="Attempts before solving" />
+        </ChartCard>
       </Box>
 
-      <SectionCard title="Which test case fails">
-        <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
-          From each student&apos;s most recent submission ({d.studentsAnalyzed} analysed). A dark square is the specific
-          edge case the class is missing — usually worth one slide.
-        </Typography>
+      <ChartCard
+        title="Which test case fails"
+        subtitle={`From each student's most recent submission (${d.studentsAnalyzed} analysed). A dark square is the specific edge case the class is missing — usually worth one slide.`}
+        empty={d.testHeatmap.length === 0}
+        emptyTitle="No graded submissions yet."
+      >
         <TestCaseHeatmap rows={d.testHeatmap} />
-      </SectionCard>
+      </ChartCard>
 
-      <SectionCard title="Verdicts on this problem">
+      <ChartCard title="Verdicts on this problem" height={220} empty={d.verdicts.length === 0} emptyTitle="No data yet.">
         <RankedBars rows={d.verdicts as unknown as Record<string, string | number>[]} valueKey="count" indexKey="verdict" colorIndex={4} />
-      </SectionCard>
+      </ChartCard>
     </Stack>
   );
 }
