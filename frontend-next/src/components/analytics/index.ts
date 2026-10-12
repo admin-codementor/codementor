@@ -12,3 +12,4 @@ export type { Period, GroupOption } from "./FilterBar";
 export { StatusBanner, FlagChip, STATE_LABEL } from "./StatusFlag";
 export type { Flag, StudentState, StatusInfo } from "./StatusFlag";
 export { ExportButton, toCsv } from "./ExportButton";
+export { ThresholdsDialog } from "./ThresholdsDialog";

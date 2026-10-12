@@ -28,7 +28,7 @@ import {
   Eye, EyeOff, TriangleAlert, Briefcase,
   SignalLow, SignalMedium, SignalHigh, Type, Hash, ArrowRightLeft, ArrowDownUp, GitFork,
   Boxes, Binary, PenTool, Waypoints, TrendingUp, TrendingDown, GripVertical,
-  CloudOff, Inbox, FilterX,
+  CloudOff, Inbox, FilterX, Info,
 } from "lucide-react";
 
 export type IconFontSize = "small" | "medium" | "large" | "inherit";
@@ -160,6 +160,7 @@ export const PlayArrowOutlinedIcon = makeIcon(Play, "PlayArrowOutlinedIcon");
 export const PolicyOutlinedIcon = makeIcon(ShieldAlert, "PolicyOutlinedIcon");
 export const PsychologyOutlinedIcon = makeIcon(Brain, "PsychologyOutlinedIcon");
 export const QuizOutlinedIcon = makeIcon(CircleHelp, "QuizOutlinedIcon");
+export const InfoOutlinedIcon = makeIcon(Info, "InfoOutlinedIcon");
 export const RadioButtonUncheckedIcon = makeIcon(Circle, "RadioButtonUncheckedIcon");
 export const ReceiptLongOutlinedIcon = makeIcon(ReceiptText, "ReceiptLongOutlinedIcon");
 export const RefreshIcon = makeIcon(RefreshCw, "RefreshIcon");

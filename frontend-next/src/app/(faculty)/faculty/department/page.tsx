@@ -26,7 +26,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState } from "@/components/ui/States";
 import {
-  ChartCard, ChartRow, ExportButton, KpiRow, KpiTile, Leaderboard, StackedBars, TrendLines, toCsv,
+  ChartCard, ChartRow, ExportButton, KpiRow, KpiTile, Leaderboard, StackedBars, ThresholdsDialog, TrendLines, toCsv,
 } from "@/components/analytics";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { shape, radius, typeScale } from "@/theme/tokens";
@@ -140,7 +140,10 @@ export default function DepartmentDashboardPage() {
           </Stack>
 
           {/* ── Funnel: every count opens the list of who is in it ── */}
-          <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1.5 }}>Where every student stands</Typography>
+          <Stack direction="row" alignItems="center" spacing={0.5} sx={{ mb: 1.5 }}>
+            <Typography variant="subtitle1" fontWeight={600}>Where every student stands</Typography>
+            <ThresholdsDialog kind="flag" />
+          </Stack>
           <Box sx={{ display: "grid", gap: 2, gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, mb: 1 }}>
             {d.funnel.map((f) => {
               const st = FUNNEL_STYLE[f.key];
@@ -198,7 +201,11 @@ export default function DepartmentDashboardPage() {
           </ChartRow>
 
           <ChartRow cols={2}>
-            <SectionCard title="Badge distribution" icon={<LocalFireDepartmentOutlinedIcon fontSize="small" />}>
+            <SectionCard
+              title="Badge distribution"
+              icon={<LocalFireDepartmentOutlinedIcon fontSize="small" />}
+              action={<ThresholdsDialog kind="badge" />}
+            >
               <Stack spacing={1.25}>
                 {d.badges.map((b) => {
                   const pct = d.totals.students ? Math.round((b.count / d.totals.students) * 100) : 0;

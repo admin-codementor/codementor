@@ -42,6 +42,7 @@ import { Reveal, RevealGroup, RevealItem } from "@/components/ui/motion";
 import { CODING_PLATFORM_META } from "@/lib/codingPlatforms";
 import { radius } from "@/theme/tokens";
 import { StatusBanner, type StatusInfo } from "@/components/analytics/StatusFlag";
+import { ThresholdsDialog } from "@/components/analytics/ThresholdsDialog";
 import {
   CourseProgressCard, ExamHistoryCard, WeeklyProgressCard,
   type CourseRow, type ExamRow, type WeeklyRow,
@@ -200,7 +201,16 @@ export default function StudentProfilePage() {
 
       {!loading && !error && data && (
         <Stack spacing={3}>
-          {data.status && <Reveal><StatusBanner status={data.status} /></Reveal>}
+          {data.status && (
+            <Reveal>
+              <Box sx={{ position: "relative" }}>
+                <StatusBanner status={data.status} />
+                <Box sx={{ position: "absolute", top: 4, right: 4 }}>
+                  <ThresholdsDialog kind="flag" inherit />
+                </Box>
+              </Box>
+            </Reveal>
+          )}
 
           <RevealGroup>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>

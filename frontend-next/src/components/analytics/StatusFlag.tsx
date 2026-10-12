@@ -7,7 +7,7 @@ import Stack from "@mui/material/Stack";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { CheckCircleOutlineIcon, WarningAmberIcon } from "@/components/ui/icons";
-import { shape } from "@/theme/tokens";
+import { shape, typeScale } from "@/theme/tokens";
 
 export type Flag = "green" | "orange" | "red";
 export type StudentState = "not_started" | "practising" | "stuck" | "gone_quiet";
@@ -39,7 +39,7 @@ export function FlagChip({ flag, reasons = [] }: { flag: Flag; reasons?: string[
       <Chip
         size="small"
         label={s.label}
-        sx={{ height: 22, fontSize: 11, fontWeight: 600, bgcolor: s.bg, color: s.fg }}
+        sx={{ height: 22, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600, bgcolor: s.bg, color: s.fg }}
       />
     </Tooltip>
   );
@@ -75,7 +75,7 @@ export function StatusBanner({ status }: { status: StatusInfo }) {
           <Chip
             size="small"
             label={STATE_LABEL[status.state]}
-            sx={{ height: 20, fontSize: 11, bgcolor: "rgba(0,0,0,0.08)", color: "inherit" }}
+            sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, bgcolor: "rgba(0,0,0,0.08)", color: "inherit" }}
           />
         </Stack>
         <Typography variant="body2" sx={{ mt: 0.5, opacity: 0.9 }}>
