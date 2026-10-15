@@ -28,6 +28,7 @@ const SUITES = {
   groupsDepartment: require('./suites/groupsAndDepartment'),
   hodFeatures: require('./suites/hodFeatures'),
   hodPlacement: require('./suites/hodPlacement'),
+  hodAlumni: require('./suites/hodAlumni'),
 };
 
 const C = {

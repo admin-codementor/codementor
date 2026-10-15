@@ -6,6 +6,7 @@ const userRepo = require('../repositories/userRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const { scopeDept } = require('../middleware/role.middleware');
 const { buildMentorBoard, checkAssignment, PERIODS, MAX_ASSIGN } = require('../utils/mentors');
+const { activeStudents } = require('../utils/students');
 
 const TTL_SECONDS = 120;
 const VERSION = 1;
@@ -18,7 +19,7 @@ async function scoped(req) {
   const inDept = (u) => dept === null || (u.department || null) === dept;
   // The `faculty` collection also holds admins, who are not mentors.
   const mentors = [...staffMap.values()].filter((u) => u.role !== 'admin' && inDept(u));
-  const students = [...studentsMap.values()].filter(inDept);
+  const students = activeStudents([...studentsMap.values()]).filter(inDept);
   return { dept, staffMap, studentsMap, mentors, students };
 }
 

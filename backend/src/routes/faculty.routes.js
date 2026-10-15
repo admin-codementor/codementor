@@ -8,6 +8,7 @@ const plagiarismController = require('../controllers/plagiarism.controller');
 const groupController = require('../controllers/studentGroup.controller');
 const mentorController = require('../controllers/mentor.controller');
 const placementController = require('../controllers/placement.controller');
+const alumniController = require('../controllers/alumni.controller');
 const { logAction } = require('../middleware/audit');
 const userRepo = require('../repositories/userRepository');
 const auditLogRepo = require('../repositories/auditLogRepository');
@@ -56,6 +57,9 @@ router.patch('/placement/drives/:id', authorize('hod', 'admin'), placementContro
 router.delete('/placement/drives/:id', authorize('hod', 'admin'), placementController.deleteDrive);
 router.put('/placement/drives/:id/applications', authorize('hod', 'admin'), placementController.saveApplications);
 router.get('/placement/analytics', authorize('hod', 'admin'), placementController.getAnalytics);
+// Alumni: HOD/admin only; an HOD is confined to their own department.
+router.get('/alumni', authorize('hod', 'admin'), alumniController.getAlumni);
+router.put('/alumni/graduation', authorize('hod', 'admin'), alumniController.setGraduation);
 router.get('/mentors', authorize('hod', 'admin'), mentorController.listMentors);
 router.put('/mentors/assign', authorize('hod', 'admin'), mentorController.assignMentees);
 router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, facultyController.getDepartmentInsights);

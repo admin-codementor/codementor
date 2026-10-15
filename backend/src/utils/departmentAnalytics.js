@@ -35,7 +35,7 @@ function badgeFor(percentile) {
  * @param {{userId,problemId,verdict,submittedAt}[]} a.submissions
  * @param {number} a.now
  */
-function buildDepartmentAnalytics({ students, submissions, now = Date.now() }) {
+function buildDepartmentAnalytics({ students, submissions, now = Date.now(), baseline = null }) {
   const byId = new Map(students.map((s) => [s.id, s]));
 
   // ── Per-student rollup ────────────────────────────────────────────────────
@@ -92,10 +92,14 @@ function buildDepartmentAnalytics({ students, submissions, now = Date.now() }) {
   };
 
   // ── Badges by percentile on problems solved ───────────────────────────────
+  // By default a student is ranked against everyone in this view, so the badge moves as
+  // the filters move. `baseline(row)` can supply a different pool of solved-counts to rank
+  // against (their year, or the whole institution) so a filter does not change the badge.
   const solvedValues = rows.map((r) => r.solved);
   const withBadges = rows.map((r) => {
-    const below = solvedValues.filter((v) => v < r.solved).length;
-    const percentile = rows.length ? Math.round((below / rows.length) * 100) : 0;
+    const pool = baseline ? baseline(r) : solvedValues;
+    const below = pool.filter((v) => v < r.solved).length;
+    const percentile = pool.length ? Math.round((below / pool.length) * 100) : 0;
     return { ...r, percentile, badge: badgeFor(percentile) };
   });
   const badgeCounts = BADGES.map((b) => ({

@@ -5,6 +5,7 @@ const { cached } = require('../utils/cache');
 const userRepo = require('../repositories/userRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const { buildDepartmentLeaderboard, normalizeDepartment } = require('../utils/departmentLeaderboard');
+const { activeStudents } = require('../utils/students');
 
 const TTL_SECONDS = 120;
 // Bump when the response shape or aggregation changes (the cache outlives deploys).
@@ -15,7 +16,7 @@ async function compute() {
     userRepo.getMapByRole('student'),
     submissionRepo.listAllForAnalytics(),
   ]);
-  const students = [...studentsMap.values()].map((s) => ({ id: s.id, department: s.department }));
+  const students = activeStudents([...studentsMap.values()]).map((s) => ({ id: s.id, department: s.department }));
   return buildDepartmentLeaderboard({ students, submissions, now: Date.now() });
 }
 

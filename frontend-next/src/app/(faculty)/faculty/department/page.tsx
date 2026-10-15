@@ -30,6 +30,7 @@ import { DepartmentInsights } from "@/components/faculty/DepartmentInsights";
 import { MentorsTab } from "@/components/faculty/MentorsTab";
 import { PortfolioTab } from "@/components/faculty/PortfolioTab";
 import { PlacementTab } from "@/components/faculty/PlacementTab";
+import { AlumniTab } from "@/components/faculty/AlumniTab";
 import { radius } from "@/theme/tokens";
 import {
   CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, LocalFireDepartmentOutlinedIcon,
@@ -51,7 +52,13 @@ interface DeptData {
   };
 }
 
-type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity" | "mentors" | "portfolio" | "placement";
+type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni";
+type Baseline = "view" | "year" | "institution";
+const BASELINES: { value: Baseline; label: string }[] = [
+  { value: "view", label: "This view" },
+  { value: "year", label: "Year-wise" },
+  { value: "institution", label: "Whole department" },
+];
 
 const SEVERITY: Record<string, "error" | "warning" | "info"> = { high: "error", medium: "warning", low: "info" };
 
@@ -60,12 +67,13 @@ export default function DepartmentDashboardPage() {
   const [section, setSection] = React.useState("");
   const [year, setYear] = React.useState("");
   const [mentor, setMentor] = React.useState("");
+  const [percentile, setPercentile] = React.useState<Baseline>("view");
   const [tab, setTab] = React.useState<DeptTab>("overview");
 
   const query = useQuery<DeptData>({
-    queryKey: ["faculty", "department", section, year, mentor],
+    queryKey: ["faculty", "department", section, year, mentor, percentile],
     queryFn: async () => (await api.get("/api/faculty/department", {
-      params: { ...(section ? { section } : {}), ...(year ? { year } : {}), ...(mentor ? { mentor } : {}) },
+      params: { ...(section ? { section } : {}), ...(year ? { year } : {}), ...(mentor ? { mentor } : {}), ...(percentile !== "view" ? { percentile } : {}) },
     })).data.data,
     staleTime: 60_000,
   });
@@ -109,6 +117,11 @@ export default function DepartmentDashboardPage() {
           <MenuItem value="none">No mentor yet{d ? ` (${d.scope.unmentored})` : ""}</MenuItem>
           {(d?.scope.mentors ?? []).map((m) => <MenuItem key={m.id} value={m.id}>{m.name} ({m.mentees})</MenuItem>)}
         </TextField>
+        <TextField
+          select size="small" label="Badges compared against" value={percentile} onChange={(e) => setPercentile(e.target.value as Baseline)} sx={{ minWidth: 220 }}
+        >
+          {BASELINES.map((b) => <MenuItem key={b.value} value={b.value}>{b.label}</MenuItem>)}
+        </TextField>
       </Stack>
 
       {query.isError ? (
@@ -118,13 +131,19 @@ export default function DepartmentDashboardPage() {
       ) : query.isLoading ? (
         <Stack spacing={2}><Skeleton variant="rounded" height={110} /><Skeleton variant="rounded" height={140} /><Skeleton variant="rounded" height={300} /></Stack>
       ) : !d ? null : d.totals.students === 0 ? (
-        <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-          <EmptyState
-            icon={<GroupsOutlinedIcon />}
-            title="No students in this view"
-            description="Try clearing the section or year filter. If your department has no students yet, they appear here once their accounts are created."
-          />
-        </Card>
+        <>
+          <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
+            <EmptyState
+              icon={<GroupsOutlinedIcon />}
+              title="No students in this view"
+              description="Try clearing the section, year or mentor filter. If every student has graduated, they are under Alumni below, where you can restore them."
+            />
+          </Card>
+          <Box sx={{ mt: 3 }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>Alumni</Typography>
+            <AlumniTab />
+          </Box>
+        </>
       ) : (
         <>
           <Tabs
@@ -140,6 +159,7 @@ export default function DepartmentDashboardPage() {
             <Tab value="mentors" label="Mentors" />
             <Tab value="portfolio" label="Portfolio" />
             <Tab value="placement" label="Placement" />
+            <Tab value="alumni" label="Alumni" />
           </Tabs>
 
           {tab === "weekly" && <WeeklyProgressTable students={d.students} />}
@@ -149,6 +169,7 @@ export default function DepartmentDashboardPage() {
           {tab === "mentors" && <MentorsTab />}
           {tab === "portfolio" && <PortfolioTab section={section} year={year} mentor={mentor} />}
           {tab === "placement" && <PlacementTab section={section} year={year} />}
+          {tab === "alumni" && <AlumniTab />}
           {tab === "overview" && (
             <>
           {/* ── Where to look first ── */}

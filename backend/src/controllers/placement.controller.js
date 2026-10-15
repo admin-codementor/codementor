@@ -9,6 +9,7 @@ const {
   validateDrive, isEligible, validateApplicationUpdate, MAX_UPDATES,
 } = require('../utils/placement');
 const { buildPlacementAnalytics } = require('../utils/placementAnalytics');
+const { activeStudents } = require('../utils/students');
 
 const shapeDrive = (d) => ({
   id: d.id, company: d.company, role: d.role || '', date: d.date || null, ctc: d.ctc || '',
@@ -26,7 +27,7 @@ async function scopedDrive(req, res) {
   return drive;
 }
 
-const studentsInDept = async (dept) => [...(await userRepo.getMapByRole('student')).values()]
+const studentsInDept = async (dept) => activeStudents([...(await userRepo.getMapByRole('student')).values()])
   .filter((s) => dept === null || (s.department || null) === dept);
 
 // @route GET /api/faculty/placement/drives

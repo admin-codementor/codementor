@@ -5,6 +5,7 @@ const userRepo = require('../repositories/userRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const { scopeDept } = require('../middleware/role.middleware');
 const { buildActivity, ALLOWED_DAYS } = require('../utils/departmentActivity');
+const { activeStudents } = require('../utils/students');
 
 const TTL_SECONDS = 120;
 const VERSION = 1;
@@ -21,7 +22,7 @@ async function compute({ dept, kind, days }) {
     userRepo.getMapByRole('student'),
     submissionRepo.listAllForAnalytics(),
   ]);
-  const students = [...studentsMap.values()].filter((s) => dept === null || (s.department || null) === dept);
+  const students = activeStudents([...studentsMap.values()]).filter((s) => dept === null || (s.department || null) === dept);
   const ids = new Set(students.map((s) => s.id));
   return buildActivity({ people: students, submissions: submissions.filter((s) => ids.has(s.userId)), days, now: Date.now() });
 }
