@@ -39,6 +39,16 @@ api.interceptors.response.use(
   (res) => res,
   async (error: AxiosError) => {
     const original = error.config as RetriableConfig | undefined;
+    // The server says this session must set a new password first (e.g. the saved profile was out of date).
+    const body = error.response?.data as { code?: string } | undefined;
+    if (error.response?.status === 403 && body?.code === "PASSWORD_CHANGE_REQUIRED" && typeof window !== "undefined") {
+      try {
+        const u = JSON.parse(localStorage.getItem("user") || "null");
+        if (u) localStorage.setItem("user", JSON.stringify({ ...u, must_change_password: true }));
+      } catch { /* a corrupt saved profile: the redirect below still sends them to the right page */ }
+      if (!window.location.pathname.startsWith("/change-password")) window.location.href = "/change-password";
+      return Promise.reject(error);
+    }
     if (!original || error.response?.status !== 401 || original._retry) {
       return Promise.reject(error);
     }

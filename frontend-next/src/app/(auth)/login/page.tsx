@@ -43,7 +43,8 @@ export default function LoginPage() {
 
   const completeLogin = (data: AuthSuccess) => {
     setSession({ accessToken: data.accessToken, refreshToken: data.refreshToken, user: data.user });
-    router.replace(homeForRole(data.user.role));
+    // A roster account signs in with a temporary password and must choose its own before anything else.
+    router.replace(data.user.must_change_password ? "/change-password" : homeForRole(data.user.role));
   };
 
   const errorMessage = (err: unknown) => {

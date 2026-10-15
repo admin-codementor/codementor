@@ -30,6 +30,10 @@ export function AuthGuard({
       router.replace("/login");
       return;
     }
+    if (user.must_change_password) {
+      router.replace("/change-password");
+      return;
+    }
     if (roles && !roles.includes(user.role)) {
       router.replace(homeForRole(getRole()));
       return;

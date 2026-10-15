@@ -4,11 +4,12 @@ const qrcode = require('qrcode');
 const userRepo = require('../repositories/userRepository');
 
 const { resolvePermissions } = require('../middleware/permissions');
+const { gateClaim } = require('../utils/passwordGate');
 
 // Mirror auth.controller.generateTokens exactly: payload { id, role, permissions, department }.
 const generateTokens = (user) => {
   const permissions = resolvePermissions(user);
-  const payload = { id: user.id, role: user.role, permissions, department: user.department ?? null };
+  const payload = { id: user.id, role: user.role, permissions, department: user.department ?? null, ...gateClaim(user) };
   const accessToken  = jwt.sign(payload, process.env.JWT_SECRET,         { expiresIn: '15m' });
   const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
   return { accessToken, refreshToken };
@@ -163,6 +164,7 @@ exports.verify2FA = async (req, res) => {
         email:       user.email,
         role:        user.role,
         permissions: resolvePermissions(user),
+        must_change_password: user.mustChangePassword === true,
       },
     });
   } catch (error) {

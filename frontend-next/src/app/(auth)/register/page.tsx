@@ -32,7 +32,7 @@ const STRENGTH = (pw: string): { label: string; value: number; color: "error" | 
   return { label: "Fair", value: 75, color: "primary" };
 };
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
   const [name, setName] = React.useState("");
   const [email, setEmail] = React.useState("");
@@ -247,6 +247,27 @@ export default function RegisterPage() {
           By registering, you agree to our Terms of Service and Privacy Policy.
         </Typography>
       </Box>
+    </Box>
+  );
+}
+
+// Accounts come from the college roster. Set NEXT_PUBLIC_ALLOW_SELF_SIGNUP=true (and ALLOW_SELF_SIGNUP=true on
+// the backend) to show the sign-up form again.
+export default function RegisterPage() {
+  if (process.env.NEXT_PUBLIC_ALLOW_SELF_SIGNUP === "true") return <RegisterForm />;
+  return (
+    <Box component="main" sx={{ minHeight: "100dvh", display: "grid", placeItems: "center", p: 3, bgcolor: "background.default" }}>
+      <Paper variant="outlined" sx={{ width: "100%", maxWidth: 440, p: { xs: 3, sm: 4 }, borderRadius: `${shape.extraLarge}px`, borderColor: "outlineVariant" }}>
+        <Stack spacing={2}>
+          <Typography variant="h4" component="h1" fontWeight={600}>Accounts are created for you</Typography>
+          <Typography variant="body2" color="text.secondary">
+            Your department adds every student from the college roll list, so there is nothing to sign up for. Sign in with your
+            college email (your roll number followed by @sreyas.ac.in) and the temporary password you were given. You will choose
+            your own password the first time.
+          </Typography>
+          <Button component={NextLink} href="/login" variant="contained">Go to sign in</Button>
+        </Stack>
+      </Paper>
     </Box>
   );
 }

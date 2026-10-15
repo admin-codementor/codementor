@@ -4,11 +4,12 @@ const { firebaseAuth } = require('../config/firebaseAdmin');
 const userRepo = require('../repositories/userRepository');
 
 const { resolvePermissions } = require('../middleware/permissions');
+const { gateClaim } = require('../utils/passwordGate');
 
 // Mirror auth.controller.generateTokens exactly: payload { id, role, permissions, department }.
 const generateTokens = (user) => {
   const permissions = resolvePermissions(user);
-  const payload = { id: user.id, role: user.role, permissions, department: user.department ?? null };
+  const payload = { id: user.id, role: user.role, permissions, department: user.department ?? null, ...gateClaim(user) };
   const accessToken  = jwt.sign(payload, process.env.JWT_SECRET,         { expiresIn: '1h' });
   const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
   return { accessToken, refreshToken };
@@ -40,6 +41,10 @@ const FACULTY_EMAIL_DOMAINS = (process.env.FACULTY_EMAIL_DOMAINS || '')
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean);
 
+// Self sign-up (a verified Firebase login with no profile creates a student) is OFF by default.
+// Set ALLOW_SELF_SIGNUP=true to turn it back on.
+const SELF_SIGNUP_ALLOWED = String(process.env.ALLOW_SELF_SIGNUP || '').toLowerCase() === 'true';
+
 const isFacultyEmail = (email) => {
   if (FACULTY_EMAIL_DOMAINS.length === 0) return false;
   const domain = String(email).toLowerCase().split('@')[1] || '';
@@ -56,6 +61,8 @@ const isFacultyEmail = (email) => {
 // access/refresh tokens so every existing `protect`-gated route keeps working
 // unchanged. Firestore is now the sole store for user data — no Postgres
 // row is created or read anywhere in this flow.
+exports.generateTokens = generateTokens;
+
 exports.firebaseLogin = async (req, res) => {
   try {
     const { id_token, name, role, department, section, year, roll_no } = req.body;
@@ -84,6 +91,12 @@ exports.firebaseLogin = async (req, res) => {
       if (user) {
         await userRepo.update(user.id, user.role, { firebaseUid: uid });
         user.firebaseUid = uid;
+      } else if (!SELF_SIGNUP_ALLOWED) {
+        // Accounts come from the college roster. A valid Firebase login with no profile is not enough.
+        return res.status(403).json({
+          success: false, code: 'ACCOUNT_NOT_FOUND',
+          error: 'No account exists for this email. Ask your department to add you, then try again.',
+        });
       } else {
         const displayName = (typeof name === 'string' && name.trim()) || decoded.name || email.split('@')[0];
 
@@ -132,6 +145,7 @@ exports.firebaseLogin = async (req, res) => {
         email:       user.email,
         role:        user.role,
         permissions: resolvePermissions(user),
+        must_change_password: user.mustChangePassword === true,
       },
       ...tokens,
     });
