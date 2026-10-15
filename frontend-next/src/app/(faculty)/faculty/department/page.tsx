@@ -31,6 +31,7 @@ import { MentorsTab } from "@/components/faculty/MentorsTab";
 import { PortfolioTab } from "@/components/faculty/PortfolioTab";
 import { PlacementTab } from "@/components/faculty/PlacementTab";
 import { AlumniTab } from "@/components/faculty/AlumniTab";
+import { LabsTab } from "@/components/faculty/LabsTab";
 import { radius } from "@/theme/tokens";
 import {
   CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, LocalFireDepartmentOutlinedIcon,
@@ -52,7 +53,7 @@ interface DeptData {
   };
 }
 
-type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni";
+type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni" | "labs";
 type Baseline = "view" | "year" | "institution";
 const BASELINES: { value: Baseline; label: string }[] = [
   { value: "view", label: "This view" },
@@ -159,6 +160,7 @@ export default function DepartmentDashboardPage() {
             <Tab value="mentors" label="Mentors" />
             <Tab value="portfolio" label="Portfolio" />
             <Tab value="placement" label="Placement" />
+            <Tab value="labs" label="Labs" />
             <Tab value="alumni" label="Alumni" />
           </Tabs>
 
@@ -169,6 +171,7 @@ export default function DepartmentDashboardPage() {
           {tab === "mentors" && <MentorsTab />}
           {tab === "portfolio" && <PortfolioTab section={section} year={year} mentor={mentor} />}
           {tab === "placement" && <PlacementTab section={section} year={year} />}
+          {tab === "labs" && <LabsTab />}
           {tab === "alumni" && <AlumniTab />}
           {tab === "overview" && (
             <>

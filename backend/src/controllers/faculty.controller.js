@@ -22,6 +22,7 @@ const courseAnalyticsService = require('../services/courseAnalyticsService');
 const departmentAnalyticsService = require('../services/departmentAnalyticsService');
 const departmentLeaderboardService = require('../services/departmentLeaderboardService');
 const departmentActivityService = require('../services/departmentActivityService');
+const labsService = require('../services/labsService');
 const departmentInsightsService = require('../services/departmentInsightsService');
 const portfolioService = require('../services/portfolioService');
 const portfolioRepo = require('../repositories/portfolioRepository');
@@ -2081,6 +2082,16 @@ exports.getDepartmentActivity = async (req, res) => {
   } catch (error) {
     console.error('Department activity error:', error);
     res.status(500).json({ success: false, error: 'Failed to load department activity.' });
+  }
+};
+
+// @route GET /api/faculty/labs (HOD/admin) — the department's classes and their assignments, read-only.
+exports.getLabs = async (req, res) => {
+  try {
+    res.json({ success: true, data: await labsService.getLabs(req) });
+  } catch (error) {
+    console.error('Labs error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load labs.' });
   }
 };
 

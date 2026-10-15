@@ -29,6 +29,7 @@ const SUITES = {
   hodFeatures: require('./suites/hodFeatures'),
   hodPlacement: require('./suites/hodPlacement'),
   hodAlumni: require('./suites/hodAlumni'),
+  hodLabs: require('./suites/hodLabs'),
 };
 
 const C = {

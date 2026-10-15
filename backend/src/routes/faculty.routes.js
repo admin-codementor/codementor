@@ -63,6 +63,8 @@ router.put('/alumni/graduation', authorize('hod', 'admin'), alumniController.set
 router.get('/mentors', authorize('hod', 'admin'), mentorController.listMentors);
 router.put('/mentors/assign', authorize('hod', 'admin'), mentorController.assignMentees);
 router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, facultyController.getDepartmentInsights);
+// Labs: the department's classes and assignment completion; read-only, HOD/admin, department from the token.
+router.get('/labs', authorize('hod', 'admin'), facultyController.getLabs);
 router.get('/department/activity', authorize('hod', 'admin'), facultyController.getDepartmentActivity);
 router.get('/department-leaderboard', authorize('hod', 'admin'), facultyController.getDepartmentLeaderboard);
 router.get('/cohort-topics', facultyController.getCohortTopics);
