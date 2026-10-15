@@ -29,6 +29,7 @@ import { DepartmentActivity } from "@/components/faculty/DepartmentActivity";
 import { DepartmentInsights } from "@/components/faculty/DepartmentInsights";
 import { MentorsTab } from "@/components/faculty/MentorsTab";
 import { PortfolioTab } from "@/components/faculty/PortfolioTab";
+import { PlacementTab } from "@/components/faculty/PlacementTab";
 import { radius } from "@/theme/tokens";
 import {
   CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, LocalFireDepartmentOutlinedIcon,
@@ -50,7 +51,7 @@ interface DeptData {
   };
 }
 
-type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity" | "mentors" | "portfolio";
+type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity" | "mentors" | "portfolio" | "placement";
 
 const SEVERITY: Record<string, "error" | "warning" | "info"> = { high: "error", medium: "warning", low: "info" };
 
@@ -138,6 +139,7 @@ export default function DepartmentDashboardPage() {
             <Tab value="activity" label="Activity" />
             <Tab value="mentors" label="Mentors" />
             <Tab value="portfolio" label="Portfolio" />
+            <Tab value="placement" label="Placement" />
           </Tabs>
 
           {tab === "weekly" && <WeeklyProgressTable students={d.students} />}
@@ -146,6 +148,7 @@ export default function DepartmentDashboardPage() {
           {tab === "activity" && <DepartmentActivity />}
           {tab === "mentors" && <MentorsTab />}
           {tab === "portfolio" && <PortfolioTab section={section} year={year} mentor={mentor} />}
+          {tab === "placement" && <PlacementTab section={section} year={year} />}
           {tab === "overview" && (
             <>
           {/* ── Where to look first ── */}

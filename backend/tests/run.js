@@ -27,6 +27,7 @@ const SUITES = {
   analyticsAi: require('./suites/analyticsAndAi'),
   groupsDepartment: require('./suites/groupsAndDepartment'),
   hodFeatures: require('./suites/hodFeatures'),
+  hodPlacement: require('./suites/hodPlacement'),
 };
 
 const C = {

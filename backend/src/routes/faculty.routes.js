@@ -7,6 +7,7 @@ const facultyController = require('../controllers/faculty.controller');
 const plagiarismController = require('../controllers/plagiarism.controller');
 const groupController = require('../controllers/studentGroup.controller');
 const mentorController = require('../controllers/mentor.controller');
+const placementController = require('../controllers/placement.controller');
 const { logAction } = require('../middleware/audit');
 const userRepo = require('../repositories/userRepository');
 const auditLogRepo = require('../repositories/auditLogRepository');
@@ -47,6 +48,14 @@ router.get('/department', authorize('hod', 'admin'), facultyController.getDepart
 // Aggregates only: a head may compare departments, never see another department's students.
 // Mentor mapping: HOD/admin only, and an HOD is confined to their own department by the token.
 router.get('/portfolio', authorize('hod', 'admin'), facultyController.getPortfolioOverview);
+// Placement drives, applications and analytics: HOD/admin only; an HOD is confined to their own department.
+router.get('/placement/drives', authorize('hod', 'admin'), placementController.listDrives);
+router.post('/placement/drives', authorize('hod', 'admin'), placementController.createDrive);
+router.get('/placement/drives/:id', authorize('hod', 'admin'), placementController.getDrive);
+router.patch('/placement/drives/:id', authorize('hod', 'admin'), placementController.updateDrive);
+router.delete('/placement/drives/:id', authorize('hod', 'admin'), placementController.deleteDrive);
+router.put('/placement/drives/:id/applications', authorize('hod', 'admin'), placementController.saveApplications);
+router.get('/placement/analytics', authorize('hod', 'admin'), placementController.getAnalytics);
 router.get('/mentors', authorize('hod', 'admin'), mentorController.listMentors);
 router.put('/mentors/assign', authorize('hod', 'admin'), mentorController.assignMentees);
 router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, facultyController.getDepartmentInsights);
