@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, AssignmentOutlinedIcon, TimerOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon, FormatListBulletedOutlinedIcon, HistoryOutlinedIcon, WaypointsIcon, HomeOutlinedIcon } from "@/components/ui/icons";
+import { SpaceDashboardOutlinedIcon, MenuBookOutlinedIcon, AssignmentOutlinedIcon, TimerOutlinedIcon, WorkOutlineOutlinedIcon, LeaderboardOutlinedIcon, SmartToyOutlinedIcon, CodeOutlinedIcon, FormatListBulletedOutlinedIcon, HistoryOutlinedIcon, WaypointsIcon, HomeOutlinedIcon, MailOutlineIcon } from "@/components/ui/icons";
 import { usePathname } from "next/navigation";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
@@ -37,6 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   // matches what the page is now called.
   { label: "Job-Ready", href: "/app/placement", icon: <WorkOutlineOutlinedIcon />, section: "Progress" },
   { label: "AI Tutor", href: "/app/ai-tutor", icon: <SmartToyOutlinedIcon />, section: "Assistant" },
+  { label: "Messages", href: "/app/messages", icon: <MailOutlineIcon />, section: "Assistant" },
 ];
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {

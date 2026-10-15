@@ -30,6 +30,7 @@ const SUITES = {
   hodPlacement: require('./suites/hodPlacement'),
   hodAlumni: require('./suites/hodAlumni'),
   hodLabs: require('./suites/hodLabs'),
+  messages: require('./suites/messages'),
 };
 
 const C = {
