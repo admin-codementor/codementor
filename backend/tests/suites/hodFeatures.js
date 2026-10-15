@@ -3,14 +3,16 @@
 //   H4 department activity (who is active / at risk, last seen).
 //   H5 AI insights (the provider must only ever see aggregates).
 //   H6 mentor mapping, mentor leaderboard and the dashboard mentor filter.
+//   H7 student portfolio and the department completeness view.
 // Pure checks run against fixtures with a fixed clock; API checks cover role
 // gating and that nothing identifying leaves a department.
-const { tokenFor, get, post, put, Suite, capabilities, db } = require('../harness');
+const { tokenFor, userId, get, post, put, patch, del, Suite, capabilities, db, purge } = require('../harness');
 const { DAY_MS } = require('../../src/utils/studentState');
 const { buildDepartmentLeaderboard, MIN_RANKED_STUDENTS } = require('../../src/utils/departmentLeaderboard');
 const { buildActivity } = require('../../src/utils/departmentActivity');
 const { summarise, buildPrompt, sanitiseInsights, MAX_INSIGHTS } = require('../../src/utils/departmentInsightsPrompt');
 const { buildMentorBoard, checkAssignment, MAX_ASSIGN } = require('../../src/utils/mentors');
+const { validateItem, buildPortfolioOverview, MAX_TITLE, MAX_DETAIL } = require('../../src/utils/portfolio');
 
 const now = Date.UTC(2026, 9, 1, 12, 0, 0);
 
@@ -154,12 +156,54 @@ function mentorsPure(s) {
   s.check('assign: an admin may pair across departments', checkAssignment({ mentor: { role: 'faculty', department: 'ECE' }, students: [inCse], requesterRole: 'admin', requesterDepartment: null }) === null);
 }
 
+function portfolioPure(s) {
+  const ok = (o) => validateItem({ type: 'certification', title: 'AWS Cloud Practitioner', ...o }, now);
+  s.check('portfolio: a minimal valid entry is accepted', !!ok({}).item);
+  s.check('portfolio: the title is trimmed and whitespace collapsed', ok({ title: '  A   B  ' }).item.title === 'A B');
+  s.check('portfolio: an unknown type is rejected', !!validateItem({ type: 'hobby', title: 'Chess' }).error);
+  s.check('portfolio: a missing or one-character title is rejected', !!ok({ title: '' }).error && !!ok({ title: 'x' }).error);
+  s.check(`portfolio: a title over ${MAX_TITLE} characters is rejected`, !!ok({ title: 'x'.repeat(MAX_TITLE + 1) }).error);
+  s.check(`portfolio: details over ${MAX_DETAIL} characters are rejected`, !!ok({ detail: 'x'.repeat(MAX_DETAIL + 1) }).error);
+  s.check('portfolio: a real date is accepted and kept', ok({ date: '2026-03-14' }).item.date === '2026-03-14');
+  s.check('portfolio: a malformed date is rejected', !!ok({ date: '14/03/2026' }).error);
+  s.check('portfolio: an impossible date (31 February) is rejected', !!ok({ date: '2026-02-31' }).error);
+  s.check('portfolio: a date well in the future is rejected', !!ok({ date: '2030-01-01' }).error);
+  s.check('portfolio: an https link is accepted', ok({ link: 'https://example.com/cert/1' }).item.link === 'https://example.com/cert/1');
+  s.check('portfolio: a javascript: link is rejected (it would be an XSS vector)', !!ok({ link: 'javascript:alert(1)' }).error);
+  s.check('portfolio: data: and ftp: links are rejected', !!ok({ link: 'data:text/html,hi' }).error && !!ok({ link: 'ftp://x.test/a' }).error);
+  s.check('portfolio: text that is not a link is rejected', !!ok({ link: 'not a link' }).error);
+  s.check('portfolio: empty optional fields become null, not empty strings', (() => { const i = ok({ date: '', link: '' }).item; return i.date === null && i.link === null; })());
+  s.check('portfolio: a non-object body is rejected', !!validateItem(null).error && !!validateItem('x').error);
+
+  const students = [
+    { id: 'a', name: 'A', section: 'A', year: 3, mentorId: 'm1' }, { id: 'b', name: 'B', section: 'A', year: 3, mentorId: null },
+    { id: 'c', name: 'C', section: 'B', year: 2, mentorId: 'm1' }, { id: 'd', name: 'D', section: 'B', year: 2, mentorId: null },
+  ];
+  const items = [
+    { userId: 'a', type: 'certification' }, { userId: 'a', type: 'certification' }, { userId: 'a', type: 'project' }, { userId: 'a', type: 'achievement' },
+    { userId: 'b', type: 'certification' }, { userId: 'b', type: 'certification' }, { userId: 'b', type: 'certification' }, // many, but one type
+    { userId: 'c', type: 'project' }, { userId: 'c', type: 'achievement' },
+    { userId: 'outsider', type: 'project' },
+  ];
+  const o = buildPortfolioOverview({ students, items, mentorNames: new Map([['m1', 'Mira']]) });
+  const band = (k) => o.bands.find((b) => b.key === k).count;
+  s.check('portfolio: bands are counted by types covered, not by item count', band('none') === 1 && band('one') === 1 && band('two') === 1 && band('all') === 1, JSON.stringify(o.bands));
+  s.check('portfolio: the four bands add up to the students', o.bands.reduce((n, b) => n + b.count, 0) === students.length);
+  s.check('portfolio: ten certificates and nothing else is still one type', o.records.find((r) => r.id === 'b').types === 1);
+  s.check('portfolio: items of students outside the view are not counted', o.totals.items === 9, String(o.totals.items));
+  s.check('portfolio: records list the emptiest students first', o.records[0].id === 'd' && o.records[0].types === 0);
+  s.check('portfolio: the gap table is worst first (share with nothing)', o.gaps.section[0].label === 'Section B' && o.gaps.section[0].nothing_pct === 50, JSON.stringify(o.gaps.section));
+  s.check('portfolio: gaps can be grouped by mentor, with a "No mentor" group', o.gaps.mentor.some((g) => g.label === 'Mira') && o.gaps.mentor.some((g) => g.label === 'No mentor'));
+  s.check('portfolio: an empty department does not throw', (() => { try { return buildPortfolioOverview({ students: [], items: [] }).totals.students === 0; } catch { return false; } })());
+}
+
 module.exports = async function hodFeaturesSuite() {
   const s = new Suite('HOD features');
   leaderboardPure(s);
   activityPure(s);
   insightsPure(s);
   mentorsPure(s);
+  portfolioPure(s);
 
   // ── H3: who may open it, and what it reveals ───────────────────────────────
   const BOARD = '/api/faculty/department-leaderboard';
@@ -297,6 +341,59 @@ module.exports = async function hodFeaturesSuite() {
   const monthly = await get(`${MENT}?period=monthly`, head);
   s.check('mentors: the monthly period is accepted', monthly.status === 200 && monthly.body?.data?.period === 'monthly');
   s.check('mentors: an unknown period falls back to overall', (await get(`${MENT}?period=weekly`, head)).body?.data?.period === 'overall');
+
+  // ── H7: portfolio, over the API ────────────────────────────────────────────
+  const PORT = '/api/student/portfolio';
+  const stuTok = (n) => tokenFor(`pstu-${n}`, 'student', { department: D });
+  s.onCleanup(async () => { await purge('portfolioItems', 'userId', [1, 2, 3].map((n) => userId(`pstu-${n}`))); }, 'temporary portfolio entries');
+  for (const n of [1, 2, 3]) await mk('students', userId(`pstu-${n}`), { name: `Smoke Portfolio ${n}`, role: 'student', department: D, section: 'P', year: 2 });
+
+  s.check('portfolio: unauthenticated → 401', (await get(PORT)).status === 401);
+  s.check('portfolio: faculty cannot use the student endpoints → 403', (await get(PORT, tokenFor('hod-faculty', 'faculty'))).status === 403);
+  s.check('portfolio: an HOD cannot use the student endpoints → 403', (await post(PORT, head, { type: 'project', title: 'x1' })).status === 403);
+
+  s.check('portfolio: an unknown type → 400', (await post(PORT, stuTok(1), { type: 'hobby', title: 'Chess' })).status === 400);
+  s.check('portfolio: a javascript: link → 400', (await post(PORT, stuTok(1), { type: 'project', title: 'Site', link: 'javascript:alert(1)' })).status === 400);
+  s.check('portfolio: a missing title → 400', (await post(PORT, stuTok(1), { type: 'project', title: ' ' })).status === 400);
+
+  const c1 = await post(PORT, stuTok(1), { type: 'certification', title: 'Smoke Cert', detail: 'issuer', date: '2026-01-10', link: 'https://example.com/c' });
+  s.check('portfolio: a student adds a certification', c1.status === 201 && c1.body?.data?.title === 'Smoke Cert', `status ${c1.status}`);
+  const p1 = await post(PORT, stuTok(1), { type: 'project', title: 'Smoke Project' });
+  const a1 = await post(PORT, stuTok(1), { type: 'achievement', title: 'Smoke Award' });
+  await post(PORT, stuTok(2), { type: 'certification', title: 'Only Cert' });
+  s.check('portfolio: all three entries for student 1 saved', p1.status === 201 && a1.status === 201);
+
+  const mine = await get(PORT, stuTok(1));
+  s.check('portfolio: a student lists their own entries', mine.status === 200 && mine.body?.data?.length === 3, String(mine.body?.data?.length));
+  s.check('portfolio: another student sees none of them', (await get(PORT, stuTok(3))).body?.data?.length === 0);
+
+  const cid = c1.body?.data?.id;
+  const edited = await patch(`${PORT}/${cid}`, stuTok(1), { title: 'Smoke Cert Renamed' });
+  s.check('portfolio: the owner edits an entry', edited.status === 200 && edited.body?.data?.title === 'Smoke Cert Renamed', `status ${edited.status}`);
+  s.check('portfolio: editing keeps the entry type', edited.body?.data?.type === 'certification');
+  s.check('portfolio: another student cannot edit it (looks missing → 404)', (await patch(`${PORT}/${cid}`, stuTok(2), { title: 'hijack' })).status === 404);
+  s.check('portfolio: another student cannot delete it → 404', (await del(`${PORT}/${cid}`, stuTok(2))).status === 404);
+  s.check('portfolio: an invalid edit is rejected and changes nothing', (await patch(`${PORT}/${cid}`, stuTok(1), { link: 'ftp://nope' })).status === 400
+    && (await get(PORT, stuTok(1))).body.data.some((i) => i.title === 'Smoke Cert Renamed'));
+
+  // ── H7: what the HOD sees ──────────────────────────────────────────────────
+  const POV = '/api/faculty/portfolio';
+  s.check('portfolio overview: student → 403', (await get(POV, tokenFor('hod-student', 'student'))).status === 403);
+  s.check('portfolio overview: faculty → 403', (await get(POV, tokenFor('hod-faculty', 'faculty'))).status === 403);
+  const ov = await get(`${POV}?section=P`, head);
+  s.check('portfolio overview: HOD → 200', ov.status === 200, `status ${ov.status}`);
+  const bandOf = (k) => ov.body?.data?.bands?.find((b) => b.key === k)?.count;
+  s.check('portfolio overview: student 1 covers all three types, student 2 one, student 3 none', bandOf('all') === 1 && bandOf('one') === 1 && bandOf('none') === 1 && bandOf('two') === 0, JSON.stringify(ov.body?.data?.bands));
+  s.check('portfolio overview: records carry counts per type, not entry text', (ov.body?.data?.records || []).every((r) => 'certifications' in r && !('title' in r)));
+  s.check('portfolio overview: the emptiest student is listed first', ov.body?.data?.records?.[0]?.types === 0);
+  const detail = await get(`/api/faculty/students/${userId('pstu-1')}/detail`, head);
+  s.check('student profile (faculty view) lists the portfolio entries', detail.status === 200 && detail.body?.data?.portfolio?.length === 3, `status ${detail.status}`);
+  const outside = await get(`/api/faculty/students/${userId('pstu-1')}/detail`, tokenFor('other-hod', 'hod', { department: 'SMOKEOTHER' }));
+  s.check('student profile: another department HOD cannot read it', outside.status === 403 || outside.status === 404, `status ${outside.status}`);
+
+  const delOk = await del(`${PORT}/${cid}`, stuTok(1));
+  s.check('portfolio: the owner deletes an entry', delOk.status === 200);
+  s.check('portfolio: it is gone afterwards', (await get(PORT, stuTok(1))).body.data.length === 2);
 
   return s;
 };

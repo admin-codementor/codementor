@@ -40,7 +40,7 @@ import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal, RevealGroup, RevealItem } from "@/components/ui/motion";
 import { CODING_PLATFORM_META } from "@/lib/codingPlatforms";
-import { radius } from "@/theme/tokens";
+import { radius, typeScale } from "@/theme/tokens";
 import { StatusBanner, type StatusInfo } from "@/components/analytics/StatusFlag";
 import { ThresholdsDialog } from "@/components/analytics/ThresholdsDialog";
 import {
@@ -96,6 +96,7 @@ interface StudentProfile {
   exams: ExamRow[];
   examSummary: { taken: number; available: number; avg_percent: number | null };
   courses: CourseRow[];
+  portfolio: { id: string; type: "certification" | "project" | "achievement"; title: string; detail: string; date: string | null; link: string | null }[];
   highlights: {
     topTopic: string | null;
     weakTopic: string | null;
@@ -253,6 +254,29 @@ export default function StudentProfilePage() {
             <Reveal><CourseProgressCard courses={data.courses ?? []} /></Reveal>
             <Reveal><ExamHistoryCard exams={data.exams ?? []} summary={data.examSummary ?? { taken: 0, available: 0, avg_percent: null }} /></Reveal>
           </Box>
+
+          <Reveal>
+            <SectionCard title="Portfolio" icon={<HubOutlinedIcon sx={{ fontSize: 20, color: "text.secondary" }} />}>
+              {(data.portfolio ?? []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                  This student has not added any certifications, projects or achievements yet.
+                </Typography>
+              ) : (
+                <Stack spacing={1.25}>
+                  {data.portfolio.map((i) => (
+                    <Stack key={i.id} direction="row" spacing={1.5} alignItems="flex-start">
+                      <Chip size="small" label={i.type} sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize" }} />
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" fontWeight={500}>{i.title}</Typography>
+                        {i.detail && <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>{i.detail}</Typography>}
+                        {i.link && <Typography variant="caption" component="a" href={i.link} target="_blank" rel="noopener noreferrer" sx={{ color: "primary.main" }}>View link</Typography>}
+                      </Box>
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
+            </SectionCard>
+          </Reveal>
 
           {/* Strengths & weaknesses */}
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3 }}>

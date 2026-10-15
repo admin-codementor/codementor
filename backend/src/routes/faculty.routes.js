@@ -46,6 +46,7 @@ router.get('/analytics',  authorize('admin'), facultyController.getClassAnalytic
 router.get('/department', authorize('hod', 'admin'), facultyController.getDepartmentAnalytics);
 // Aggregates only: a head may compare departments, never see another department's students.
 // Mentor mapping: HOD/admin only, and an HOD is confined to their own department by the token.
+router.get('/portfolio', authorize('hod', 'admin'), facultyController.getPortfolioOverview);
 router.get('/mentors', authorize('hod', 'admin'), mentorController.listMentors);
 router.put('/mentors/assign', authorize('hod', 'admin'), mentorController.assignMentees);
 router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, facultyController.getDepartmentInsights);

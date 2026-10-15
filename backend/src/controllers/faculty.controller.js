@@ -23,6 +23,8 @@ const departmentAnalyticsService = require('../services/departmentAnalyticsServi
 const departmentLeaderboardService = require('../services/departmentLeaderboardService');
 const departmentActivityService = require('../services/departmentActivityService');
 const departmentInsightsService = require('../services/departmentInsightsService');
+const portfolioService = require('../services/portfolioService');
+const portfolioRepo = require('../repositories/portfolioRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 
@@ -1664,13 +1666,14 @@ exports.getStudentDetail = async (req, res) => {
 // Runs every query for one student's full profile bundle. Pulled out of the route
 // handler so the (department-check-free) result can be Redis-cached by id alone.
 async function buildStudentProfile(id, student) {
-  const [subs, ratingRows, masteryRes, codingProfilesRes, allExams, allCourses] = await Promise.all([
+  const [subs, ratingRows, masteryRes, codingProfilesRes, allExams, allCourses, portfolioItems] = await Promise.all([
     submissionRepo.listByUser(id),
     ratingHistoryRepo.listByUser(id),
     topicMasteryRepo.listByUser(id),
     codingProfileRepo.listByUser(id),
     examRepo.listPublished(),
     courseRepo.listAll(),
+    portfolioRepo.listByUser(id),
   ]);
   const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
   const subDate = (s) => s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
@@ -1893,6 +1896,9 @@ async function buildStudentProfile(id, student) {
     exams,
     examSummary,
     courses,
+    portfolio: portfolioItems.map((i) => ({
+      id: i.id, type: i.type, title: i.title, detail: i.detail || '', date: i.date || null, link: i.link || null,
+    })),
     highlights: {
       topTopic,
       weakTopic,
@@ -2098,6 +2104,21 @@ exports.getDepartmentInsights = async (req, res) => {
     }
     console.error('Department insights error:', error);
     res.status(500).json({ success: false, error: 'Failed to generate insights.' });
+  }
+};
+
+// @route GET /api/faculty/portfolio?section&year&mentor (HOD/admin)
+// How complete the department's portfolios are, counted by types covered, never a score.
+exports.getPortfolioOverview = async (req, res) => {
+  try {
+    const clean = (v, n) => String(v || '').trim().slice(0, n) || null;
+    const data = await portfolioService.getOverview(req, {
+      section: clean(req.query.section, 40), year: clean(req.query.year, 10), mentor: clean(req.query.mentor, 80),
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Portfolio overview error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load portfolio completeness.' });
   }
 };
 

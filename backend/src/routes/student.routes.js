@@ -21,6 +21,8 @@ const { setActiveRoadmap } = require('../controllers/roadmaps.controller');
 const { getJobReadiness } = require('../controllers/jobReadiness.controller');
 const { getSettings, updateSettings } = require('../controllers/publicProfile.controller');
 const { protect } = require('../middleware/auth.middleware');
+const { authorize } = require('../middleware/role.middleware');
+const portfolio = require('../controllers/portfolio.controller');
 
 const router = express.Router();
 
@@ -50,5 +52,12 @@ router.put('/active-roadmap', setActiveRoadmap);
 // /api/public/profile/:handle, which takes no token.
 router.get('/public-profile', getSettings);
 router.put('/public-profile', updateSettings);
+
+// A student's own portfolio (certifications, projects, achievements). Students only,
+// and every handler scopes to the caller's own id.
+router.get('/portfolio', authorize('student'), portfolio.list);
+router.post('/portfolio', authorize('student'), portfolio.create);
+router.patch('/portfolio/:id', authorize('student'), portfolio.update);
+router.delete('/portfolio/:id', authorize('student'), portfolio.remove);
 
 module.exports = router;
