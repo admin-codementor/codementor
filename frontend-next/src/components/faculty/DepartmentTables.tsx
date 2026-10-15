@@ -35,7 +35,7 @@ type Dir = "asc" | "desc";
 const PAGE = 25;
 
 /** Search + sort + paginate, shared by both tables so they behave identically. */
-function useTable<T, K extends string>(rows: T[], searchText: (r: T) => string, sorters: Record<K, (r: T) => number | string>, initial: { by: K; dir: Dir }) {
+export function useTable<T, K extends string>(rows: T[], searchText: (r: T) => string, sorters: Record<K, (r: T) => number | string>, initial: { by: K; dir: Dir }) {
   const [q, setQ] = React.useState("");
   const [sort, setSort] = React.useState(initial);
   const [page, setPage] = React.useState(0);
@@ -59,7 +59,7 @@ function useTable<T, K extends string>(rows: T[], searchText: (r: T) => string, 
   };
 }
 
-function Head<K extends string>({ id, label, sort, toggle, align }: {
+export function Head<K extends string>({ id, label, sort, toggle, align }: {
   id: K; label: string; sort: { by: K; dir: Dir }; toggle: (k: K) => void; align?: "right";
 }) {
   const active = sort.by === id;
@@ -70,10 +70,10 @@ function Head<K extends string>({ id, label, sort, toggle, align }: {
   );
 }
 
-const headRow = { "& th": { color: "text.secondary", fontWeight: 600, borderColor: "outlineVariant" } };
-const bodyRow = { cursor: "pointer", "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } };
+export const headRow = { "& th": { color: "text.secondary", fontWeight: 600, borderColor: "outlineVariant" } };
+export const bodyRow = { cursor: "pointer", "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } };
 
-function Pager({ count, page, onPage }: { count: number; page: number; onPage: (p: number) => void }) {
+export function Pager({ count, page, onPage }: { count: number; page: number; onPage: (p: number) => void }) {
   return (
     <TablePagination
       component="div" count={count} page={page} rowsPerPage={PAGE} rowsPerPageOptions={[PAGE]}
@@ -184,7 +184,7 @@ export function WeeklyProgressTable({ students }: { students: DeptStudent[] }) {
   );
 }
 
-const MEDAL: Record<number, { bg: string; fg: string }> = {
+export const MEDAL: Record<number, { bg: string; fg: string }> = {
   1: { bg: "tertiaryContainer", fg: "onTertiaryContainer" },
   2: { bg: "secondaryContainer", fg: "onSecondaryContainer" },
   3: { bg: "surfaceContainerHighest", fg: "onSurfaceVariant" },

@@ -12,6 +12,14 @@ const auditLogRepo = require('../repositories/auditLogRepository');
 
 const router = express.Router();
 
+// Every insights call can spend AI quota (results are cached 10 minutes server-side).
+const insightsLimiter = createLimiter({
+  windowMs: 60 * 1000,
+  max: 6,
+  prefix: 'ai:dept-insights',
+  message: 'Too many insight requests. Please wait a minute.',
+});
+
 router.use(protect);
 router.use(facultyStaff);
 
@@ -27,11 +35,18 @@ const plagiarismLimiter = createLimiter({
 
 // ── Read-only dashboard endpoints (no extra permission needed) ───────────────
 router.get('/dashboard',  facultyController.getDashboardData);
-router.get('/analytics',  facultyController.getClassAnalytics);
+// Admin only: this legacy endpoint aggregates EVERY department and returns top
+// students by name, which a faculty or HOD token must not be able to read. No
+// screen calls it (the analytics pages use /analytics/overview and friends).
+router.get('/analytics',  authorize('admin'), facultyController.getClassAnalytics);
 // HOD/admin only. A `faculty` token is scoped to its own CLASSES everywhere else
 // (resolveAnalyticsScope), so serving it a whole-department roster here would
 // quietly widen what a class teacher can see.
 router.get('/department', authorize('hod', 'admin'), facultyController.getDepartmentAnalytics);
+// Aggregates only: a head may compare departments, never see another department's students.
+router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, facultyController.getDepartmentInsights);
+router.get('/department/activity', authorize('hod', 'admin'), facultyController.getDepartmentActivity);
+router.get('/department-leaderboard', authorize('hod', 'admin'), facultyController.getDepartmentLeaderboard);
 router.get('/cohort-topics', facultyController.getCohortTopics);
 // Hierarchical drill-down (department-scoped for HOD/faculty; admin = all).
 router.get('/analytics/cohorts', facultyController.getCohorts);

@@ -20,6 +20,9 @@ const mcqRepo = require('../repositories/mcqRepository');
 const analytics = require('../services/analyticsService');
 const courseAnalyticsService = require('../services/courseAnalyticsService');
 const departmentAnalyticsService = require('../services/departmentAnalyticsService');
+const departmentLeaderboardService = require('../services/departmentLeaderboardService');
+const departmentActivityService = require('../services/departmentActivityService');
+const departmentInsightsService = require('../services/departmentInsightsService');
 const submissionRepo = require('../repositories/submissionRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 
@@ -2062,6 +2065,53 @@ exports.getFacultyCourseDetail = async (req, res) => {
 // HOD/department dashboard: student-state funnel, flags, section comparison,
 // badge ladder and written insights. Department comes from the caller's token
 // (scopeDept), never the query string.
+// @route GET /api/faculty/department/activity?kind=students|faculty&days=7|30|90 (HOD/admin)
+exports.getDepartmentActivity = async (req, res) => {
+  try {
+    const data = await departmentActivityService.getDepartmentActivity(req, {
+      kind: req.query.kind, days: parseInt(req.query.days, 10) || 7,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Department activity error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load department activity.' });
+  }
+};
+
+// @route POST /api/faculty/department/insights (HOD/admin) body { section?, year? }
+// Written recommendations from an AI provider that only ever sees aggregate numbers.
+exports.getDepartmentInsights = async (req, res) => {
+  try {
+    if (!aiGateway.isConfigured()) {
+      return res.status(503).json({ success: false, error: 'No AI provider is configured, so insights cannot be generated.' });
+    }
+    const section = String(req.body?.section || '').trim().slice(0, 40) || null;
+    const year = String(req.body?.year || '').trim().slice(0, 10) || null;
+    const data = await departmentInsightsService.getInsights(req, { section, year });
+    logAction(req, 'ai.department-insights', `${section || 'all sections'} / ${year || 'all years'}`);
+    res.json({ success: true, data });
+  } catch (error) {
+    if (error.name === 'AiError') {
+      return res.status(error.status && error.status >= 400 && error.status < 600 ? error.status : 502).json({
+        success: false, error: `AI provider error: ${error.message}`,
+      });
+    }
+    console.error('Department insights error:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate insights.' });
+  }
+};
+
+// @route GET /api/faculty/department-leaderboard (HOD/admin)
+// Every department's aggregate numbers side by side, with the caller's own row marked.
+exports.getDepartmentLeaderboard = async (req, res) => {
+  try {
+    res.json({ success: true, data: await departmentLeaderboardService.getDepartmentLeaderboard(req) });
+  } catch (error) {
+    console.error('Department leaderboard error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the department leaderboard.' });
+  }
+};
+
 exports.getDepartmentAnalytics = async (req, res) => {
   try {
     const section = String(req.query.section || '').trim().slice(0, 40) || null;

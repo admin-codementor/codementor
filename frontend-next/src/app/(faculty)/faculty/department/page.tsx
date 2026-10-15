@@ -24,6 +24,9 @@ import {
 } from "@/components/analytics";
 import type { FunnelBucket } from "@/components/analytics";
 import { RankingsTable, WeeklyProgressTable, type DeptStudent } from "@/components/faculty/DepartmentTables";
+import { DepartmentLeaderboard } from "@/components/faculty/DepartmentLeaderboard";
+import { DepartmentActivity } from "@/components/faculty/DepartmentActivity";
+import { DepartmentInsights } from "@/components/faculty/DepartmentInsights";
 import { radius } from "@/theme/tokens";
 import {
   CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, LocalFireDepartmentOutlinedIcon,
@@ -42,7 +45,7 @@ interface DeptData {
   scope: { department: string | null; section: string | null; year: string | null; sections: string[]; years: number[] };
 }
 
-type DeptTab = "overview" | "weekly" | "rankings";
+type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity";
 
 const SEVERITY: Record<string, "error" | "warning" | "info"> = { high: "error", medium: "warning", low: "info" };
 
@@ -118,10 +121,14 @@ export default function DepartmentDashboardPage() {
             <Tab value="overview" label="Overview" />
             <Tab value="weekly" label="Weekly progress" />
             <Tab value="rankings" label="Rankings" />
+            <Tab value="departments" label="Departments" />
+            <Tab value="activity" label="Activity" />
           </Tabs>
 
           {tab === "weekly" && <WeeklyProgressTable students={d.students} />}
           {tab === "rankings" && <RankingsTable students={d.students} />}
+          {tab === "departments" && <DepartmentLeaderboard />}
+          {tab === "activity" && <DepartmentActivity />}
           {tab === "overview" && (
             <>
           {/* ── Where to look first ── */}
@@ -134,6 +141,8 @@ export default function DepartmentDashboardPage() {
               </Alert>
             ))}
           </Stack>
+
+          <Box sx={{ mb: 3 }}><DepartmentInsights section={section} year={year} /></Box>
 
           <StudentFunnel funnel={d.funnel} total={d.totals.students} />
 
