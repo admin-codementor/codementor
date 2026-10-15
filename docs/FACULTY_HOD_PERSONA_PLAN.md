@@ -164,6 +164,27 @@ the `manage_students` permission gate; department gating and scoping; funnel/fla
 the cohort size; week-over-week figures; course-completion buckets; and the thresholds the F3 dialog states,
 pinned to the backend constants so the dialog cannot drift from the rules.
 
+### H3–H11 — the pending HOD features (added 2026-10-15; this overrides FD1 and FD4)
+
+On `feat/hod-persona`. The user asked for every pending HOD feature, so mentor, portfolio, placement, alumni and the
+cross-department leaderboard are built here rather than deferred to T&P / Admin. One commit per phase.
+
+| Phase | What | Notes |
+|---|---|---|
+| (script) | `backend/scripts/create-hod-account.js` | Dry run by default, `--confirm` to write. **Not run yet**: the user must create the HOD account. |
+| H3 | Cross-department leaderboard (**Departments** tab) | Aggregates only; a department needs 3 students to be ranked. `GET /api/faculty/analytics` (all departments, by name) closed to admin only. |
+| H4 | **Activity** tab | 7/30/90 days; last seen = latest login or submission. No "online now" (needs presence tracking). |
+| H5 | AI insights card on Overview | The model sees counts and rates only, never names or code. Cached 10 min, 6 requests/min. |
+| H6 | **Mentors** tab, mentor filter, mentor leaderboard | HOD assigns own-department students to own-department staff. |
+| H7 | Student **Portfolio** (certifications, projects, achievements) + department completeness | Links must be http(s). Faculty and HOD see it; the public profile does not. |
+| H8 | **Placement**: drives, per-student results, analytics | HOD-managed. Placement readiness from the Job-Ready Score is **not built**. |
+| H9 | **Alumni** (graduate / restore) + "badges compared against" (this view / year-wise / whole department) | Graduated students leave every active view; they stay in faculty class analytics and the student leaderboard (known limitation). |
+| H10 | **Labs**: each class in the department with its assignments, attempted / completed / average solved | Read-only. Solved = any accepted answer, deadline ignored. |
+| H11 | **Messages**: `/faculty/messages` and `/app/messages` | Staff start; a student must accept (one opening message until then); block and report; a reported thread is readable by the HOD of the department or an admin, and the UI says so. Plain text, 1000 characters, no attachments. |
+
+Not built: real presence, resume / ATS scoring, file attachments in messages, notification badges for unread messages,
+placement readiness bands, a T&P role.
+
 ---
 
 ## 6. Feature pick-list — from the 2026-10-12 CodeTantra (faculty) + CampusTrack (HOD) walkthrough

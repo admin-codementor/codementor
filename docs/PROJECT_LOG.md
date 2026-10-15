@@ -37,6 +37,32 @@ browser walkthrough of the faculty pages (no faculty credentials in the session)
 
 ---
 
+## 2026-10-15 (Thu) — part 2
+**Area:** HOD persona (branch `feat/hod-persona`, 6 commits after `abd5eae`)
+**Did:** every pending HOD feature, one commit each: H3 cross-department leaderboard, H4 activity, H5 AI insights,
+H6 mentors, H7 portfolio, H8 placement (HOD-managed), H9 alumni + percentile baseline, H10 Labs (read-only),
+H11 messages (consent, block, report). Closed a leak: `GET /api/faculty/analytics` listed every department by name
+to any staff token; it is admin-only now. Details per phase are in `docs/FACULTY_HOD_PERSONA_PLAN.md` (H3–H11).
+**Decisions:** a department always comes from the token, never the query; other departments are aggregate-only;
+the AI only ever sees aggregates; messaging is opt-in for students and a report is the only way a conversation
+becomes readable by anyone outside it.
+**Verified:** backend smoke suites 376 passed + 1 skipped (AI quota) through H9; Labs 31 and Messages 91 passed
+when run; `tsc`, lint, production build and `check:routes` clean at every phase.
+**Not verified:**
+- **No signed-in browser check of any faculty or HOD page.** Nothing has been looked at as an HOD.
+- After H10 and H11 the earlier suites were **not re-run**: the Firestore free-tier daily quota ran out partway
+  through the final regression run (`RESOURCE_EXHAUSTED`), so those failures are quota, not code. Re-run
+  `node tests/run.js groupsDepartment hodFeatures hodPlacement hodAlumni hodLabs messages` after the quota resets.
+- Leftover `smoketest-` records from that crashed run may remain; the suites use fixed ids, so the next run
+  overwrites and cleans them.
+**Heads-up:** the test suites run against the live Firestore project, so a heavy testing day can exhaust the
+daily quota the live demo also uses.
+**Next:** the user creates the HOD account (`node scripts/create-hod-account.js --department CSE --confirm`, run
+in `backend/`); re-run the suites; one signed-in pass over the faculty and HOD pages; then the PR.
+**Branch:** `feat/hod-persona`
+
+---
+
 ## 2026-10-12 (Mon) — part 19
 **Area:** S13 Phase C — 16 new roadmap roles
 **Did:**
