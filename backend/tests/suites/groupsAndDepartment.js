@@ -13,6 +13,8 @@ const {
   flagFor, studentState, QUIET_DAYS, LOW_ACCURACY_PCT, MIN_SUBS_FOR_ACCURACY, DAY_MS,
 } = require('../../src/utils/studentState');
 const { buildDepartmentAnalytics, BADGES } = require('../../src/utils/departmentAnalytics');
+const { funnelFromStats } = require('../../src/utils/studentState');
+const { completionStats, COMPLETION_BUCKETS } = require('../../src/utils/courseAnalytics');
 
 const sum = (rows, key) => rows.reduce((n, r) => n + r[key], 0);
 
@@ -95,6 +97,45 @@ function pureChecks(s) {
     r.students.find((x) => x.id === 'a').percentile > r.students.find((x) => x.id === 'e').percentile);
   s.check('aggregator: an empty cohort does not throw and reports zero',
     (() => { try { return buildDepartmentAnalytics({ students: [], submissions: [], now }).funnel.every((f) => f.count === 0); } catch { return false; } })());
+  // ── Week-over-week, per student (the cohort-wide weekly table) ─────────────
+  const a = r.students.find((x) => x.id === 'a');
+  s.check('weekly: every student carries a week block', r.students.every((x) => x.week && typeof x.week.solved === 'number'));
+  s.check('weekly: a student who solved 3 this week and 0 before shows +3', a.week.solved === 3 && a.week.solved_change === 3, JSON.stringify(a.week));
+  s.check('weekly: a student with no activity shows zero, not a change', r.students.find((x) => x.id === 'e').week.subs === 0);
+  s.check('weekly: work from the previous week is not counted this week',
+    (() => {
+      const lastWeek = buildDepartmentAnalytics({ students: [mk('z', 'A', 3)], submissions: [sub('z', 'p1', 'Accepted', 9)], now });
+      const w = lastWeek.students[0].week;
+      return w.solved === 0 && w.solved_change === -1;
+    })());
+
+  // ── Class-level funnel from analytics-snapshot stats ───────────────────────
+  const stat = (id, subs, solved, daysAgo) => ({ id, name: id, subs, solved, acRate: subs ? 50 : 0, lastActiveMs: subs ? now - daysAgo * DAY_MS : null });
+  const fun = funnelFromStats([stat('a', 4, 2, 1), stat('b', 3, 0, 1), stat('c', 2, 1, 20), stat('d', 0, 0, 0), stat('e', 0, 0, 0)], now);
+  s.check('funnel: counts sum to the number of students', sum(fun, 'count') === 5, fun.map((f) => `${f.key}=${f.count}`).join(' '));
+  s.check('funnel: states land in the right buckets',
+    fun.find((f) => f.key === 'practising').count === 1 && fun.find((f) => f.key === 'stuck').count === 1
+    && fun.find((f) => f.key === 'gone_quiet').count === 1 && fun.find((f) => f.key === 'not_started').count === 2);
+  s.check('funnel: buckets name who is in them', fun.find((f) => f.key === 'stuck').students[0].id === 'b');
+
+  // ── Course completion distribution ─────────────────────────────────────────
+  const people = ['p', 'q', 'r', 's', 't', 'u'].map((id) => ({ id }));
+  const solvedSets = new Map(people.map((p) => [p.id, new Set()]));
+  const give = (id, n) => { for (let i = 0; i < n; i++) solvedSets.get(id).add(`x${i}`); };
+  give('q', 1); give('r', 5); give('s', 12); give('t', 199); give('u', 200);
+  const comp = completionStats(200, people, solvedSets);
+  const at = (label) => comp.buckets.find((b) => b.bucket === label).count;
+  s.check('completion: buckets sum to the number of students', sum(comp.buckets, 'count') === people.length);
+  s.check('completion: exactly six buckets in ladder order', comp.buckets.map((b) => b.bucket).join() === COMPLETION_BUCKETS.map((b) => b.bucket).join());
+  s.check('completion: nothing solved → 0%', at('0%') === 1);
+  s.check('completion: 1, 5 and 12 of 200 (under 26%) → 1–25%', at('1–25%') === 3, String(at('1–25%')));
+  s.check('completion: nobody sits in 26–50% or 51–75%', at('26–50%') === 0 && at('51–75%') === 0);
+  s.check('completion: 199 of 200 is 76–99%, never "complete"', at('76–99%') === 1 && comp.completed === 1);
+  s.check('completion: all solved → 100%', at('100%') === 1);
+  s.check('completion: average percent is the mean share solved', comp.avgPercent === Math.round(((0 + 1 + 5 + 12 + 199 + 200) / 6 / 200) * 100), String(comp.avgPercent));
+  const emptyCourse = completionStats(0, people, solvedSets);
+  s.check('completion: a course with no problems puts everyone at 0% without dividing by zero', emptyCourse.buckets[0].count === people.length && emptyCourse.avgPercent === 0);
+
 }
 
 module.exports = async function groupsAndDepartmentSuite() {
@@ -142,6 +183,18 @@ module.exports = async function groupsAndDepartmentSuite() {
   const filtered = await get(`${DEPT}?section=__no_such_section__`, hod);
   s.check('department: an unmatched section filter yields an empty view, not an error',
     filtered.status === 200 && filtered.body?.data?.totals?.students === 0, `status ${filtered.status}`);
+
+
+  // ── Class-level funnel and course completion over the API ──────────────────
+  const overview = await get('/api/faculty/analytics/overview', hod);
+  const f = overview.body?.data?.funnel;
+  s.check('analytics overview: carries the four-state funnel', Array.isArray(f) && f.length === 4, `status ${overview.status}`);
+  if (f) s.check('analytics overview: funnel sums to the students in view', sum(f, 'count') === overview.body.data.kpis.totalStudents.value);
+
+  const summary = await get('/api/faculty/courses/completion', tokenFor('dept-faculty', 'faculty'));
+  s.check('courses: completion summary answers for faculty', summary.status === 200 && summary.body?.success === true, `status ${summary.status}`);
+  s.check('courses: completion summary is an object keyed by course, not a course record', summary.body?.data && !('title' in summary.body.data), `keys ${Object.keys(summary.body?.data || {}).length}`);
+  s.check('courses: completion summary is closed to students', (await get('/api/faculty/courses/completion', tokenFor('dept-student', 'student'))).status === 403);
 
   // ── Groups: gating ─────────────────────────────────────────────────────────
   const G = '/api/faculty/groups';

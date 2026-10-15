@@ -111,6 +111,7 @@ router.delete('/groups/:id', requirePermission('manage_students'), groupControll
 
 // ── Courses / modules (student practice catalogue) ──────────────────────────
 router.get('/courses',    facultyController.getFacultyCourses);
+router.get('/courses/completion', facultyController.getCourseCompletionSummary);
 router.get('/courses/:id', facultyController.getFacultyCourseDetail);
 router.get('/courses/:id/analytics', facultyController.getCourseAnalytics);
 router.post('/courses',

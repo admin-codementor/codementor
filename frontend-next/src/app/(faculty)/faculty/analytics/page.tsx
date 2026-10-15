@@ -28,7 +28,8 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { getUser } from "@/lib/auth";
 import { PageHeader } from "@/components/ui/PageHeader";
-import { ExportButton, toCsv, ChartCard } from "@/components/analytics";
+import { ExportButton, toCsv, ChartCard, StudentFunnel } from "@/components/analytics";
+import type { FunnelBucket } from "@/components/analytics";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
@@ -72,6 +73,7 @@ interface Overview {
   activityByDayHour: number[][];
   verdicts: { verdict: string; count: number }[];
   languages: { name: string; subs: number; acRate: number }[];
+  funnel: FunnelBucket[];
   cohorts: { cohort: string; students: number; avgSolved: number; acRate: number; activeStudents: number; solvedDistribution: BoxStats | null; avgAttemptsToSolve: number | null }[];
   solvedHistogram: { bucket: string; from: number; count: number }[];
   solvedDistribution: BoxStats | null;
@@ -474,6 +476,7 @@ export default function FacultyAnalyticsPage() {
 
           {overviewTab === "cohorts" && (
             <Stack spacing={2.5}>
+              <StudentFunnel funnel={overview.funnel} total={overview.kpis.totalStudents.value} />
               <SectionCard title={`Cohorts by ${dimension} — who's ahead, who's behind`}>
                 <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
                   Click a row to drill into that cohort.
@@ -610,6 +613,7 @@ function CohortView({ data, loading, onStudent }: { data: Record<string, unknown
   if (!data) return <EmptyState title="Couldn't load this cohort" />;
   const d = data as unknown as {
     cohort: string; size: number; empty?: boolean;
+    funnel: FunnelBucket[];
     summary: { active: number; acRate: number; solvedDistribution: BoxStats | null };
     solvedHistogram: { bucket: string; from: number; count: number }[];
     topicMastery: { topic: string; accuracy: number; attempts: number; students: number }[];
@@ -627,6 +631,8 @@ function CohortView({ data, loading, onStudent }: { data: Record<string, unknown
         <KpiTile icon={<CheckCircleOutlinedIcon />} accent="success" label="Acceptance rate" value={d.summary.acRate} suffix="%" />
         <KpiTile icon={<WarningAmberOutlinedIcon />} accent="warning" label="Needing attention" value={atRisk.length} help="Students with at least one risk signal." />
       </Box>
+
+      <StudentFunnel funnel={d.funnel} total={d.size} title="Where this cohort stands" />
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", lg: "1fr 1fr" }, gap: 2.5 }}>
         <ChartCard title="Spread of problems solved" height={240}>

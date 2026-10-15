@@ -8,7 +8,7 @@ const { buildDepartmentAnalytics } = require('../utils/departmentAnalytics');
 
 const TTL_SECONDS = 120;
 // Bump when the response shape or aggregation changes (the cache outlives deploys).
-const VERSION = 1;
+const VERSION = 2;
 
 async function compute({ dept, section, year }) {
   const [studentsMap, submissions] = await Promise.all([

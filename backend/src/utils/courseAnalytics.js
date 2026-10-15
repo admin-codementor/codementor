@@ -10,6 +10,63 @@ const PROCTOR_FLAG_THRESHOLD = 3;
 const BENIGN_PROCTOR_EVENTS = new Set(['fullscreen_enter', 'exam_start', 'copy']);
 
 /**
+ * How far along each student is, as a share of the course's problems solved.
+ * Six buckets that always sum to the number of students. 0% and 100% are
+ * exact (a student at 199/200 is 76-99%, never "complete"), so "completed"
+ * here means the same thing as the Completed KPI.
+ * Bucket rows use { bucket, from, count } so they feed the shared histogram chart directly.
+ */
+const COMPLETION_BUCKETS = [
+  { bucket: '0%', from: 0 },
+  { bucket: '1–25%', from: 1 },
+  { bucket: '26–50%', from: 26 },
+  { bucket: '51–75%', from: 51 },
+  { bucket: '76–99%', from: 76 },
+  { bucket: '100%', from: 100 },
+];
+
+function completionBucketIndex(solved, total) {
+  if (!total || solved === 0) return 0;
+  if (solved >= total) return COMPLETION_BUCKETS.length - 1;
+  const pct = Math.min(99, Math.max(1, Math.floor((solved / total) * 100)));
+  if (pct <= 25) return 1;
+  if (pct <= 50) return 2;
+  if (pct <= 75) return 3;
+  return 4;
+}
+
+/** @param {Map<string, Set<string>>} solvedByStudent  ids of course problems each student has solved */
+function completionStats(totalProblems, students, solvedByStudent) {
+  const counts = COMPLETION_BUCKETS.map(() => 0);
+  let pctSum = 0;
+  let completed = 0;
+  for (const st of students) {
+    const n = solvedByStudent.get(st.id)?.size ?? 0;
+    counts[completionBucketIndex(n, totalProblems)] += 1;
+    if (totalProblems > 0) {
+      pctSum += (n / totalProblems) * 100;
+      if (n >= totalProblems) completed += 1;
+    }
+  }
+  return {
+    totalProblems,
+    completed,
+    avgPercent: students.length && totalProblems ? Math.round(pctSum / students.length) : 0,
+    buckets: COMPLETION_BUCKETS.map((b, i) => ({ ...b, count: counts[i] })),
+  };
+}
+
+/** Course problem ids → per-student solved sets, from raw submissions. */
+function solvedByStudent(courseProblems, students, submissions) {
+  const ids = new Set(students.map((s) => s.id));
+  const out = new Map(students.map((s) => [s.id, new Set()]));
+  for (const s of submissions) {
+    if (s.verdict === 'Accepted' && courseProblems.has(s.problemId) && ids.has(s.userId)) out.get(s.userId).add(s.problemId);
+  }
+  return out;
+}
+
+/**
  * @param {object} a
  * @param {{id,title,problemIds:string[]}[]} a.modules   course units
  * @param {{id,name,rollNo}[]} a.students                students in scope (already filtered)
@@ -146,7 +203,8 @@ function buildCourseAnalytics({ modules, students, groups, submissions, proctorE
       suspicious: { value: flagged.length, total: students.length },
     },
     units, daily, mostActiveUsers, mostActiveGroups, flagged,
+    completion: completionStats(totalProblems, students, solved),
   };
 }
 
-module.exports = { buildCourseAnalytics, PROCTOR_FLAG_THRESHOLD };
+module.exports = { buildCourseAnalytics, completionStats, solvedByStudent, COMPLETION_BUCKETS, PROCTOR_FLAG_THRESHOLD };

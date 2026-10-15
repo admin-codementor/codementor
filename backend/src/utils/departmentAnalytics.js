@@ -4,7 +4,7 @@
 // Shape follows the CampusTrack HOD review (docs/COMPETITOR_UX_RESEARCH.md part 2):
 // a four-state funnel first, then flags, then per-section comparison, then
 // written insights. The funnel is the spine: every other number hangs off it.
-const { flagFor, weeklyActivity, STATE_LABELS } = require('./studentState');
+const { flagFor, weeklyActivity, buildFunnel } = require('./studentState');
 
 const DAY_MS = 86400000;
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
@@ -65,24 +65,25 @@ function buildDepartmentAnalytics({ students, submissions, now = Date.now() }) {
     const acRate = p.subs ? Math.round((p.accepted / p.subs) * 100) : 0;
     const base = { subs: p.subs, solved: p.solvedIds.size, acRate, lastActiveMs: p.lastActiveMs };
     const status = flagFor(base, now);
+    // Newest of two 7-day buckets, with its change against the one before:
+    // the week-over-week review loop, per student.
+    const thisWeek = weeklyActivity(p.mySubs, 2, now)[1];
     return {
       id: p.id, name: p.name, roll_no: p.rollNo, section: p.section, year: p.year,
       subs: p.subs, accepted: p.accepted, solved: p.solvedIds.size, ac_rate: acRate,
       active_days: p.activeDays.size,
       last_active: p.lastActiveMs ? new Date(p.lastActiveMs).toISOString() : null,
       state: status.state, flag: status.flag, reasons: status.reasons,
+      week: {
+        solved: thisWeek.solved, solved_change: thisWeek.solved_change,
+        subs: thisWeek.subs, subs_change: thisWeek.subs_change,
+        active_days: thisWeek.active_days,
+      },
     };
   });
 
   // ── Funnel: exhaustive and mutually exclusive, so the parts sum to the whole ──
-  const funnel = ['not_started', 'practising', 'stuck', 'gone_quiet'].map((key) => ({
-    key,
-    label: STATE_LABELS[key],
-    count: rows.filter((r) => r.state === key).length,
-    students: rows.filter((r) => r.state === key).map((r) => ({
-      id: r.id, name: r.name, roll_no: r.roll_no, section: r.section, reasons: r.reasons,
-    })),
-  }));
+  const funnel = buildFunnel(rows);
 
   const flags = {
     red: rows.filter((r) => r.flag === 'red').length,

@@ -143,18 +143,26 @@ cutoffs). Added a shared `ThresholdsDialog` (info button + dialog, mirrors `stud
 `departmentAnalytics.js` constants exactly), wired next to the department funnel heading, the badge distribution
 card, and a student's status banner.
 
-### H1 — HOD dashboard polish pass
+### H1 — HOD dashboard polish pass — done, with the four deep-dive picks
 
-With the funnel/insights/badge-ladder/trend already built (Phase 7), this is a verification + gap-closing phase,
-not new construction: confirm department scoping is correct for a real multi-department dataset, confirm the
-badge ladder and thresholds (once F3 lands) apply identically on the HOD view, and close any specific item from
-`COMPETITOR_UX_RESEARCH.md`'s mapping table not already covered by §2 above (re-check against current code before
-starting — that table predates Phase 7 and is partly stale).
+Verification half: department scoping is now covered by tests (the department comes from the token and a
+`?department=` override is ignored; an ECE HOD sees only ECE; faculty and students are refused), and the same
+thresholds dialog (F3) applies on the funnel, the badge card and the new Rankings tab. Gap-closing half: the
+user picked four of the G11–G15 options and all four shipped —
+- **G12b** department dashboard **Weekly progress** tab: one row per student, this week against the week before,
+  sortable, filterable (improving / dropped / no activity), CSV export.
+- **G15b** **Rankings** tab: competition ranking by problems solved then accuracy, badge and flag per student.
+- **G14b** the four-state funnel is now one shared component (`StudentFunnel`), used on the department page and
+  on the faculty **Cohorts** tab and each cohort drill-down.
+- **G13b/c** course analytics shows **how far along each student is** (six buckets, 199/200 is never "complete"),
+  and each course card in the list shows average completion and how many students finished.
 
-### H2 — Regression coverage backfill (closes Review_Feedback item 23's named gap)
+### H2 — Regression coverage backfill (closes Review_Feedback item 23's named gap) — done
 
-Item 23 names student-groups and department-dashboard endpoints as currently untested. Add smoke-test coverage
-for `/api/faculty/groups` CRUD and `/api/faculty/department` to `backend/tests/`.
+`backend/tests/suites/groupsAndDepartment.js` (suite `groupsDepartment`): group lifecycle, validation, ownership,
+the `manage_students` permission gate; department gating and scoping; funnel/flag/badge counts always summing to
+the cohort size; week-over-week figures; course-completion buckets; and the thresholds the F3 dialog states,
+pinned to the backend constants so the dialog cannot drift from the rules.
 
 ---
 

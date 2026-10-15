@@ -19,6 +19,7 @@ export interface CourseAnalytics {
   mostActiveUsers: { id: string; name: string; rollNo: string | null; activeDays: number; subs: number }[];
   mostActiveGroups: { id: string; name: string; students: number; activeStudents: number; subs: number }[];
   flagged: { id: string; name: string; rollNo: string | null; reasons: string[] }[];
+  completion: { totalProblems: number; completed: number; avgPercent: number; buckets: { bucket: string; from: number; count: number }[] };
   availableGroups: { id: string; name: string; students: number }[];
   selectedGroupIds: string[];
 }
@@ -36,6 +37,17 @@ export function useCourseAnalyticsQuery(courseId: string, days: number, groupIds
     },
     // Keep the old numbers on screen while a filter change loads.
     placeholderData: keepPreviousData,
+    staleTime: 60_000,
+  });
+}
+
+export interface CourseCompletion { students: number; completed: number; avgPercent: number; totalProblems: number }
+
+/** One line per course for the course list: how far along the viewer's students are. */
+export function useCourseCompletionQuery() {
+  return useQuery<Record<string, CourseCompletion>>({
+    queryKey: ["faculty", "course-completion"],
+    queryFn: async () => (await api.get<{ success: boolean; data: Record<string, CourseCompletion> }>("/api/faculty/courses/completion")).data.data,
     staleTime: 60_000,
   });
 }

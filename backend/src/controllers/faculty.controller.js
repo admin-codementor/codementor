@@ -5,7 +5,7 @@ const { logAction } = require('../middleware/audit');
 const { scopeDept, canSeeDepartment, canManageResource, canManageOwnedBy } = require('../middleware/role.middleware');
 const { cached } = require('../utils/cache');
 const { computeStrengthsWeaknesses } = require('../utils/topicScores');
-const { flagFor, weeklyActivity } = require('../utils/studentState');
+const { flagFor, weeklyActivity, funnelFromStats } = require('../utils/studentState');
 const examRepo = require('../repositories/examRepository');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
@@ -1246,6 +1246,8 @@ exports.getAnalyticsOverview = async (req, res) => {
         verdicts: snap.verdicts,
         languages: snap.languages,
         cohorts,
+        // Where every student in view stands: not started / practising / stuck / gone quiet.
+        funnel: funnelFromStats(snap.studentStats, now),
         // The class-wide shape the averages hide.
         solvedHistogram: analytics.histogram(solvedValues, 5),
         solvedDistribution: analytics.boxStats(solvedValues),
@@ -1331,6 +1333,7 @@ exports.getCohortDetail = async (req, res) => {
             return s ? Math.round((a / s) * 100) : 0;
           })(),
         },
+        funnel: funnelFromStats(members),
         solvedHistogram: analytics.histogram(solved, 5),
         topicMastery: [...masteryByTopic.entries()]
           .map(([topic, t]) => ({
@@ -2068,6 +2071,17 @@ exports.getDepartmentAnalytics = async (req, res) => {
   } catch (error) {
     console.error('Department analytics error:', error);
     res.status(500).json({ success: false, error: 'Failed to load department analytics.' });
+  }
+};
+
+// @route GET /api/faculty/courses/completion
+// Per-course completion for the viewer's own students, keyed by course id.
+exports.getCourseCompletionSummary = async (req, res) => {
+  try {
+    res.json({ success: true, data: await courseAnalyticsService.getCompletionSummary(req) });
+  } catch (error) {
+    console.error('Course completion summary error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load course completion.' });
   }
 };
 
