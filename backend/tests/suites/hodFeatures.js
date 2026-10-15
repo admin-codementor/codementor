@@ -2,13 +2,15 @@
 //   H3 cross-department leaderboard (aggregates only).
 //   H4 department activity (who is active / at risk, last seen).
 //   H5 AI insights (the provider must only ever see aggregates).
+//   H6 mentor mapping, mentor leaderboard and the dashboard mentor filter.
 // Pure checks run against fixtures with a fixed clock; API checks cover role
 // gating and that nothing identifying leaves a department.
-const { tokenFor, get, post, Suite, capabilities } = require('../harness');
+const { tokenFor, get, post, put, Suite, capabilities, db } = require('../harness');
 const { DAY_MS } = require('../../src/utils/studentState');
 const { buildDepartmentLeaderboard, MIN_RANKED_STUDENTS } = require('../../src/utils/departmentLeaderboard');
 const { buildActivity } = require('../../src/utils/departmentActivity');
 const { summarise, buildPrompt, sanitiseInsights, MAX_INSIGHTS } = require('../../src/utils/departmentInsightsPrompt');
+const { buildMentorBoard, checkAssignment, MAX_ASSIGN } = require('../../src/utils/mentors');
 
 const now = Date.UTC(2026, 9, 1, 12, 0, 0);
 
@@ -118,11 +120,46 @@ ${prompt}`;
   s.check('insights: a non-object reply yields an empty, safe result', (() => { const e = sanitiseInsights('not json'); return e.insights.length === 0 && e.headline === ''; })());
 }
 
+function mentorsPure(s) {
+  const sub = (userId, problemId, daysAgo, verdict = 'Accepted') => ({ userId, problemId, verdict, submittedAt: new Date(now - daysAgo * DAY_MS) });
+  const mentors = [{ id: 'm1', name: 'Mira' }, { id: 'm2', name: 'Nikhil' }, { id: 'm3', name: 'Idle' }];
+  const students = [
+    { id: 's1', mentorId: 'm1' }, { id: 's2', mentorId: 'm1' }, { id: 's3', mentorId: 'm2' },
+    { id: 's4', mentorId: null }, { id: 's5', mentorId: 'gone' }, // no mentor / mentor left the department
+  ];
+  const submissions = [
+    sub('s1', 'p1', 2), sub('s1', 'p2', 40), sub('s2', 'p1', 3), // m1: s1 solved 2 (one 40 days ago), s2 solved 1
+    sub('s3', 'p1', 1), sub('s3', 'p2', 1), sub('s3', 'p3', 1),   // m2: s3 solved 3
+  ];
+  const all = buildMentorBoard({ mentors, students, submissions, period: 'overall', now });
+  const mo = buildMentorBoard({ mentors, students, submissions, period: 'monthly', now });
+  const by = (b, id) => b.mentors.find((m) => m.id === id);
+
+  s.check('mentors: overall ranks by solved per mentee', by(all, 'm2').rank === 1 && by(all, 'm1').rank === 2, JSON.stringify(all.mentors.map((m) => [m.id, m.solved_per_mentee, m.rank])));
+  s.check('mentors: overall solved per mentee is the mean', by(all, 'm1').solved_per_mentee === 1.5 && by(all, 'm2').solved_per_mentee === 3);
+  s.check('mentors: monthly counts only problems first solved in the last 30 days', by(mo, 'm1').solved_per_mentee === 1, String(by(mo, 'm1').solved_per_mentee));
+  s.check('mentors: a mentor with no mentees is listed last and unranked', all.mentors[all.mentors.length - 1].id === 'm3' && by(all, 'm3').rank === null && by(all, 'm3').mentees === 0);
+  s.check('mentors: unassigned counts students with no mentor or a mentor outside scope', all.unassigned_students === 2, String(all.unassigned_students));
+  s.check('mentors: every student is either a mentee or unassigned', all.mentors.reduce((n, m) => n + m.mentees, 0) + all.unassigned_students === students.length);
+  s.check('mentors: active % counts mentees active in the last 7 days', by(all, 'm2').active_pct === 100 && by(all, 'm1').active_pct === 100);
+  s.check('mentors: an empty department does not throw', (() => { try { return buildMentorBoard({ mentors: [], students: [], submissions: [], now }).mentors.length === 0; } catch { return false; } })());
+
+  const hod = { requesterRole: 'hod', requesterDepartment: 'CSE' };
+  const inCse = { id: 'a', department: 'CSE' };
+  s.check('assign: same-department pairing is allowed', checkAssignment({ mentor: { role: 'faculty', department: 'CSE' }, students: [inCse], ...hod }) === null);
+  s.check('assign: an HOD cannot use another department mentor', /outside your department/.test(checkAssignment({ mentor: { role: 'faculty', department: 'ECE' }, students: [inCse], ...hod }) || ''));
+  s.check('assign: an HOD cannot assign another department students', /outside your department/.test(checkAssignment({ mentor: { role: 'faculty', department: 'CSE' }, students: [{ id: 'b', department: 'ECE' }], ...hod }) || ''));
+  s.check('assign: an admin account can never be a mentor', /admin/.test(checkAssignment({ mentor: { role: 'admin', department: 'CSE' }, students: [inCse], ...hod }) || ''));
+  s.check('assign: removing a mentor (null) needs no mentor check', checkAssignment({ mentor: null, students: [inCse], ...hod }) === null);
+  s.check('assign: an admin may pair across departments', checkAssignment({ mentor: { role: 'faculty', department: 'ECE' }, students: [inCse], requesterRole: 'admin', requesterDepartment: null }) === null);
+}
+
 module.exports = async function hodFeaturesSuite() {
   const s = new Suite('HOD features');
   leaderboardPure(s);
   activityPure(s);
   insightsPure(s);
+  mentorsPure(s);
 
   // ── H3: who may open it, and what it reveals ───────────────────────────────
   const BOARD = '/api/faculty/department-leaderboard';
@@ -193,11 +230,73 @@ module.exports = async function hodFeaturesSuite() {
     if ([429, 502, 503].includes(ins.status)) {
       s.skip('insights: HOD generates insights end to end', `AI provider answered ${ins.status} (${String(ins.body?.error || '').slice(0, 80)})`);
       s.check('insights: a provider failure is passed through as an error with a message, not a crash', typeof ins.body?.error === 'string' && ins.body.error.length > 0);
-      return s;
+    } else {
+      s.check('insights: HOD → 200 with a headline and a bounded list', ins.status === 200 && typeof ins.body?.data?.headline === 'string' && ins.body.data.insights.length <= MAX_INSIGHTS, `status ${ins.status}`);
+      s.check('insights: every item has a title, detail and valid priority', (ins.body?.data?.insights || []).every((i) => i.title && i.detail && ['high', 'medium', 'low'].includes(i.priority)));
     }
-    s.check('insights: HOD → 200 with a headline and a bounded list', ins.status === 200 && typeof ins.body?.data?.headline === 'string' && ins.body.data.insights.length <= MAX_INSIGHTS, `status ${ins.status}`);
-    s.check('insights: every item has a title, detail and valid priority', (ins.body?.data?.insights || []).every((i) => i.title && i.detail && ['high', 'medium', 'low'].includes(i.priority)));
   }
+
+  // ── H6: mentors, over the API, on throwaway records ────────────────────────
+  const MENT = '/api/faculty/mentors';
+  s.check('mentors: unauthenticated → 401', (await get(MENT)).status === 401);
+  s.check('mentors: student → 403', (await get(MENT, tokenFor('hod-student', 'student'))).status === 403);
+  s.check('mentors: faculty cannot list → 403', (await get(MENT, tokenFor('hod-faculty', 'faculty'))).status === 403);
+  s.check('mentors: faculty cannot assign → 403', (await put(`${MENT}/assign`, tokenFor('hod-faculty', 'faculty'), { mentor_id: null, student_ids: ['x'] })).status === 403);
+
+  // Temporary records in a department nobody else uses; every one is deleted afterwards.
+  const D = 'SMOKEDEPT';
+  const made = [];
+  const mk = async (collection, id, data) => { await db().collection(collection).doc(id).set({ ...data, isSmokeTest: true }); made.push([collection, id]); };
+  s.onCleanup(async () => { for (const [c, id] of made) await db().collection(c).doc(id).delete().catch(() => {}); }, 'temporary mentor/student records');
+  await mk('faculty', 'smoketest-mentor-a', { name: 'Smoke Mentor A', role: 'faculty', department: D });
+  await mk('faculty', 'smoketest-mentor-other', { name: 'Smoke Mentor Other', role: 'faculty', department: 'SMOKEOTHER' });
+  await mk('faculty', 'smoketest-mentor-admin', { name: 'Smoke Admin', role: 'admin', department: D });
+  for (const n of [1, 2, 3]) await mk('students', `smoketest-mstu-${n}`, { name: `Smoke Student ${n}`, role: 'student', department: D, section: 'A', year: 3 });
+  await mk('students', 'smoketest-mstu-out', { name: 'Smoke Outsider', role: 'student', department: 'SMOKEOTHER', section: 'A', year: 3 });
+
+  const head = tokenFor('mentor-hod', 'hod', { department: D });
+  const board0 = await get(MENT, head);
+  s.check('mentors: HOD lists their department mentors', board0.status === 200 && board0.body?.data?.mentors?.some((m) => m.id === 'smoketest-mentor-a'), `status ${board0.status}`);
+  s.check('mentors: other departments staff and admins are not listed', !board0.body?.data?.mentors?.some((m) => ['smoketest-mentor-other', 'smoketest-mentor-admin'].includes(m.id)));
+  s.check('mentors: all three students start unassigned', board0.body?.data?.unassigned_students === 3, String(board0.body?.data?.unassigned_students));
+
+  const A = `${MENT}/assign`;
+  s.check('assign: no students → 400', (await put(A, head, { mentor_id: 'smoketest-mentor-a', student_ids: [] })).status === 400);
+  s.check('assign: unknown mentor → 400', (await put(A, head, { mentor_id: 'nope', student_ids: ['smoketest-mstu-1'] })).status === 400);
+  s.check('assign: unknown student → 400', (await put(A, head, { mentor_id: 'smoketest-mentor-a', student_ids: ['nope'] })).status === 400);
+  s.check('assign: another department mentor → 400', (await put(A, head, { mentor_id: 'smoketest-mentor-other', student_ids: ['smoketest-mstu-1'] })).status === 400);
+  s.check('assign: another department student → 400', (await put(A, head, { mentor_id: 'smoketest-mentor-a', student_ids: ['smoketest-mstu-out'] })).status === 400);
+  s.check('assign: an admin account as mentor → 400', (await put(A, head, { mentor_id: 'smoketest-mentor-admin', student_ids: ['smoketest-mstu-1'] })).status === 400);
+  s.check(`assign: more than ${MAX_ASSIGN} students → 400`, (await put(A, head, { mentor_id: 'smoketest-mentor-a', student_ids: Array.from({ length: MAX_ASSIGN + 1 }, (_, i) => `x${i}`) })).status === 400);
+
+  const ok = await put(A, head, { mentor_id: 'smoketest-mentor-a', student_ids: ['smoketest-mstu-1', 'smoketest-mstu-2'] });
+  s.check('assign: HOD assigns two students to a mentor', ok.status === 200 && ok.body?.data?.updated === 2, `status ${ok.status}`);
+
+  const board1 = await get(MENT, head);
+  const mA = board1.body?.data?.mentors?.find((m) => m.id === 'smoketest-mentor-a');
+  s.check('mentors: the board reflects the assignment immediately (no stale cache)', mA?.mentees === 2 && board1.body?.data?.unassigned_students === 1, `mentees ${mA?.mentees}, unassigned ${board1.body?.data?.unassigned_students}`);
+
+  const dMine = await get('/api/faculty/department?mentor=smoketest-mentor-a', head);
+  s.check('dashboard: the mentor filter narrows the roster to their mentees', dMine.body?.data?.totals?.students === 2, String(dMine.body?.data?.totals?.students));
+  s.check('dashboard: each row names its mentor', (dMine.body?.data?.students || []).every((r) => r.mentor_name === 'Smoke Mentor A'));
+  const dNone = await get('/api/faculty/department?mentor=none', head);
+  s.check('dashboard: mentor=none lists students nobody mentors', dNone.body?.data?.totals?.students === 1, String(dNone.body?.data?.totals?.students));
+  const dAll = await get('/api/faculty/department', head);
+  s.check('dashboard: the filter menu lists mentors with their mentee counts', (dAll.body?.data?.scope?.mentors || []).some((m) => m.id === 'smoketest-mentor-a' && m.mentees === 2));
+  s.check('dashboard: the roster is not narrowed without the filter', dAll.body?.data?.totals?.students === 3);
+
+  const cleared = await put(A, head, { mentor_id: null, student_ids: ['smoketest-mstu-1', 'smoketest-mstu-2'] });
+  s.check('assign: a null mentor removes the assignment', cleared.status === 200);
+  const board2 = await get(MENT, head);
+  s.check('mentors: after removal everyone is unassigned again', board2.body?.data?.unassigned_students === 3, String(board2.body?.data?.unassigned_students));
+
+  const adminTok = tokenFor('mentor-admin', 'admin');
+  const adminCross = await put(A, adminTok, { mentor_id: 'smoketest-mentor-other', student_ids: ['smoketest-mstu-3'] });
+  s.check('assign: an admin may pair across departments', adminCross.status === 200, `status ${adminCross.status}`);
+  await put(A, adminTok, { mentor_id: null, student_ids: ['smoketest-mstu-3'] });
+  const monthly = await get(`${MENT}?period=monthly`, head);
+  s.check('mentors: the monthly period is accepted', monthly.status === 200 && monthly.body?.data?.period === 'monthly');
+  s.check('mentors: an unknown period falls back to overall', (await get(`${MENT}?period=weekly`, head)).body?.data?.period === 'overall');
 
   return s;
 };

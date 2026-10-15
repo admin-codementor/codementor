@@ -2116,7 +2116,8 @@ exports.getDepartmentAnalytics = async (req, res) => {
   try {
     const section = String(req.query.section || '').trim().slice(0, 40) || null;
     const year = String(req.query.year || '').trim().slice(0, 10) || null;
-    const data = await departmentAnalyticsService.getDepartmentAnalytics(req, { section, year });
+    const mentor = String(req.query.mentor || '').trim().slice(0, 80) || null;
+    const data = await departmentAnalyticsService.getDepartmentAnalytics(req, { section, year, mentor });
     res.json({ success: true, data });
   } catch (error) {
     console.error('Department analytics error:', error);

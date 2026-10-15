@@ -27,6 +27,7 @@ import { RankingsTable, WeeklyProgressTable, type DeptStudent } from "@/componen
 import { DepartmentLeaderboard } from "@/components/faculty/DepartmentLeaderboard";
 import { DepartmentActivity } from "@/components/faculty/DepartmentActivity";
 import { DepartmentInsights } from "@/components/faculty/DepartmentInsights";
+import { MentorsTab } from "@/components/faculty/MentorsTab";
 import { radius } from "@/theme/tokens";
 import {
   CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, LocalFireDepartmentOutlinedIcon,
@@ -42,10 +43,13 @@ interface DeptData {
   weekly: { week_start: string; week_end: string; subs: number; solved: number; active_days: number; subs_change: number | null }[];
   insights: { severity: "high" | "medium" | "low"; title: string; detail: string }[];
   students: DeptStudent[];
-  scope: { department: string | null; section: string | null; year: string | null; sections: string[]; years: number[] };
+  scope: {
+    department: string | null; section: string | null; year: string | null; sections: string[]; years: number[];
+    mentor: string | null; mentors: { id: string; name: string; mentees: number }[]; unmentored: number;
+  };
 }
 
-type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity";
+type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity" | "mentors";
 
 const SEVERITY: Record<string, "error" | "warning" | "info"> = { high: "error", medium: "warning", low: "info" };
 
@@ -53,12 +57,13 @@ export default function DepartmentDashboardPage() {
   const router = useRouter();
   const [section, setSection] = React.useState("");
   const [year, setYear] = React.useState("");
+  const [mentor, setMentor] = React.useState("");
   const [tab, setTab] = React.useState<DeptTab>("overview");
 
   const query = useQuery<DeptData>({
-    queryKey: ["faculty", "department", section, year],
+    queryKey: ["faculty", "department", section, year, mentor],
     queryFn: async () => (await api.get("/api/faculty/department", {
-      params: { ...(section ? { section } : {}), ...(year ? { year } : {}) },
+      params: { ...(section ? { section } : {}), ...(year ? { year } : {}), ...(mentor ? { mentor } : {}) },
     })).data.data,
     staleTime: 60_000,
   });
@@ -95,6 +100,13 @@ export default function DepartmentDashboardPage() {
           <MenuItem value="">All years</MenuItem>
           {(d?.scope.years ?? []).map((y) => <MenuItem key={y} value={String(y)}>Year {y}</MenuItem>)}
         </TextField>
+        <TextField
+          select size="small" label="Mentor" value={mentor} onChange={(e) => setMentor(e.target.value)} sx={{ minWidth: 200 }}
+        >
+          <MenuItem value="">All mentors</MenuItem>
+          <MenuItem value="none">No mentor yet{d ? ` (${d.scope.unmentored})` : ""}</MenuItem>
+          {(d?.scope.mentors ?? []).map((m) => <MenuItem key={m.id} value={m.id}>{m.name} ({m.mentees})</MenuItem>)}
+        </TextField>
       </Stack>
 
       {query.isError ? (
@@ -123,12 +135,14 @@ export default function DepartmentDashboardPage() {
             <Tab value="rankings" label="Rankings" />
             <Tab value="departments" label="Departments" />
             <Tab value="activity" label="Activity" />
+            <Tab value="mentors" label="Mentors" />
           </Tabs>
 
           {tab === "weekly" && <WeeklyProgressTable students={d.students} />}
           {tab === "rankings" && <RankingsTable students={d.students} />}
           {tab === "departments" && <DepartmentLeaderboard />}
           {tab === "activity" && <DepartmentActivity />}
+          {tab === "mentors" && <MentorsTab />}
           {tab === "overview" && (
             <>
           {/* ── Where to look first ── */}

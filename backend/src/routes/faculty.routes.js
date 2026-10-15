@@ -6,6 +6,7 @@ const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../m
 const facultyController = require('../controllers/faculty.controller');
 const plagiarismController = require('../controllers/plagiarism.controller');
 const groupController = require('../controllers/studentGroup.controller');
+const mentorController = require('../controllers/mentor.controller');
 const { logAction } = require('../middleware/audit');
 const userRepo = require('../repositories/userRepository');
 const auditLogRepo = require('../repositories/auditLogRepository');
@@ -44,6 +45,9 @@ router.get('/analytics',  authorize('admin'), facultyController.getClassAnalytic
 // quietly widen what a class teacher can see.
 router.get('/department', authorize('hod', 'admin'), facultyController.getDepartmentAnalytics);
 // Aggregates only: a head may compare departments, never see another department's students.
+// Mentor mapping: HOD/admin only, and an HOD is confined to their own department by the token.
+router.get('/mentors', authorize('hod', 'admin'), mentorController.listMentors);
+router.put('/mentors/assign', authorize('hod', 'admin'), mentorController.assignMentees);
 router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, facultyController.getDepartmentInsights);
 router.get('/department/activity', authorize('hod', 'admin'), facultyController.getDepartmentActivity);
 router.get('/department-leaderboard', authorize('hod', 'admin'), facultyController.getDepartmentLeaderboard);
