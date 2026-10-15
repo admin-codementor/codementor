@@ -25,6 +25,7 @@ const SUITES = {
   roadmaps: require('./suites/roadmaps'),
   jobReadyProfile: require('./suites/jobReadyAndProfile'),
   analyticsAi: require('./suites/analyticsAndAi'),
+  groupsDepartment: require('./suites/groupsAndDepartment'),
 };
 
 const C = {
