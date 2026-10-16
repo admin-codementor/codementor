@@ -43,6 +43,13 @@ sheet, then delete the files.
 
 ## 3. Accounts (live Firebase and Firestore)
 
+First check that Firestore is usable (the free daily quota resets at midnight Pacific, about 1:00 pm IST). The account
+scripts also check this themselves and stop before changing anything, but this is quicker:
+
+```bash
+node scripts/check-firestore.js
+```
+
 ```bash
 node scripts/create-staff-account.js --role hod            # dry run, then add --confirm
 node scripts/create-staff-account.js --role faculty

@@ -39,18 +39,25 @@ async function main() {
     process.exit(1);
   }
 
-  let uid; let password = null;
+  let uid; let password = null; let createdHere = false;
   if (existingAuth) uid = existingAuth.uid;
   else {
     password = `${makePassword(12)}!`;
     uid = (await firebaseAuth.createUser({ email: EMAIL, password, displayName: NAME, emailVerified: false })).uid;
+    createdHere = true;
   }
 
-  await userRepo.update(uid, ROLE, {
-    name: NAME, email: EMAIL, role: ROLE, department: DEPARTMENT, permissions: {},
-    firebaseUid: uid, totpSecret: null, totpEnabled: false, rating: 1200, isTestAccount: true,
-    createdAt: existingProfile?.createdAt ?? new Date(), lastLoginAt: existingProfile?.lastLoginAt ?? null,
-  });
+  try {
+    await userRepo.update(uid, ROLE, {
+      name: NAME, email: EMAIL, role: ROLE, department: DEPARTMENT, permissions: {},
+      firebaseUid: uid, totpSecret: null, totpEnabled: false, rating: 1200, isTestAccount: true,
+      createdAt: existingProfile?.createdAt ?? new Date(), lastLoginAt: existingProfile?.lastLoginAt ?? null,
+    });
+  } catch (e) {
+    // Do not leave a sign-in with no profile behind (for example when the Firestore quota is used up).
+    if (createdHere) await firebaseAuth.deleteUser(uid).catch(() => {});
+    throw e;
+  }
   console.log(`Wrote faculty/${uid} (role ${ROLE}, department ${DEPARTMENT}).`);
 
   if (password) {

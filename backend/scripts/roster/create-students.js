@@ -47,7 +47,24 @@ async function main() {
   console.log(`CSV: ${path.basename(CSV)} · ${all.length} students${LIMIT ? ` (first ${rows.length} only)` : ''} · department ${DEPARTMENT}`);
   console.log(CONFIRM ? 'Mode: CREATE' : 'Mode: dry run (nothing is written)');
 
+  // Sign-ins do not use the Firestore quota but profiles do, so a full quota would leave sign-ins with no
+  // profile. Prove Firestore can be read AND written before anything is created.
+  if (CONFIRM) {
+    const { db } = require('../../src/config/firestore');
+    try {
+      await db.collection('students').limit(1).get();
+      const ping = db.collection('_preflight').doc('roster-import');
+      await ping.set({ at: new Date() });
+      await ping.delete();
+    } catch (e) {
+      console.error(`Firestore is not available right now (${e.message.split(':').slice(0, 2).join(':')}). Nothing was created.`);
+      if (/RESOURCE_EXHAUSTED/.test(e.message)) console.error('The free daily quota is used up. It resets at midnight Pacific time (about 1:00 pm IST). Try again after that.');
+      process.exit(1);
+    }
+  }
+
   const stats = { created: 0, resumed: 0, skipped: 0, failed: 0, wouldCreate: 0, signInExists: 0 };
+  let stopped = false; // set when the quota runs out mid-run: stop instead of failing every remaining row
   const log = [];
   const note = (kind, r, extra = '') => log.push(`${new Date().toISOString()} ${kind} ${r.Rollno} ${r.Name}${extra ? ` (${extra})` : ''}`);
 
@@ -67,9 +84,16 @@ async function main() {
         return;
       }
       const created = await firebaseAuth.createUser({ email: r.email, password: r.Password, displayName: r.Name });
-      await writeProfile(r, created.uid);
+      try {
+        await writeProfile(r, created.uid);
+      } catch (e) {
+        // Do not leave a sign-in with no profile behind.
+        await firebaseAuth.deleteUser(created.uid).catch(() => {});
+        throw e;
+      }
       stats.created += 1; note('created', r);
     } catch (e) {
+      if (/RESOURCE_EXHAUSTED/.test(e.message)) { stopped = true; note('STOPPED (quota)', r); return; }
       stats.failed += 1; note('FAILED', r, e.message);
       console.error(`  failed: ${r.Rollno} ${r.Name}: ${e.message}`);
     }
@@ -89,7 +113,7 @@ async function main() {
   let next = 0;
   let done = 0;
   const worker = async () => {
-    while (next < rows.length) {
+    while (next < rows.length && !stopped) {
       const r = rows[next++];
       await one(r);
       done += 1;
@@ -109,7 +133,7 @@ async function main() {
     console.log(`\nCreated: ${stats.created}. Resumed: ${stats.resumed}. Skipped (already done): ${stats.skipped}. Failed: ${stats.failed}.`);
   }
   console.log(`Log (no passwords): ${path.relative(process.cwd(), logFile)}`);
-  if (stats.failed) { console.error('Some students failed. Run the same command again: it only does what is missing.'); process.exit(1); }
+  if (stopped || stats.failed) { if (stats.failed) console.error('Some students failed. Run the same command again: it only does what is missing.'); process.exit(1); }
 }
 
 main().then(() => process.exit(0)).catch((e) => { console.error('Failed:', e.message); process.exit(1); });
