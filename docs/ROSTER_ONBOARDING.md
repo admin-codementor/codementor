@@ -23,6 +23,14 @@ node scripts/roster/build-roster.js --text roll-list.txt --out ../docs/private-c
 Prints students per section, the serial-number cross-check and the rows needing review. Fix anything it lists by
 editing `roster-draft.csv` (clear the `review` cell once a row is confirmed).
 
+To list roll numbers that the PDF skips (students you may need to add), run:
+
+```bash
+node scripts/roster/missing-rolls.js --in ../docs/private-credentials/roster-draft.csv
+```
+
+It writes `missing-students-<date>.csv` with a blank `student_name` column for the department to fill in.
+
 ## 2. Passwords and the final CSV (no database)
 
 ```bash
