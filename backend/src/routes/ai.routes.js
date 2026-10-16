@@ -9,6 +9,7 @@ const aiLimiter = createLimiter({
   windowMs: 60 * 1000,
   max: 20,
   prefix: 'ai',
+  keyGenerator: (req) => `user:${req.user?.id || req.ip}`, // runs after protect; a class shares one IP
   message: 'Too many AI requests. Please wait a moment.',
 });
 

@@ -38,7 +38,15 @@ const submitSustainedAuth = new Ratelimit({ redis, prefix: 'rl:submit:sustained'
 const submitSustainedAnon = new Ratelimit({ redis, prefix: 'rl:submit:sustained', limiter: Ratelimit.slidingWindow(10, '60 s') });
 
 // General API limiter — protects non-submission endpoints from scraping/brute-force.
-const apiRl = new Ratelimit({ redis, prefix: 'rl:api', limiter: Ratelimit.slidingWindow(200, '60 s') });
+//
+// Keyed by USER when the request carries a valid token, by IP only when it does not. A whole class
+// sits behind one campus IP, so a per-IP budget of 200 calls a minute would lock students out of their
+// own dashboards as soon as the class opened it together. Anonymous traffic (the sign-in page, public
+// profiles) stays per IP, with room for a classroom. Override with API_LIMIT_USER_PER_MIN / API_LIMIT_IP_PER_MIN.
+const API_LIMIT_USER = Number(process.env.API_LIMIT_USER_PER_MIN) || 300;
+const API_LIMIT_IP = Number(process.env.API_LIMIT_IP_PER_MIN) || 1500;
+const apiRlUser = new Ratelimit({ redis, prefix: 'rl:api:user', limiter: Ratelimit.slidingWindow(API_LIMIT_USER, '60 s') });
+const apiRlIp = new Ratelimit({ redis, prefix: 'rl:api:ip', limiter: Ratelimit.slidingWindow(API_LIMIT_IP, '60 s') });
 
 // Wraps a Ratelimit instance as Express middleware. Fails OPEN if Upstash is
 // unreachable — matching utils/cache.js's philosophy: a rate limiter outage
@@ -61,7 +69,10 @@ const submitSustainedLimiter = (req, res, next) => {
   return asMiddleware(limiter, submissionKey, 'Submission rate limit exceeded. Please wait before trying again.')(req, res, next);
 };
 
-const apiLimiter = asMiddleware(apiRl, (req) => `ip:${req.ip}`, 'Too many requests. Please slow down.');
+const apiLimiter = (req, res, next) => {
+  const userId = getUserId(req);
+  return asMiddleware(userId ? apiRlUser : apiRlIp, () => (userId ? `user:${userId}` : `ip:${req.ip}`), 'Too many requests. Please slow down.')(req, res, next);
+};
 
 // Reusable factory for the route-local limiters scattered across
 // routes/*.routes.js (auth, faculty, profiles, problemImport, twofa, ai) —

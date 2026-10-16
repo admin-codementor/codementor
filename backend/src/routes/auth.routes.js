@@ -8,16 +8,19 @@ const { protect } = require('../middleware/auth.middleware');
 
 const router = express.Router();
 
+// Sign-in. Wrong passwords never reach this route (Firebase checks them and throttles them itself); this
+// receives a valid Firebase token. Per IP, so it has to allow a class signing in together from one campus address.
 const authLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 300,
   prefix: 'auth',
   message: 'Too many attempts, please try again after 15 minutes.',
 });
 
+// Tokens issued to a class at the same moment expire at the same moment, so they all refresh together.
 const refreshLimiter = createLimiter({
   windowMs: 15 * 60 * 1000,
-  max: 60,
+  max: 600,
   prefix: 'auth:refresh',
   message: 'Too many refresh attempts.',
 });
