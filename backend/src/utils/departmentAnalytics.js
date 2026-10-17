@@ -4,7 +4,8 @@
 // Shape follows the CampusTrack HOD review (docs/COMPETITOR_UX_RESEARCH.md part 2):
 // a four-state funnel first, then flags, then per-section comparison, then
 // written insights. The funnel is the spine: every other number hangs off it.
-const { flagFor, weeklyActivity, STATE_LABELS } = require('./studentState');
+const { flagFor, weeklyActivity, buildFunnel } = require('./studentState');
+const { classLabel, classOrder } = require('./students');
 
 const DAY_MS = 86400000;
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
@@ -35,7 +36,7 @@ function badgeFor(percentile) {
  * @param {{userId,problemId,verdict,submittedAt}[]} a.submissions
  * @param {number} a.now
  */
-function buildDepartmentAnalytics({ students, submissions, now = Date.now() }) {
+function buildDepartmentAnalytics({ students, submissions, now = Date.now(), baseline = null }) {
   const byId = new Map(students.map((s) => [s.id, s]));
 
   // ── Per-student rollup ────────────────────────────────────────────────────
@@ -65,24 +66,25 @@ function buildDepartmentAnalytics({ students, submissions, now = Date.now() }) {
     const acRate = p.subs ? Math.round((p.accepted / p.subs) * 100) : 0;
     const base = { subs: p.subs, solved: p.solvedIds.size, acRate, lastActiveMs: p.lastActiveMs };
     const status = flagFor(base, now);
+    // Newest of two 7-day buckets, with its change against the one before:
+    // the week-over-week review loop, per student.
+    const thisWeek = weeklyActivity(p.mySubs, 2, now)[1];
     return {
       id: p.id, name: p.name, roll_no: p.rollNo, section: p.section, year: p.year,
       subs: p.subs, accepted: p.accepted, solved: p.solvedIds.size, ac_rate: acRate,
       active_days: p.activeDays.size,
       last_active: p.lastActiveMs ? new Date(p.lastActiveMs).toISOString() : null,
       state: status.state, flag: status.flag, reasons: status.reasons,
+      week: {
+        solved: thisWeek.solved, solved_change: thisWeek.solved_change,
+        subs: thisWeek.subs, subs_change: thisWeek.subs_change,
+        active_days: thisWeek.active_days,
+      },
     };
   });
 
   // ── Funnel: exhaustive and mutually exclusive, so the parts sum to the whole ──
-  const funnel = ['not_started', 'practising', 'stuck', 'gone_quiet'].map((key) => ({
-    key,
-    label: STATE_LABELS[key],
-    count: rows.filter((r) => r.state === key).length,
-    students: rows.filter((r) => r.state === key).map((r) => ({
-      id: r.id, name: r.name, roll_no: r.roll_no, section: r.section, reasons: r.reasons,
-    })),
-  }));
+  const funnel = buildFunnel(rows);
 
   const flags = {
     red: rows.filter((r) => r.flag === 'red').length,
@@ -91,10 +93,14 @@ function buildDepartmentAnalytics({ students, submissions, now = Date.now() }) {
   };
 
   // ── Badges by percentile on problems solved ───────────────────────────────
+  // By default a student is ranked against everyone in this view, so the badge moves as
+  // the filters move. `baseline(row)` can supply a different pool of solved-counts to rank
+  // against (their year, or the whole institution) so a filter does not change the badge.
   const solvedValues = rows.map((r) => r.solved);
   const withBadges = rows.map((r) => {
-    const below = solvedValues.filter((v) => v < r.solved).length;
-    const percentile = rows.length ? Math.round((below / rows.length) * 100) : 0;
+    const pool = baseline ? baseline(r) : solvedValues;
+    const below = pool.filter((v) => v < r.solved).length;
+    const percentile = pool.length ? Math.round((below / pool.length) * 100) : 0;
     return { ...r, percentile, badge: badgeFor(percentile) };
   });
   const badgeCounts = BADGES.map((b) => ({
@@ -103,9 +109,15 @@ function buildDepartmentAnalytics({ students, submissions, now = Date.now() }) {
   }));
 
   // ── Section comparison ────────────────────────────────────────────────────
-  const sectionNames = [...new Set(rows.map((r) => r.section || 'Unassigned'))].sort();
+  // Grouped by year AND section: Section A of the 2nd year and of the 4th year are different classes.
+  const labelOf = (r) => classLabel(r.year, r.section);
+  const sectionNames = [...new Set(rows.map(labelOf))]
+    .sort((a, b) => {
+      const ra = rows.find((r) => labelOf(r) === a); const rb = rows.find((r) => labelOf(r) === b);
+      return classOrder(ra.year, ra.section).localeCompare(classOrder(rb.year, rb.section));
+    });
   const sections = sectionNames.map((name) => {
-    const inSection = rows.filter((r) => (r.section || 'Unassigned') === name);
+    const inSection = rows.filter((r) => labelOf(r) === name);
     const red = inSection.filter((r) => r.flag === 'red').length;
     const green = inSection.filter((r) => r.flag === 'green').length;
     return {
@@ -152,11 +164,14 @@ function buildDepartmentAnalytics({ students, submissions, now = Date.now() }) {
     });
   }
   const worst = [...sections].filter((s) => s.students >= 3).sort((a, b) => b.at_risk_pct - a.at_risk_pct)[0];
-  if (worst && worst.at_risk_pct >= 50 && sections.length > 1) {
+  const deptRedPct = Math.round(rows.filter((r) => r.flag === 'red').length / total * 100);
+  // Only worth saying when one class is clearly behind the rest; if everyone is at the same level (for example
+  // on the first day, when nobody has started) singling one class out is noise.
+  if (worst && worst.at_risk_pct >= 50 && sections.length > 1 && worst.at_risk_pct >= deptRedPct + 10) {
     insights.push({
       severity: 'medium',
-      title: `Section ${worst.name} needs the most attention`,
-      detail: `${worst.at_risk_pct}% of its ${worst.students} students are flagged, against ${Math.round(rows.filter((r) => r.flag === 'red').length / total * 100)}% across the department.`,
+      title: `${worst.name} needs the most attention`,
+      detail: `${worst.at_risk_pct}% of its ${worst.students} students are flagged, against ${deptRedPct}% across the department.`,
     });
   }
   const thisWeek = weekly[weekly.length - 1];

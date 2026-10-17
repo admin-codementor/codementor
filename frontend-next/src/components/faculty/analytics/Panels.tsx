@@ -13,7 +13,7 @@ import { ResponsiveScatterPlot } from "@nivo/scatterplot";
 import { ResponsivePie } from "@nivo/pie";
 import { useTheme } from "@mui/material/styles";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
-import { lightScheme, darkScheme } from "@/theme/tokens";
+import { lightScheme, darkScheme, radius, typeScale } from "@/theme/tokens";
 
 export { KpiTile } from "@/components/analytics/KpiTile";
 
@@ -144,7 +144,7 @@ export function StudentScatter({
         tooltip={({ node }) => {
           const d = node.data as unknown as { name: string; x: number; y: number; solved: number };
           return (
-            <Box sx={{ bgcolor: "surfaceContainerHigh", color: "onSurface", p: 1, borderRadius: 2, fontSize: 12, boxShadow: 3 }}>
+            <Box sx={{ bgcolor: "surfaceContainerHigh", color: "onSurface", p: 1, borderRadius: radius.md, fontSize: typeScale.bodySmall.fontSize, boxShadow: 3 }}>
               <strong>{d.name}</strong><br />
               {d.x} submissions · {d.y}% accepted · {d.solved} solved
             </Box>
@@ -186,7 +186,7 @@ export function DistributionChart({
         axisLeft={{ tickSize: 0, tickPadding: 8, legend: "Students", legendPosition: "middle", legendOffset: -38 }}
         onClick={onBarClick ? (d) => onBarClick(d.data as { bucket: string; count: number }) : undefined}
         tooltip={onBarClick ? ({ data }) => (
-          <Box sx={{ bgcolor: "surfaceContainerHigh", color: "onSurface", p: 1, borderRadius: 2, fontSize: 12, boxShadow: 3 }}>
+          <Box sx={{ bgcolor: "surfaceContainerHigh", color: "onSurface", p: 1, borderRadius: radius.md, fontSize: typeScale.bodySmall.fontSize, boxShadow: 3 }}>
             {data.count} student{data.count === 1 ? "" : "s"} · click to list them
           </Box>
         ) : undefined}
@@ -221,7 +221,7 @@ export function VerdictDonut({ rows }: { rows: { verdict: string; count: number 
       <Stack spacing={0.75} sx={{ minWidth: 0, flex: 1 }}>
         {rows.map((r, i) => (
           <Stack key={r.verdict} direction="row" alignItems="center" spacing={1}>
-            <Box sx={{ width: 10, height: 10, borderRadius: 0.5, bgcolor: colors[i % colors.length], flexShrink: 0 }} />
+            <Box sx={{ width: 10, height: 10, borderRadius: radius.xs, bgcolor: colors[i % colors.length], flexShrink: 0 }} />
             <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>{r.verdict}</Typography>
             <Typography variant="body2" fontWeight={600}>{r.count}</Typography>
             <Typography variant="caption" color="text.secondary" sx={{ minWidth: 34, textAlign: "right" }}>
@@ -259,11 +259,11 @@ export function BoxPlotRow({
               </Typography>
             </Stack>
             <Tooltip title={`min ${b.min} · Q1 ${b.q1} · median ${b.median} · Q3 ${b.q3} · max ${b.max}`}>
-              <Box sx={{ position: "relative", height: 18, bgcolor: "surfaceContainerHigh", borderRadius: 1 }}>
+              <Box sx={{ position: "relative", height: 18, bgcolor: "surfaceContainerHigh", borderRadius: radius.sm }}>
                 {/* whiskers */}
                 <Box sx={{ position: "absolute", top: 8, left: pct(b.min), width: `calc(${pct(b.max)} - ${pct(b.min)})`, height: 2, bgcolor: "outlineVariant" }} />
                 {/* interquartile box */}
-                <Box sx={{ position: "absolute", top: 3, left: pct(b.q1), width: `calc(${pct(b.q3)} - ${pct(b.q1)})`, height: 12, bgcolor: colors[0], opacity: 0.35, borderRadius: 0.5 }} />
+                <Box sx={{ position: "absolute", top: 3, left: pct(b.q1), width: `calc(${pct(b.q3)} - ${pct(b.q1)})`, height: 12, bgcolor: colors[0], opacity: 0.35, borderRadius: radius.xs }} />
                 {/* median */}
                 <Box sx={{ position: "absolute", top: 1, left: pct(b.median), width: 2, height: 16, bgcolor: colors[0] }} />
               </Box>
@@ -293,7 +293,7 @@ export function TestCaseHeatmap({
         <Tooltip key={r.testIndex} title={`Test ${r.testIndex}${r.isPublic ? " (sample)" : ""} — ${r.failures}/${r.attempts} failed`}>
           <Box
             sx={{
-              width: 46, height: 46, borderRadius: 2, display: "flex", flexDirection: "column",
+              width: 46, height: 46, borderRadius: radius.md, display: "flex", flexDirection: "column",
               alignItems: "center", justifyContent: "center", border: "1px solid", borderColor: "outlineVariant",
               // Red intensity tracks the fail rate; a wall of red on one index is
               // the edge case the class is missing.
@@ -304,7 +304,7 @@ export function TestCaseHeatmap({
             }}
           >
             <Typography variant="caption" fontWeight={700} sx={{ lineHeight: 1 }}>{r.testIndex}</Typography>
-            <Typography variant="caption" sx={{ fontSize: 10, lineHeight: 1.2 }}>{r.failRate}%</Typography>
+            <Typography variant="caption" sx={{ fontSize: typeScale.labelSmall.fontSize, lineHeight: 1.2 }}>{r.failRate}%</Typography>
           </Box>
         </Tooltip>
       ))}
@@ -342,7 +342,7 @@ export function ItemAnalysisScatter({
         tooltip={({ node }) => {
           const d = (node.data as unknown as { item: { position: number; question_text: string; flag: string | null } }).item;
           return (
-            <Box sx={{ bgcolor: "surfaceContainerHigh", color: "onSurface", p: 1, borderRadius: 2, fontSize: 12, maxWidth: 280, boxShadow: 3 }}>
+            <Box sx={{ bgcolor: "surfaceContainerHigh", color: "onSurface", p: 1, borderRadius: radius.md, fontSize: typeScale.bodySmall.fontSize, maxWidth: 280, boxShadow: 3 }}>
               <strong>Q{d.position}</strong> — {d.question_text.slice(0, 90)}
               {d.flag && <><br /><em>{d.flag}</em></>}
             </Box>
@@ -392,11 +392,11 @@ export function RankedBars({
 
 /** Explainable risk chips — never a bare score. */
 export function RiskChips({ reasons }: { reasons: string[] }) {
-  if (reasons.length === 0) return <Chip size="small" label="On track" sx={{ height: 20, fontSize: 10, bgcolor: "successContainer", color: "onSuccessContainer" }} />;
+  if (reasons.length === 0) return <Chip size="small" label="On track" sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, bgcolor: "successContainer", color: "onSuccessContainer" }} />;
   return (
     <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap>
       {reasons.map((r) => (
-        <Chip key={r} size="small" label={r} sx={{ height: 20, fontSize: 10, bgcolor: "warningContainer", color: "onWarningContainer" }} />
+        <Chip key={r} size="small" label={r} sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, bgcolor: "warningContainer", color: "onWarningContainer" }} />
       ))}
     </Stack>
   );

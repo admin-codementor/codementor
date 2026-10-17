@@ -1,5 +1,6 @@
 const jwt = require('jsonwebtoken');
 const userRepo = require('../repositories/userRepository');
+const { gateClaim } = require('../utils/passwordGate');
 
 exports.refresh = async (req, res) => {
   try {
@@ -20,7 +21,7 @@ exports.refresh = async (req, res) => {
     const { resolvePermissions } = require('../middleware/permissions');
     const permissions = resolvePermissions(user);
     const newAccessToken = jwt.sign(
-      { id: user.id, role: user.role, permissions, department: user.department ?? null },
+      { id: user.id, role: user.role, permissions, department: user.department ?? null, ...gateClaim(user) },
       process.env.JWT_SECRET,
       { expiresIn: '1h' }
     );

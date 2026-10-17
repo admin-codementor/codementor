@@ -6,11 +6,22 @@ const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../m
 const facultyController = require('../controllers/faculty.controller');
 const plagiarismController = require('../controllers/plagiarism.controller');
 const groupController = require('../controllers/studentGroup.controller');
+const mentorController = require('../controllers/mentor.controller');
+const placementController = require('../controllers/placement.controller');
+const alumniController = require('../controllers/alumni.controller');
 const { logAction } = require('../middleware/audit');
 const userRepo = require('../repositories/userRepository');
 const auditLogRepo = require('../repositories/auditLogRepository');
 
 const router = express.Router();
+
+// Every insights call can spend AI quota (results are cached 10 minutes server-side).
+const insightsLimiter = createLimiter({
+  windowMs: 60 * 1000,
+  max: 6,
+  prefix: 'ai:dept-insights',
+  message: 'Too many insight requests. Please wait a minute.',
+});
 
 router.use(protect);
 router.use(facultyStaff);
@@ -27,11 +38,35 @@ const plagiarismLimiter = createLimiter({
 
 // ── Read-only dashboard endpoints (no extra permission needed) ───────────────
 router.get('/dashboard',  facultyController.getDashboardData);
-router.get('/analytics',  facultyController.getClassAnalytics);
+// Admin only: this legacy endpoint aggregates EVERY department and returns top
+// students by name, which a faculty or HOD token must not be able to read. No
+// screen calls it (the analytics pages use /analytics/overview and friends).
+router.get('/analytics',  authorize('admin'), facultyController.getClassAnalytics);
 // HOD/admin only. A `faculty` token is scoped to its own CLASSES everywhere else
 // (resolveAnalyticsScope), so serving it a whole-department roster here would
 // quietly widen what a class teacher can see.
 router.get('/department', authorize('hod', 'admin'), facultyController.getDepartmentAnalytics);
+// Aggregates only: a head may compare departments, never see another department's students.
+// Mentor mapping: HOD/admin only, and an HOD is confined to their own department by the token.
+router.get('/portfolio', authorize('hod', 'admin'), facultyController.getPortfolioOverview);
+// Placement drives, applications and analytics: HOD/admin only; an HOD is confined to their own department.
+router.get('/placement/drives', authorize('hod', 'admin'), placementController.listDrives);
+router.post('/placement/drives', authorize('hod', 'admin'), placementController.createDrive);
+router.get('/placement/drives/:id', authorize('hod', 'admin'), placementController.getDrive);
+router.patch('/placement/drives/:id', authorize('hod', 'admin'), placementController.updateDrive);
+router.delete('/placement/drives/:id', authorize('hod', 'admin'), placementController.deleteDrive);
+router.put('/placement/drives/:id/applications', authorize('hod', 'admin'), placementController.saveApplications);
+router.get('/placement/analytics', authorize('hod', 'admin'), placementController.getAnalytics);
+// Alumni: HOD/admin only; an HOD is confined to their own department.
+router.get('/alumni', authorize('hod', 'admin'), alumniController.getAlumni);
+router.put('/alumni/graduation', authorize('hod', 'admin'), alumniController.setGraduation);
+router.get('/mentors', authorize('hod', 'admin'), mentorController.listMentors);
+router.put('/mentors/assign', authorize('hod', 'admin'), mentorController.assignMentees);
+router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, facultyController.getDepartmentInsights);
+// Labs: the department's classes and assignment completion; read-only, HOD/admin, department from the token.
+router.get('/labs', authorize('hod', 'admin'), facultyController.getLabs);
+router.get('/department/activity', authorize('hod', 'admin'), facultyController.getDepartmentActivity);
+router.get('/department-leaderboard', authorize('hod', 'admin'), facultyController.getDepartmentLeaderboard);
 router.get('/cohort-topics', facultyController.getCohortTopics);
 // Hierarchical drill-down (department-scoped for HOD/faculty; admin = all).
 router.get('/analytics/cohorts', facultyController.getCohorts);
@@ -111,6 +146,7 @@ router.delete('/groups/:id', requirePermission('manage_students'), groupControll
 
 // ── Courses / modules (student practice catalogue) ──────────────────────────
 router.get('/courses',    facultyController.getFacultyCourses);
+router.get('/courses/completion', facultyController.getCourseCompletionSummary);
 router.get('/courses/:id', facultyController.getFacultyCourseDetail);
 router.get('/courses/:id/analytics', facultyController.getCourseAnalytics);
 router.post('/courses',

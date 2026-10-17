@@ -10,12 +10,18 @@ const submissionRepo = require('../repositories/submissionRepository');
 const proctorEventRepo = require('../repositories/proctorEventRepository');
 const plagiarismRepo = require('../repositories/plagiarismResultRepository');
 const analytics = require('./analyticsService');
-const { buildCourseAnalytics } = require('../utils/courseAnalytics');
+const { buildCourseAnalytics, completionStats, solvedByStudent } = require('../utils/courseAnalytics');
 
 const TTL_SECONDS = 120;
 // Bump when the response shape or aggregation changes (the cache outlives deploys).
-const VERSION = 1;
+const VERSION = 2;
 const ALLOWED_DAYS = new Set([7, 30, 182]);
+
+/** Same population rule as the analytics snapshot: own classes' students, department, or everyone. */
+function scopedStudents(scope, studentsMap) {
+  const inScope = (s) => (scope.memberIds ? scope.memberIds.has(s.id) : scope.dept === null || (s.department || null) === scope.dept);
+  return new Map([...studentsMap.values()].filter(inScope).map((s) => [s.id, s]));
+}
 
 async function compute({ courseId, scope, days, classroomIds }) {
   const course = await courseRepo.getById(courseId);
@@ -27,10 +33,8 @@ async function compute({ courseId, scope, days, classroomIds }) {
     scope.ownClasses ? classroomRepo.listByFacultyId(scope.facultyId) : classroomRepo.listAll(),
   ]);
 
-  // Same population rule as the analytics snapshot: a faculty member sees their
-  // own classes' students, HOD sees their department, admin sees everyone.
-  const inScope = (s) => (scope.memberIds ? scope.memberIds.has(s.id) : scope.dept === null || (s.department || null) === scope.dept);
-  const scoped = new Map([...studentsMap.values()].filter(inScope).map((s) => [s.id, s]));
+  // A faculty member sees their own classes' students, HOD their department, admin everyone.
+  const scoped = scopedStudents(scope, studentsMap);
 
   // Groups = classrooms, with members trimmed to the people this viewer may see.
   // A classroom with nobody in scope is dropped (e.g. another department's class for an HOD).
@@ -82,4 +86,28 @@ exports.getCourseAnalytics = async (req, courseId, days, classroomIds = []) => {
   const ids = [...new Set(classroomIds)].sort();
   const key = `analytics:course:v${VERSION}:${courseId}:${analytics.scopeKey(scope)}:${windowDays}:${ids.join(',') || 'all'}`;
   return cached(key, TTL_SECONDS, () => compute({ courseId, scope, days: windowDays, classroomIds: ids }));
+};
+
+async function computeSummary(scope) {
+  const [courses, studentsMap, submissions] = await Promise.all([
+    courseRepo.listAll(),
+    userRepo.getMapByRole('student'),
+    submissionRepo.listAllForAnalytics(),
+  ]);
+  const students = [...scopedStudents(scope, studentsMap).values()].map((s) => ({ id: s.id }));
+  const out = {};
+  for (const c of courses) {
+    const modules = await courseRepo.getModules(c.id);
+    const problems = new Set(modules.flatMap((m) => m.problemIds || []));
+    const stats = completionStats(problems.size, students, solvedByStudent(problems, students, submissions));
+    out[c.id] = { students: students.length, completed: stats.completed, avgPercent: stats.avgPercent, totalProblems: stats.totalProblems };
+  }
+  return out;
+}
+
+/** One line per course for the course list: how many of the viewer's students finished, and how far along on average. */
+exports.getCompletionSummary = async (req) => {
+  const scope = await analytics.resolveAnalyticsScope(req);
+  scope.facultyId = req.user.id;
+  return cached(`analytics:course-summary:v1:${analytics.scopeKey(scope)}`, TTL_SECONDS, () => computeSummary(scope));
 };

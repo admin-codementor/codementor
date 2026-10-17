@@ -65,6 +65,38 @@ function flagFor({ subs, solved, acRate, lastActiveMs }, now = Date.now()) {
   return { flag, state, reasons };
 }
 
+const FUNNEL_ORDER = ['not_started', 'practising', 'stuck', 'gone_quiet'];
+
+/**
+ * The four-state funnel, with the students in each bucket. Every row lands in
+ * exactly one bucket, so the counts always sum to rows.length.
+ * Rows need { id, name, roll_no, section, state, reasons }.
+ */
+function buildFunnel(rows) {
+  return FUNNEL_ORDER.map((key) => {
+    const inBucket = rows.filter((r) => r.state === key);
+    return {
+      key,
+      label: STATE_LABELS[key],
+      count: inBucket.length,
+      students: inBucket.map((r) => ({
+        id: r.id, name: r.name, roll_no: r.roll_no, section: r.section, reasons: r.reasons,
+      })),
+    };
+  });
+}
+
+/** Funnel for analytics-snapshot student stats ({ subs, solved, acRate, lastActiveMs, ... }). */
+function funnelFromStats(stats, now = Date.now()) {
+  return buildFunnel(stats.map((s) => {
+    const status = flagFor({ subs: s.subs, solved: s.solved, acRate: s.acRate, lastActiveMs: s.lastActiveMs || 0 }, now);
+    return {
+      id: s.id, name: s.name || 'Unknown', roll_no: s.rollNo || null, section: s.section || null,
+      state: status.state, reasons: status.reasons,
+    };
+  }));
+}
+
 /**
  * Per-week activity for the last `weeks` weeks, newest last, each with the
  * change against the week before it. Weeks are 7-day buckets ending today
@@ -121,6 +153,6 @@ function weeklyActivity(submissions, weeks = 8, now = Date.now()) {
 }
 
 module.exports = {
-  studentState, flagFor, weeklyActivity, STATE_LABELS,
+  studentState, flagFor, weeklyActivity, STATE_LABELS, buildFunnel, funnelFromStats,
   QUIET_DAYS, LOW_ACCURACY_PCT, MIN_SUBS_FOR_ACCURACY, DAY_MS,
 };

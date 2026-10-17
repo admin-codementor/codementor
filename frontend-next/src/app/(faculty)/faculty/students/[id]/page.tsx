@@ -29,6 +29,7 @@ import {
   CheckCircleOutlineIcon,
   ErrorOutlineIcon,
   LinkOutlinedIcon,
+  AssignmentOutlinedIcon,
 } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -39,7 +40,9 @@ import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal, RevealGroup, RevealItem } from "@/components/ui/motion";
 import { CODING_PLATFORM_META } from "@/lib/codingPlatforms";
+import { radius, typeScale } from "@/theme/tokens";
 import { StatusBanner, type StatusInfo } from "@/components/analytics/StatusFlag";
+import { ThresholdsDialog } from "@/components/analytics/ThresholdsDialog";
 import {
   CourseProgressCard, ExamHistoryCard, WeeklyProgressCard,
   type CourseRow, type ExamRow, type WeeklyRow,
@@ -68,7 +71,7 @@ interface StudentProfile {
     lastLoginAt: string | null;
     joinedDate: string;
   };
-  totals: { total: number; accepted: number; solved: number; acRate: number };
+  totals: { total: number; accepted: number; solved: number; attempted: number; activeDays: number; acRate: number };
   learningCurve: { date: string; solved: number }[];
   topicBreakdown: { topic: string; solved: number; attempts: number }[];
   verdictBreakdown: { name: string; value: number }[];
@@ -93,6 +96,7 @@ interface StudentProfile {
   exams: ExamRow[];
   examSummary: { taken: number; available: number; avg_percent: number | null };
   courses: CourseRow[];
+  portfolio: { id: string; type: "certification" | "project" | "achievement"; title: string; detail: string; date: string | null; link: string | null }[];
   highlights: {
     topTopic: string | null;
     weakTopic: string | null;
@@ -120,7 +124,7 @@ function TopicScoreRow({ item, tone }: { item: TopicScore; tone: "success" | "wa
         variant="determinate"
         value={item.acRate}
         color={tone}
-        sx={{ height: 6, borderRadius: 3, mb: 0.5 }}
+        sx={{ height: 6, borderRadius: radius.xs, mb: 0.5 }}
       />
       <Typography variant="caption" color="text.secondary">
         {item.reason}
@@ -143,18 +147,18 @@ export default function StudentProfilePage() {
 
   const [data, setData] = React.useState<StudentProfile | null>(null);
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState(false);
+  const [error, setError] = React.useState<unknown>(null);
 
   const load = React.useCallback(() => {
     setLoading(true);
-    setError(false);
+    setError(null);
     api
       .get(`/api/faculty/students/${studentId}/detail`)
       .then((r) => {
         if (r.data?.success) setData(r.data.data);
         else setError(true);
       })
-      .catch(() => setError(true))
+      .catch((e) => setError(e))
       .finally(() => setLoading(false));
   }, [studentId]);
 
@@ -188,13 +192,26 @@ export default function StudentProfilePage() {
         </Stack>
       )}
 
-      {!loading && error && (
-        <ErrorState onRetry={load} description="We couldn't load this student's profile. You may be outside your department scope." />
+      {!loading && Boolean(error) && (
+        <ErrorState
+          error={error}
+          onRetry={load}
+          description="We couldn't load this student's profile. You may be outside your department scope."
+        />
       )}
 
       {!loading && !error && data && (
         <Stack spacing={3}>
-          {data.status && <Reveal><StatusBanner status={data.status} /></Reveal>}
+          {data.status && (
+            <Reveal>
+              <Box sx={{ position: "relative" }}>
+                <StatusBanner status={data.status} />
+                <Box sx={{ position: "absolute", top: 4, right: 4 }}>
+                  <ThresholdsDialog kind="flag" inherit />
+                </Box>
+              </Box>
+            </Reveal>
+          )}
 
           <RevealGroup>
             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", md: "repeat(4, 1fr)" }, gap: 2 }}>
@@ -220,6 +237,12 @@ export default function StudentProfilePage() {
                 <StatCard icon={<CodeOutlinedIcon />} label="Top Language" value={data.highlights.topLanguage ?? "—"} accent="secondary" />
               </RevealItem>
               <RevealItem>
+                <StatCard icon={<AssignmentOutlinedIcon />} label="Problems Attempted" value={data.totals.attempted} accent="tertiary" />
+              </RevealItem>
+              <RevealItem>
+                <StatCard icon={<HistoryOutlinedIcon />} label="Active Days (12 mo)" value={data.totals.activeDays} helper="Days with any submission, not measured time" accent="secondary" />
+              </RevealItem>
+              <RevealItem>
                 <StatCard icon={<HubOutlinedIcon />} label="External Solved" value={data.highlights.externalSolved} helper="Across synced platforms" accent="primary" />
               </RevealItem>
             </Box>
@@ -231,6 +254,29 @@ export default function StudentProfilePage() {
             <Reveal><CourseProgressCard courses={data.courses ?? []} /></Reveal>
             <Reveal><ExamHistoryCard exams={data.exams ?? []} summary={data.examSummary ?? { taken: 0, available: 0, avg_percent: null }} /></Reveal>
           </Box>
+
+          <Reveal>
+            <SectionCard title="Portfolio" icon={<HubOutlinedIcon sx={{ fontSize: 20, color: "text.secondary" }} />}>
+              {(data.portfolio ?? []).length === 0 ? (
+                <Typography variant="body2" color="text.secondary" sx={{ py: 1 }}>
+                  This student has not added any certifications, projects or achievements yet.
+                </Typography>
+              ) : (
+                <Stack spacing={1.25}>
+                  {data.portfolio.map((i) => (
+                    <Stack key={i.id} direction="row" spacing={1.5} alignItems="flex-start">
+                      <Chip size="small" label={i.type} sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize" }} />
+                      <Box sx={{ minWidth: 0 }}>
+                        <Typography variant="body2" fontWeight={500}>{i.title}</Typography>
+                        {i.detail && <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>{i.detail}</Typography>}
+                        {i.link && <Typography variant="caption" component="a" href={i.link} target="_blank" rel="noopener noreferrer" sx={{ color: "primary.main" }}>View link</Typography>}
+                      </Box>
+                    </Stack>
+                  ))}
+                </Stack>
+              )}
+            </SectionCard>
+          </Reveal>
 
           {/* Strengths & weaknesses */}
           <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" }, gap: 3 }}>

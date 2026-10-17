@@ -5,6 +5,64 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-15 (Thu)
+**Area:** Faculty + HOD persona (branch `feat/faculty-persona`, off `main` after PR #39)
+**Did:**
+- Merged the S12/S13 student work first (PR #39, after fixing a third recurrence of the `npm ci` lockfile
+  failure: delete `package-lock.json` as well as `node_modules` before reinstalling).
+- Wrote `docs/FACULTY_HOD_PERSONA_PLAN.md` from a code audit plus a read-only walkthrough of CodeTantra (faculty)
+  and CampusTrack (HOD) with the user's logins; findings in `docs/COMPETITOR_UX_RESEARCH.md` Part 3. Main finding:
+  most of the HOD dashboard was already shipped, so the plan is about what is left, not a rebuild.
+- **F0** design-system sweep of every faculty page (raw `borderRadius`/`fontSize` → tokens) and real error states
+  in audit-logs and the student profile. **F1** `/faculty/analytics`: 12 chart cards onto the shared `ChartCard`.
+  **F2** per-student: "Problems attempted" and a labelled "Active days" time-spent proxy. **F3** a shared
+  "How flags / badges are calculated" dialog stating the real thresholds.
+- **H2** 92 smoke checks for student groups and the department endpoint (`backend/tests/suites/
+  groupsAndDepartment.js`), including pinning the numbers the F3 dialog states to the backend constants.
+- User picked four of the deep-dive options (G12b, G13b/c, G14b, G15b), built: department dashboard now has
+  **Overview / Weekly progress / Rankings** tabs (cohort-wide week-over-week table; ranked list with badge and
+  flag); the four-state funnel is one shared component, now also on the faculty **Cohorts** tab and each
+  cohort's drill-down; course analytics gains a **how-far-along-each-student-is** distribution and the course
+  list shows average completion per course.
+**Decisions:** FD1–FD4 (defer mentor/portfolio/placement to T&P; keep the submission-based time proxy; fold
+company-specific content into the course-content track; cross-department leaderboard belongs to Admin).
+**Deviations from the plan, on purpose:** did not flip the `no-restricted-syntax` lint rule to error (student
+pages still carry raw font sizes, so it would break CI on untouched files); did not wrap list pages in
+`SectionCard` (the sibling list pages do not either); `loading`/`error` left unwired on the analytics
+`ChartCard`s because the page already gates both.
+**Verified:** `tsc`, production build, backend syntax, `check:routes`, smoke suite. **Not verified:** a signed-in
+browser walkthrough of the faculty pages (no faculty credentials in the session) — worth one manual pass.
+**Next:** open the PR for `feat/faculty-persona`; then T&P.
+**Branch:** `feat/faculty-persona`
+
+---
+
+## 2026-10-15 (Thu) — part 2
+**Area:** HOD persona (branch `feat/hod-persona`, 6 commits after `abd5eae`)
+**Did:** every pending HOD feature, one commit each: H3 cross-department leaderboard, H4 activity, H5 AI insights,
+H6 mentors, H7 portfolio, H8 placement (HOD-managed), H9 alumni + percentile baseline, H10 Labs (read-only),
+H11 messages (consent, block, report). Closed a leak: `GET /api/faculty/analytics` listed every department by name
+to any staff token; it is admin-only now. Details per phase are in `docs/FACULTY_HOD_PERSONA_PLAN.md` (H3–H11).
+**Decisions:** a department always comes from the token, never the query; other departments are aggregate-only;
+the AI only ever sees aggregates; messaging is opt-in for students and a report is the only way a conversation
+becomes readable by anyone outside it.
+**Verified:** backend smoke suites 376 passed + 1 skipped (AI quota) through H9; Labs 31 and Messages 91 passed
+when run; `tsc`, lint, production build and `check:routes` clean at every phase.
+**Not verified:**
+- **No signed-in browser check of any faculty or HOD page.** Nothing has been looked at as an HOD.
+- After H10 and H11 the earlier suites were **not re-run**: the Firestore free-tier daily quota ran out partway
+  through the final regression run (`RESOURCE_EXHAUSTED`), so those failures are quota, not code. Re-run
+  `node tests/run.js groupsDepartment hodFeatures hodPlacement hodAlumni hodLabs messages` after the quota resets.
+- Leftover `smoketest-` records from that crashed run may remain; the suites use fixed ids, so the next run
+  overwrites and cleans them.
+**Heads-up:** the test suites run against the live Firestore project, so a heavy testing day can exhaust the
+daily quota the live demo also uses.
+**Next:** the user creates the HOD account (`node scripts/create-hod-account.js --department CSE --confirm`, run
+in `backend/`); re-run the suites; one signed-in pass over the faculty and HOD pages; then the PR.
+**Branch:** `feat/hod-persona`
+
+---
+
 ## 2026-10-12 (Mon) — part 19
 **Area:** S13 Phase C — 16 new roadmap roles
 **Did:**

@@ -36,6 +36,7 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { EmptyState } from "@/components/ui/States";
+import { radius, typeScale } from "@/theme/tokens";
 import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
@@ -178,7 +179,7 @@ function AttemptDetailDialog({
                       const selected = entry && Number.isInteger(entry.selectedIndex) ? entry.selectedIndex : null;
                       const correct = selected != null && selected === q.correct_index;
                       return (
-                        <Box key={q.id} sx={{ p: 1, borderRadius: 1, border: "1px solid", borderColor: "outlineVariant" }}>
+                        <Box key={q.id} sx={{ p: 1, borderRadius: radius.sm, border: "1px solid", borderColor: "outlineVariant" }}>
                           <Stack direction="row" spacing={1} alignItems="flex-start">
                             {correct
                               ? <CheckCircleIcon sx={{ fontSize: 16, color: "success.main", mt: 0.25, flexShrink: 0 }} />
@@ -199,7 +200,7 @@ function AttemptDetailDialog({
                       const cs = detail.coding_state[p.id];
                       const accepted = cs?.verdict === "Accepted";
                       return (
-                        <Stack key={p.id} direction="row" spacing={1} alignItems="center" sx={{ p: 1, borderRadius: 1, border: "1px solid", borderColor: "outlineVariant" }}>
+                        <Stack key={p.id} direction="row" spacing={1} alignItems="center" sx={{ p: 1, borderRadius: radius.sm, border: "1px solid", borderColor: "outlineVariant" }}>
                           {cs
                             ? (accepted
                               ? <CheckCircleIcon sx={{ fontSize: 16, color: "success.main", flexShrink: 0 }} />
@@ -338,7 +339,7 @@ export default function FacultyExamsPage() {
                     <Box key={s.id}>
                       <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: s.type === "coding" ? 1 : 0 }}>
                         <Typography variant="body2" fontWeight={500}>{s.title}</Typography>
-                        <Chip size="small" label={s.type} sx={{ height: 18, fontSize: 10, textTransform: "uppercase" }} />
+                        <Chip size="small" label={s.type} sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "uppercase" }} />
                       </Stack>
                       {s.type === "coding" && (s.problem_stats ?? []).length > 0 && (
                         <Stack spacing={0.5} sx={{ pl: 1 }}>
@@ -456,7 +457,7 @@ export default function FacultyExamsPage() {
                     <Chip
                       label={e.is_published ? "Published" : "Draft"}
                       size="small"
-                      sx={{ height: 18, fontSize: 10, fontWeight: 600, bgcolor: e.is_published ? "successContainer" : "surfaceContainerHigh", color: e.is_published ? "onSuccessContainer" : "onSurfaceVariant" }}
+                      sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600, bgcolor: e.is_published ? "successContainer" : "surfaceContainerHigh", color: e.is_published ? "onSuccessContainer" : "onSurfaceVariant" }}
                     />
                   </Stack>
                   <Typography variant="caption" color="text.secondary">

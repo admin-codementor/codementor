@@ -32,6 +32,7 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { AuthoringShell, CheckLine, type SaveState, type AuthoringStep } from "@/components/faculty/AuthoringShell";
+import { radius } from "@/theme/tokens";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 
@@ -312,10 +313,10 @@ export default function ProblemAuthoringPage() {
             onChange={(e) => { const v = e.target.value; edit(() => ({ description: v })); }}
             slotProps={{ htmlInput: { style: { fontFamily: "ui-monospace, monospace", fontSize: 13 } } }}
           />
-          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, p: 2, minHeight: 320, overflowX: "auto" }}>
+          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, p: 2, minHeight: 320, overflowX: "auto" }}>
             <Typography variant="overline" color="text.secondary">Student preview</Typography>
             {draft.description.trim() ? (
-              <Box sx={{ "& pre": { overflowX: "auto", bgcolor: "surfaceContainerHigh", p: 1.5, borderRadius: 1 }, "& code": { fontFamily: "ui-monospace, monospace", fontSize: 13 }, "& table": { borderCollapse: "collapse" }, "& td, & th": { border: "1px solid", borderColor: "outlineVariant", px: 1, py: 0.5 } }}>
+              <Box sx={{ "& pre": { overflowX: "auto", bgcolor: "surfaceContainerHigh", p: 1.5, borderRadius: radius.sm }, "& code": { fontFamily: "ui-monospace, monospace", fontSize: 13 }, "& table": { borderCollapse: "collapse" }, "& td, & th": { border: "1px solid", borderColor: "outlineVariant", px: 1, py: 0.5 } }}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{draft.description}</ReactMarkdown>
               </Box>
             ) : (
@@ -373,7 +374,7 @@ export default function ProblemAuthoringPage() {
             No test cases yet. Add them by hand, or generate a verified set from the statement.
           </Alert>
         ) : (
-          <TableContainer sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2 }}>
+          <TableContainer sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md }}>
             <Table size="small" sx={{ minWidth: 620 }}>
               <TableHead>
                 <TableRow sx={{ "& th": { color: "text.secondary", fontWeight: 600 } }}>
@@ -481,7 +482,7 @@ export default function ProblemAuthoringPage() {
 
         {!isPublished && !readyToPublish && (
           <Alert severity="warning">
-            <AlertTitle sx={{ fontSize: 14 }}>Not ready to publish</AlertTitle>
+            <AlertTitle>Not ready to publish</AlertTitle>
             A problem needs a title, a statement and at least one complete test case, otherwise it
             cannot be graded.
           </Alert>

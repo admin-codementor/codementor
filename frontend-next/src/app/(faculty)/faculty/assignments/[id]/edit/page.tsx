@@ -27,6 +27,7 @@ import { useToast } from "@/components/feedback/ToastProvider";
 import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState } from "@/components/ui/States";
 import { AuthoringShell, CheckLine, type SaveState, type AuthoringStep } from "@/components/faculty/AuthoringShell";
+import { radius, typeScale } from "@/theme/tokens";
 
 interface PickableProblem { id: string; title: string; difficulty: string; tags: string[]; status?: string }
 interface ClassOption { id: string; name: string; department: string | null; section: string | null; member_count: number }
@@ -56,7 +57,7 @@ function SelectedRow({
         alignItems="center"
         spacing={1}
         sx={{
-          px: 1, py: 0.75, mb: 0.75, borderRadius: 2, border: "1px solid",
+          px: 1, py: 0.75, mb: 0.75, borderRadius: radius.md, border: "1px solid",
           borderColor: "outlineVariant", bgcolor: "background.paper",
         }}
       >
@@ -70,7 +71,7 @@ function SelectedRow({
         </Box>
         <Typography variant="caption" sx={{ width: 20, color: "text.secondary" }}>{index + 1}</Typography>
         <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>{problem.title}</Typography>
-        <Chip label={problem.difficulty} size="small" sx={{ height: 18, fontSize: 10, textTransform: "capitalize" }} />
+        <Chip label={problem.difficulty} size="small" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize" }} />
         <IconButton size="small" disabled={index === 0} onClick={() => onMove(-1)} aria-label={`Move ${problem.title} up`}>
           <ExpandLessIcon fontSize="small" />
         </IconButton>
@@ -238,7 +239,7 @@ export default function AssignmentBuilderPage() {
             <Typography variant="overline" color="text.secondary">Available</Typography>
             <SearchField value={search} onChange={setSearch} placeholder="Title or tag" />
           </Stack>
-          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 340, overflowY: "auto" }}>
+          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, maxHeight: 340, overflowY: "auto" }}>
             {visible.length === 0 ? (
               <EmptyState
                 icon={<DescriptionOutlinedIcon />}
@@ -264,7 +265,7 @@ export default function AssignmentBuilderPage() {
                       <Typography variant="caption" color="text.secondary" noWrap>{p.tags.slice(0, 4).join(" · ")}</Typography>
                     )}
                   </Box>
-                  <Chip label={p.difficulty} size="small" sx={{ height: 18, fontSize: 10, textTransform: "capitalize", flexShrink: 0 }} />
+                  <Chip label={p.difficulty} size="small" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize", flexShrink: 0 }} />
                 </Stack>
               );
             })}
@@ -276,7 +277,7 @@ export default function AssignmentBuilderPage() {
             In this assignment ({selectedIds.length})
           </Typography>
           {selectedProblems.length === 0 ? (
-            <Box sx={{ border: "1px dashed", borderColor: "outlineVariant", borderRadius: 2 }}>
+            <Box sx={{ border: "1px dashed", borderColor: "outlineVariant", borderRadius: radius.md }}>
               <EmptyState icon={<DescriptionOutlinedIcon />} title="Nothing selected yet" description="Pick problems on the left." />
             </Box>
           ) : (
@@ -320,7 +321,7 @@ export default function AssignmentBuilderPage() {
         {classes.length === 0 ? (
           <EmptyState icon={<GroupsOutlinedIcon />} title="No classes yet" description="Create a class to target assignments at it." />
         ) : (
-          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 340, overflowY: "auto" }}>
+          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, maxHeight: 340, overflowY: "auto" }}>
             {classes.map((c) => {
               const chosen = classIds.includes(c.id);
               return (
@@ -341,7 +342,7 @@ export default function AssignmentBuilderPage() {
                   </Box>
                   <Chip
                     icon={<GroupsOutlinedIcon />} label={c.member_count} size="small"
-                    sx={{ height: 20, fontSize: 11, flexShrink: 0 }}
+                    sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, flexShrink: 0 }}
                   />
                 </Stack>
               );
@@ -377,7 +378,7 @@ export default function AssignmentBuilderPage() {
         </Stack>
 
         {selectedProblems.length > 0 && (
-          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, p: 1.5 }}>
+          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, p: 1.5 }}>
             <Typography variant="overline" color="text.secondary">Order students will see</Typography>
             <Stack spacing={0.25} sx={{ mt: 0.5 }}>
               {selectedProblems.map((p, i) => (
@@ -389,7 +390,7 @@ export default function AssignmentBuilderPage() {
 
         {saveError && (
           <Alert severity="error">
-            <AlertTitle sx={{ fontSize: 14 }}>Not saved</AlertTitle>
+            <AlertTitle>Not saved</AlertTitle>
             {saveError}
           </Alert>
         )}

@@ -23,3 +23,25 @@ exports.cached = async (key, ttlSeconds, fn) => {
   }
   return value;
 };
+
+/**
+ * Version counters for invalidating cached aggregates when the data under them
+ * changes (e.g. a mentor assignment). Include the version in the cache key and
+ * bump it on write; old entries simply expire. Fails open like `cached`: if
+ * Redis is unavailable nothing is cached either, so there is nothing stale.
+ */
+exports.getVersion = async (name) => {
+  try {
+    return Number(await redis.get(`version:${name}`)) || 0;
+  } catch {
+    return 0;
+  }
+};
+
+exports.bumpVersion = async (name) => {
+  try {
+    await redis.incr(`version:${name}`);
+  } catch {
+    /* best-effort */
+  }
+};

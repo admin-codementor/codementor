@@ -25,8 +25,10 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
 import { ChartCard, ChartRow, FilterBar, KpiRow, KpiTile, Leaderboard, StackedBars, TrendLines, periodDays } from "@/components/analytics";
 import type { GroupOption, Period } from "@/components/analytics";
+import { DistributionChart } from "@/components/faculty/analytics/Panels";
 import { useCourseAnalyticsQuery, type CourseAnalytics } from "@/lib/queries/courseAnalytics";
 import { apiErrorMessage } from "@/lib/apiError";
+import { radius } from "@/theme/tokens";
 
 /** Past ~6 weeks, daily counts in the single digits zigzag; weekly totals show the real direction. */
 function bucketWeekly<T extends { date: string }>(rows: T[], sum: (slice: T[]) => Omit<T, "date">): T[] {
@@ -55,7 +57,7 @@ function FlaggedDialog({ open, onClose, rows, onStudent }: {
         ) : (
           <List disablePadding>
             {rows.map((r) => (
-              <ListItemButton key={r.id} onClick={() => onStudent(r.id)} sx={{ borderRadius: 1 }}>
+              <ListItemButton key={r.id} onClick={() => onStudent(r.id)} sx={{ borderRadius: radius.sm }}>
                 <ListItemText
                   primary={`${r.name}${r.rollNo ? ` · ${r.rollNo}` : ""}`}
                   secondary={r.reasons.join(" · ")}
@@ -188,6 +190,19 @@ export default function CourseAnalyticsPage() {
                 height={320}
                 rows={d.units.map((u) => ({ label: u.title, Solved: u.solved, Partial: u.partial, "Not started": u.notStarted }))}
               />
+            </ChartCard>
+          </ChartRow>
+
+          <ChartRow cols={1}>
+            <ChartCard
+              title="How far along each student is"
+              subtitle={`Share of this course's ${d.completion.totalProblems} problems each student has solved. Average ${d.completion.avgPercent}%; ${d.completion.completed} of ${d.totalStudents} finished it.`}
+              height={240}
+              empty={d.completion.totalProblems === 0}
+              emptyTitle="This course has no problems yet"
+              emptyDescription="Add problems to its modules to see how far along each student is."
+            >
+              <DistributionChart histogram={d.completion.buckets} label="Course completed" />
             </ChartCard>
           </ChartRow>
 

@@ -27,6 +27,7 @@ import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
 import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState } from "@/components/ui/States";
+import { radius, typeScale } from "@/theme/tokens";
 import { AuthoringShell, CheckLine, type SaveState, type AuthoringStep } from "@/components/faculty/AuthoringShell";
 import {
   McqQuestionEditor, type McqQuestion, newQuestionKey, isMcqQuestionComplete,
@@ -224,8 +225,8 @@ function SectionCard({
             onChange={(e) => { const v = e.target.value; editMeta(() => setTitle(v)); }}
             sx={{ minWidth: 160, "& .MuiInput-input": { fontWeight: 600 } }}
           />
-          <Chip size="small" label={section.type} sx={{ height: 18, fontSize: 10, textTransform: "uppercase" }} />
-          {completeCount === 0 && <Chip label="Empty" size="small" sx={{ height: 18, fontSize: 10, bgcolor: "warningContainer", color: "onWarningContainer" }} />}
+          <Chip size="small" label={section.type} sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "uppercase" }} />
+          {completeCount === 0 && <Chip label="Empty" size="small" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, bgcolor: "warningContainer", color: "onWarningContainer" }} />}
           <Box sx={{ flex: 1 }} />
           <TextField
             label="Marks/Q" type="number" size="small" sx={{ width: 90 }} value={marksPerQuestion}
@@ -286,7 +287,7 @@ function SectionCard({
                   {creatingProblem && (
                     <QuickCreateProblemForm onCreated={handleProblemCreated} onCancel={() => setCreatingProblem(false)} />
                   )}
-                  <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 300, overflowY: "auto" }}>
+                  <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, maxHeight: 300, overflowY: "auto" }}>
                     {visibleProblems.length === 0 ? (
                       <EmptyState
                         icon={<DescriptionOutlinedIcon />}
@@ -304,7 +305,7 @@ function SectionCard({
                         >
                           <Checkbox size="small" checked={chosen} tabIndex={-1} />
                           <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>{p.title}</Typography>
-                          <Chip label={p.difficulty} size="small" sx={{ height: 18, fontSize: 10, textTransform: "capitalize", flexShrink: 0 }} />
+                          <Chip label={p.difficulty} size="small" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize", flexShrink: 0 }} />
                         </Stack>
                       );
                     })}
@@ -315,15 +316,15 @@ function SectionCard({
                     In this section ({problemIds.length})
                   </Typography>
                   {selectedProblems.length === 0 ? (
-                    <Box sx={{ border: "1px dashed", borderColor: "outlineVariant", borderRadius: 2 }}>
+                    <Box sx={{ border: "1px dashed", borderColor: "outlineVariant", borderRadius: radius.md }}>
                       <EmptyState icon={<DescriptionOutlinedIcon />} title="Nothing selected yet" description="Pick problems on the left." />
                     </Box>
                   ) : (
                     <Stack spacing={0.75}>
                       {selectedProblems.map((p) => (
-                        <Stack key={p.id} direction="row" alignItems="center" spacing={1} sx={{ px: 1, py: 0.75, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant" }}>
+                        <Stack key={p.id} direction="row" alignItems="center" spacing={1} sx={{ px: 1, py: 0.75, borderRadius: radius.md, border: "1px solid", borderColor: "outlineVariant" }}>
                           <Typography variant="body2" sx={{ flex: 1, minWidth: 0 }} noWrap>{p.title}</Typography>
-                          <Chip label={p.difficulty} size="small" sx={{ height: 18, fontSize: 10, textTransform: "capitalize" }} />
+                          <Chip label={p.difficulty} size="small" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize" }} />
                           <IconButton size="small" onClick={() => toggleProblem(p.id)} aria-label={`Remove ${p.title}`}><CloseIcon fontSize="small" /></IconButton>
                         </Stack>
                       ))}
@@ -599,7 +600,7 @@ export default function ExamBuilderPage() {
         {classes.length === 0 ? (
           <EmptyState icon={<GroupsOutlinedIcon />} title="No classes yet" description="Create a class to target this exam at it." />
         ) : (
-          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 340, overflowY: "auto" }}>
+          <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, maxHeight: 340, overflowY: "auto" }}>
             {classes.map((c) => {
               const chosen = classIds.includes(c.id);
               return (
@@ -618,7 +619,7 @@ export default function ExamBuilderPage() {
                       {[c.department, c.section && `Sec ${c.section}`].filter(Boolean).join(" · ") || "No dept/section"}
                     </Typography>
                   </Box>
-                  <Chip icon={<GroupsOutlinedIcon />} label={c.member_count} size="small" sx={{ height: 20, fontSize: 11, flexShrink: 0 }} />
+                  <Chip icon={<GroupsOutlinedIcon />} label={c.member_count} size="small" sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, flexShrink: 0 }} />
                 </Stack>
               );
             })}
@@ -636,7 +637,7 @@ export default function ExamBuilderPage() {
               description="Create one under Student Groups to target this exam at a custom cohort."
             />
           ) : (
-            <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 240, overflowY: "auto" }}>
+            <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, maxHeight: 240, overflowY: "auto" }}>
               {groups.map((g) => {
                 const chosen = groupIds.includes(g.id);
                 return (
@@ -653,7 +654,7 @@ export default function ExamBuilderPage() {
                       <Typography variant="body2" noWrap>{g.name}</Typography>
                       {g.description && <Typography variant="caption" color="text.secondary" noWrap>{g.description}</Typography>}
                     </Box>
-                    <Chip icon={<GroupsOutlinedIcon />} label={g.student_count} size="small" sx={{ height: 20, fontSize: 11, flexShrink: 0 }} />
+                    <Chip icon={<GroupsOutlinedIcon />} label={g.student_count} size="small" sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, flexShrink: 0 }} />
                   </Stack>
                 );
               })}
@@ -693,7 +694,7 @@ export default function ExamBuilderPage() {
             <Stack key={s.id} direction="row" spacing={1} alignItems="center">
               <Typography variant="body2" sx={{ minWidth: 24 }}>{i + 1}.</Typography>
               <Typography variant="body2" sx={{ flex: 1 }}>{s.title}</Typography>
-              <Chip size="small" label={s.type} sx={{ height: 18, fontSize: 10, textTransform: "uppercase" }} />
+              <Chip size="small" label={s.type} sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "uppercase" }} />
               <Typography variant="caption" color="text.secondary">
                 {contentCounts[s.id] ?? 0} {s.type === "mcq" ? "question" : "problem"}{(contentCounts[s.id] ?? 0) === 1 ? "" : "s"} · {s.marks_per_question} mark{s.marks_per_question === 1 ? "" : "s"} each
               </Typography>
@@ -727,7 +728,7 @@ export default function ExamBuilderPage() {
         </Stack>
         {!isPublished && (sections.length === 0 || emptySections.length > 0) && (
           <Alert severity="warning">
-            <AlertTitle sx={{ fontSize: 14 }}>Not ready</AlertTitle>
+            <AlertTitle>Not ready</AlertTitle>
             Every section needs content before this exam can be published.
           </Alert>
         )}

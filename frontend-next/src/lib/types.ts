@@ -14,6 +14,8 @@ export interface User {
   section?: string;
   year?: number;
   roll_no?: string;
+  /** True until a roster-created account has replaced its temporary password. */
+  must_change_password?: boolean;
 }
 
 export type Difficulty = "Easy" | "Medium" | "Hard";

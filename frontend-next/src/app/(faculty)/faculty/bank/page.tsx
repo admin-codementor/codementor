@@ -30,6 +30,7 @@ import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { EmptyState } from "@/components/ui/States";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
+import { typeScale } from "@/theme/tokens";
 
 interface BankProblem {
   kind: "problem"; id: string; title: string; difficulty: string; tags: string[];
@@ -209,7 +210,7 @@ export default function QuestionBankPage() {
                             <Chip
                               key={t} label={t} size="small" variant="outlined"
                               onClick={() => setTag(t)}
-                              sx={{ height: 18, fontSize: 10, borderColor: "outlineVariant", color: "text.secondary" }}
+                              sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, borderColor: "outlineVariant", color: "text.secondary" }}
                             />
                           ))}
                         </Stack>
@@ -218,7 +219,7 @@ export default function QuestionBankPage() {
                         <Chip
                           label={p.status === "draft" ? "Draft" : "Live"} size="small"
                           sx={{
-                            height: 20, fontSize: 10, fontWeight: 600,
+                            height: 20, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600,
                             bgcolor: p.status === "draft" ? "surfaceContainerHigh" : "successContainer",
                             color: p.status === "draft" ? "onSurfaceVariant" : "onSuccessContainer",
                           }}
@@ -290,7 +291,7 @@ export default function QuestionBankPage() {
                     </TableCell>
                     <TableCell>
                       {m.topic
-                        ? <Chip label={m.topic} size="small" variant="outlined" sx={{ height: 18, fontSize: 10, borderColor: "outlineVariant" }} />
+                        ? <Chip label={m.topic} size="small" variant="outlined" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, borderColor: "outlineVariant" }} />
                         : <Typography variant="caption" color="text.disabled">—</Typography>}
                     </TableCell>
                     <TableCell>
@@ -298,7 +299,7 @@ export default function QuestionBankPage() {
                       <Chip
                         label={m.is_published ? "Live" : "Draft"} size="small"
                         sx={{
-                          ml: 0.5, height: 18, fontSize: 9, fontWeight: 600,
+                          ml: 0.5, height: 18, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600,
                           bgcolor: m.is_published ? "successContainer" : "surfaceContainerHigh",
                           color: m.is_published ? "onSuccessContainer" : "onSurfaceVariant",
                         }}

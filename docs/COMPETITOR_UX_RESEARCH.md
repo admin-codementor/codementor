@@ -265,3 +265,80 @@ Sidebar order: Coding Analysis · Weekly Progress · Practice Analytics · Cours
 - Course Analytics, Labs, Mentor Leaderboard and Alumni were empty for this department, so only their layout shell is known.
 - The per-student profile (reached via See More / row click) was not opened because it shows personal data.
 - No plagiarism or exam-report screens exist in the HOD sidebar, so [item 10](../Review_Feedback.md) is still unverified on CampusTrack.
+
+---
+
+# Part 3 — CodeTantra, Faculty persona (direct login, 2026-10-12)
+
+Hands-on, read-only walkthrough using a real faculty login (`sreyas.codetantra.com`), supplementing Part 1's
+partial faculty findings (which came from indirect access). Nothing was edited, blocked, exported, or generated —
+only navigated and read. Student/staff names, emails and roll numbers seen on screen are intentionally **not**
+recorded here, same discipline as Part 2.
+
+**Top nav**: Home · Labs · Tests · Users & Groups · **Reports** (dropdown) · account menu.
+
+**Reports menu — a full report catalogue, not just one dashboard**: Course Progress Report · Course Progress
+Time-based · Group-wise Users Report · Group-wise User Course Report · Summary Report · User Submission Report ·
+User-wise Report · Late Submissions Report · Reopen Requests Report · Manage Course Schedule · Edit User Details
+· Daily-wise Report. We have no equivalent of this at all — our faculty analytics is a handful of fixed pages,
+not a report catalogue a faculty member can pick from. (Report *contents* weren't opened beyond Summary Report,
+which gates on picking a Group first — same group-first pattern as the course dashboards below.)
+
+**Courses home** (`home/courses.jsp`): a **year-long GitHub-style activity calendar** (March–October visible,
+darker cells = more activity, a "Less…More" legend, Prev/Next to page months) sits above the course list —
+this is a platform-wide activity heatmap, not scoped to one course. Course list splits **"Courses as Teacher"**
+vs **"Enrolled Courses"** (a faculty account can be a student in another course) with a name search and a
+list/grid toggle.
+
+**Per-course Dashboard** (confirms and extends Part 1 §13's findings):
+- KPI strip: Last 7 Days Active Users, Users with Suspicious Activity, Submissions, Completed Users, Not Started
+  Users — each as `current/total`.
+- **Unit Wise Completion**: stacked bar (Solved / Partial / Not started) per syllabus unit, real unit names shown
+  (e.g. Basics, Strings, Arrays, Patterns, Searching, Linked List, Stacks and Queues, Non-Linear, Algorithms).
+- Three trend line charts side by side: **Submissions**, **Solved**, and — importantly — **Time Spent in Course
+  (minutes)**, plotted daily. This is genuine measured time, not a submission-based proxy.
+
+**Per-course Activity tab** (richest view, confirms Part 1 §13):
+- **Period** filter (Yesterday / Last Week / Last Month / Last 6 Months) and a **Groups** multi-select filter
+  (e.g. a course had three groups: one per section plus a combined "A&B" group spanning both — confirms the
+  cross-section group concept is core infrastructure here, not a bolt-on).
+- KPI cards with inline sparklines: Active Users, Users with Suspicious Activity, Submissions, **Average active
+  time**.
+- Same Unit Wise Completion + Solved/Submissions trend charts, scoped to the selected period/groups.
+- Two ranked horizontal-bar leaderboards: **Most Active Groups** and **Most Active Users**, both ranked by time
+  spent in minutes — not by submission count.
+
+**Per-student "Submission Analysis"** (reached via a row-menu action on the Enrolled Users roster — row menu
+also offers **Block** and **View Details**, neither opened/used): a real, drill-down profile —
+- Header stats: **Over-all Completion %**, **Over-all Suspicious Activity %**, and **Over-all Time Spent**
+  shown as **"2 days 2 hrs"** — confirmed, concretely, that CodeTantra tracks genuine session time per student,
+  not an inferred proxy. This is the clearest existing-product answer to Review_Feedback item 22/our FD2: real
+  time tracking is a solved, shipped feature elsewhere, at real-cohort scale (118+ students per course here).
+- A per-unit list below, each with its own completion % and progress bar, plus a small chart icon opening a
+  **"Unit Statistics"** dialog — pick a unit (pre-filled) and one or more Groups, **Fetch**, and it renders a bar
+  chart for just that unit/group combination (shows a designed "no activity" empty state when there's nothing to
+  plot — same discipline as our own `ChartCard`/`EmptyState` pattern).
+
+**Enrolled Users / Groups structure**: each course's roster is organized into named **Groups** (e.g.
+`2022-2026-AIML-A`, `…-B`, and a combined `…-A&B`), and **each group lists its own faculty roster** (multiple
+named faculty per group, shown as avatar chips) alongside its student roster — i.e. a group/section can have
+more than one faculty attached (co-teaching, TA, HOD oversight), not just a single owner. We currently model a
+classroom as having one `facultyId`.
+
+**Tests hub** (`Tests` nav): three cards — **Evaluations** ("evaluate answer scripts"), **Take Test**, and **See
+Results** (a dated calendar of recent tests, "No tests to display" when none fall in range — same empty-state
+discipline). Didn't find a populated exam with results in the available window, so the exam-report format
+still couldn't be directly compared — this specific gap from Part 1 remains open.
+
+## Faculty persona: features worth adding, not yet matched
+
+1. **A report catalogue**, not fixed pages — let a faculty member pick *which* report they want (by course,
+   group, date range) rather than us pre-deciding every view.
+2. **Genuine time-on-platform tracking**, proven to work at real scale elsewhere — directly informs FD2.
+3. **Platform-wide activity heatmap** (year view, all courses) as a faculty landing-page element, distinct from
+   any one course's dashboard.
+4. **Multi-faculty-per-group** data model (co-teaching / TA / oversight) — we model one faculty owner per class.
+5. **Per-unit statistics dialog** with a group-filtered, fetch-on-demand chart and a designed empty state — a
+   smaller, reusable version of our `ChartCard`, scoped to one syllabus unit at a time.
+6. **"Courses as Teacher" vs "Enrolled Courses" split** on one account — not relevant to us today (no dual-role
+   faculty/student accounts), noted for completeness only.

@@ -27,6 +27,7 @@ import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState } from "@/components/ui/States";
+import { radius } from "@/theme/tokens";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
@@ -94,7 +95,7 @@ function MemberPicker({
         </Button>
       </Stack>
 
-      <Box sx={{ maxHeight: 340, overflowY: "auto", border: "1px solid", borderColor: "outlineVariant", borderRadius: 2 }}>
+      <Box sx={{ maxHeight: 340, overflowY: "auto", border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md }}>
         {visible.length === 0 ? (
           <EmptyState title="No students match" description="Try clearing the branch or section filter." />
         ) : (

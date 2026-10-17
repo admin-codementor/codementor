@@ -38,7 +38,7 @@ import { Reveal } from "@/components/ui/motion";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useConfirm } from "@/components/feedback/ConfirmProvider";
 import { ImportWizard } from "@/components/faculty/ImportWizard";
-import { hoverTransition } from "@/theme/tokens";
+import { hoverTransition, radius, typeScale } from "@/theme/tokens";
 
 const DIFFICULTIES = ["easy", "medium", "hard"] as const;
 const STUB_LANGUAGES = [
@@ -70,7 +70,7 @@ interface Problem {
 function FormSection({ label, children }: { label: string; children: React.ReactNode }) {
   const [open, setOpen] = React.useState(false);
   return (
-    <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2 }}>
+    <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md }}>
       <Box
         component="button"
         type="button"
@@ -337,7 +337,7 @@ function ProblemDialog({
             )}
             <Stack spacing={1.5} sx={{ maxHeight: 260, overflowY: "auto", pr: 0.5 }}>
               {testCases.map((tc, i) => (
-                <Box key={i} sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, p: 1.5 }}>
+                <Box key={i} sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, p: 1.5 }}>
                   <Stack direction="row" spacing={1}>
                     <TextField label={`Input ${i + 1}`} value={tc.input} onChange={(e) => updateTC(i, "input", e.target.value)} size="small" fullWidth multiline rows={2} slotProps={{ htmlInput: { style: { fontFamily: "ui-monospace, monospace", fontSize: 12 } } }} />
                     <TextField label={`Expected ${i + 1}`} value={tc.output} onChange={(e) => updateTC(i, "output", e.target.value)} size="small" fullWidth multiline rows={2} slotProps={{ htmlInput: { style: { fontFamily: "ui-monospace, monospace", fontSize: 12 } } }} />
@@ -606,7 +606,7 @@ export default function FacultyProblemsPage() {
                         {p.tags?.length > 0 && (
                           <Stack direction="row" spacing={0.75} sx={{ mt: 0.5, flexWrap: "wrap", gap: 0.5 }}>
                             {p.tags.slice(0, 3).map((t) => (
-                              <Chip key={t} label={t} size="small" variant="outlined" sx={{ height: 20, fontSize: 10, borderColor: "outlineVariant", color: "text.secondary" }} />
+                              <Chip key={t} label={t} size="small" variant="outlined" sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, borderColor: "outlineVariant", color: "text.secondary" }} />
                             ))}
                           </Stack>
                         )}
@@ -615,12 +615,12 @@ export default function FacultyProblemsPage() {
                         {p.status === "draft" ? (
                           <Chip
                             label="Draft" size="small"
-                            sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }}
+                            sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600, bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }}
                           />
                         ) : (
                           <Chip
                             label="Live" size="small"
-                            sx={{ height: 20, fontSize: 10, fontWeight: 600, bgcolor: "successContainer", color: "onSuccessContainer" }}
+                            sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600, bgcolor: "successContainer", color: "onSuccessContainer" }}
                           />
                         )}
                       </TableCell>

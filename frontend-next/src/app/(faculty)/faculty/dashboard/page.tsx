@@ -38,6 +38,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState } from "@/components/ui/States";
+import { radius, typeScale } from "@/theme/tokens";
 import { useToast } from "@/components/feedback/ToastProvider";
 
 // ── Types ───────────────────────────────────────────────────────────────────
@@ -279,7 +280,7 @@ function AssignmentDialog({
               </Stack>
             )}
 
-            <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: 2, maxHeight: 300, overflowY: "auto" }}>
+            <Box sx={{ border: "1px solid", borderColor: "outlineVariant", borderRadius: radius.md, maxHeight: 300, overflowY: "auto" }}>
               {problemsLoading ? (
                 <Stack spacing={1} sx={{ p: 1.5 }}>
                   {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} height={36} />)}
@@ -319,7 +320,7 @@ function AssignmentDialog({
                       <Chip
                         label={p.difficulty}
                         size="small"
-                        sx={{ height: 18, fontSize: 10, textTransform: "capitalize", flexShrink: 0 }}
+                        sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, textTransform: "capitalize", flexShrink: 0 }}
                       />
                     </Stack>
                   );
@@ -515,7 +516,7 @@ function ProgressDialog({ target, onClose }: { target: { id: string; title: stri
                             </TableCell>
                             <TableCell>
                               <Stack direction="row" spacing={1} alignItems="center">
-                                <LinearProgress variant="determinate" value={pct} sx={{ flex: 1, height: 6, borderRadius: 3 }} />
+                                <LinearProgress variant="determinate" value={pct} sx={{ flex: 1, height: 6, borderRadius: radius.xs }} />
                                 <Typography variant="caption" sx={{ fontFamily: "ui-monospace, monospace" }}>{row.solved}/{row.total}</Typography>
                               </Stack>
                             </TableCell>
@@ -796,15 +797,15 @@ export default function FacultyDashboardPage() {
               ) : (
                 <Stack spacing={1} sx={{ maxHeight: 300, overflowY: "auto" }}>
                   {atRisk.slice(0, 12).map((s) => (
-                    <Stack key={s.id} direction="row" spacing={1.5} alignItems="center" sx={{ p: 1, borderRadius: 2, border: "1px solid", borderColor: "outlineVariant" }}>
-                      <Avatar sx={{ width: 32, height: 32, fontSize: 12, bgcolor: "errorContainer", color: "onErrorContainer" }}>{initials(s.name)}</Avatar>
+                    <Stack key={s.id} direction="row" spacing={1.5} alignItems="center" sx={{ p: 1, borderRadius: radius.md, border: "1px solid", borderColor: "outlineVariant" }}>
+                      <Avatar sx={{ width: 32, height: 32, fontSize: typeScale.labelMedium.fontSize, bgcolor: "errorContainer", color: "onErrorContainer" }}>{initials(s.name)}</Avatar>
                       <Box sx={{ flex: 1, minWidth: 0 }}>
                         <Typography variant="body2" fontWeight={500} noWrap>{s.name}</Typography>
                         <Typography variant="caption" color="text.secondary" noWrap>{s.email}</Typography>
                       </Box>
                       <Stack direction="row" spacing={0.5} flexWrap="wrap" justifyContent="flex-end">
                         {s.riskReasons.map((reason) => (
-                          <Chip key={reason} label={reason} size="small" sx={{ height: 20, fontSize: 10, bgcolor: "warningContainer", color: "onWarningContainer" }} />
+                          <Chip key={reason} label={reason} size="small" sx={{ height: 20, fontSize: typeScale.labelSmall.fontSize, bgcolor: "warningContainer", color: "onWarningContainer" }} />
                         ))}
                       </Stack>
                     </Stack>
@@ -847,12 +848,12 @@ export default function FacultyDashboardPage() {
                       <TableRow key={s.id} hover onClick={() => setSelectedStudent(s)} sx={{ cursor: "pointer", "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } }}>
                         <TableCell>
                           <Stack direction="row" spacing={1.5} alignItems="center">
-                            <Avatar sx={{ width: 32, height: 32, fontSize: 12, bgcolor: "primaryContainer", color: "onPrimaryContainer" }}>{initials(s.name)}</Avatar>
+                            <Avatar sx={{ width: 32, height: 32, fontSize: typeScale.labelMedium.fontSize, bgcolor: "primaryContainer", color: "onPrimaryContainer" }}>{initials(s.name)}</Avatar>
                             <Box>
                               <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap">
                                 <Typography variant="body2" fontWeight={500}>{s.name}</Typography>
                                 {(s.department || s.section) && (
-                                  <Chip size="small" label={[s.department, s.section && `Sec ${s.section}`, s.year && `Y${s.year}`].filter(Boolean).join(" · ")} sx={{ height: 18, fontSize: 10, bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }} />
+                                  <Chip size="small" label={[s.department, s.section && `Sec ${s.section}`, s.year && `Y${s.year}`].filter(Boolean).join(" · ")} sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, bgcolor: "surfaceContainerHigh", color: "onSurfaceVariant" }} />
                                 )}
                               </Stack>
                               <Typography variant="caption" color="text.secondary">{s.rollNo ? `${s.rollNo} · ` : ""}{s.email}</Typography>

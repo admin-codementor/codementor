@@ -23,6 +23,9 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
 import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { useToast } from "@/components/feedback/ToastProvider";
+import { radius, typeScale } from "@/theme/tokens";
+import { useCourseCompletionQuery, type CourseCompletion } from "@/lib/queries/courseAnalytics";
+import LinearProgress from "@mui/material/LinearProgress";
 
 interface CourseRow {
   id: string;
@@ -80,7 +83,7 @@ function NewCourseDialog({ open, onClose, onCreated }: { open: boolean; onClose:
   );
 }
 
-function CourseCard({ course, onClick }: { course: CourseRow; onClick: () => void }) {
+function CourseCard({ course, completion, onClick }: { course: CourseRow; completion?: CourseCompletion; onClick: () => void }) {
   return (
     <Card variant="outlined" sx={{ borderColor: "outlineVariant", ...interactiveSurfaceSx }}>
       <CardActionArea onClick={onClick} sx={{ p: 2.5, height: "100%", borderRadius: "inherit" }}>
@@ -91,7 +94,7 @@ function CourseCard({ course, onClick }: { course: CourseRow; onClick: () => voi
               size="small"
               label={course.isPublished ? "Published" : "Draft"}
               sx={{
-                height: 20, fontSize: 10, fontWeight: 700, flexShrink: 0,
+                height: 20, fontSize: typeScale.labelSmall.fontSize, fontWeight: 700, flexShrink: 0,
                 bgcolor: course.isPublished ? "successContainer" : "surfaceContainerHigh",
                 color: course.isPublished ? "onSuccessContainer" : "onSurfaceVariant",
               }}
@@ -103,6 +106,22 @@ function CourseCard({ course, onClick }: { course: CourseRow; onClick: () => voi
             </Typography>
           )}
           <Box sx={{ flex: 1 }} />
+          {completion && completion.totalProblems > 0 && (
+            completion.students === 0 ? (
+              <Typography variant="caption" color="text.secondary">No students in your classes yet</Typography>
+            ) : (
+              <Box>
+                <LinearProgress
+                  variant="determinate" value={completion.avgPercent}
+                  aria-label={`Average ${completion.avgPercent}% of the course solved`}
+                  sx={{ height: 6, borderRadius: radius.xs, mb: 0.5 }}
+                />
+                <Typography variant="caption" color="text.secondary">
+                  {completion.avgPercent}% on average · {completion.completed} of {completion.students} finished
+                </Typography>
+              </Box>
+            )
+          )}
           <Stack direction="row" spacing={2} sx={{ color: "text.secondary" }} flexWrap="wrap" useFlexGap>
             <Stack direction="row" spacing={0.5} alignItems="center">
               <ViewModuleOutlinedIcon sx={{ fontSize: 16 }} />
@@ -116,7 +135,7 @@ function CourseCard({ course, onClick }: { course: CourseRow; onClick: () => voi
               <Typography variant="caption" color="text.disabled">by {course.author}</Typography>
             )}
           </Stack>
-          {!course.canEdit && <Chip size="small" label="View only" sx={{ height: 18, fontSize: 10, alignSelf: "flex-start" }} />}
+          {!course.canEdit && <Chip size="small" label="View only" sx={{ height: 18, fontSize: typeScale.labelSmall.fontSize, alignSelf: "flex-start" }} />}
         </Stack>
       </CardActionArea>
     </Card>
@@ -130,6 +149,7 @@ export default function FacultyCoursesPage() {
   const [loading, setLoading] = React.useState(true);
   const [error, setError] = React.useState("");
   const [showNew, setShowNew] = React.useState(false);
+  const completion = useCourseCompletionQuery().data;
 
   const load = React.useCallback(() => {
     setLoading(true);
@@ -180,7 +200,7 @@ export default function FacultyCoursesPage() {
       ) : (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr", lg: "repeat(3, 1fr)" }, gap: 2 }}>
           {courses.map((c) => (
-            <CourseCard key={c.id} course={c} onClick={() => router.push(`/faculty/courses/${c.id}`)} />
+            <CourseCard key={c.id} course={c} completion={completion?.[c.id]} onClick={() => router.push(`/faculty/courses/${c.id}`)} />
           ))}
         </Box>
       )}

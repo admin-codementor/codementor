@@ -119,3 +119,9 @@ docs/scale-readiness/
 # nothing if the assembled document is committed alongside it.
 docs/CodeMentor-Scale-Readiness-Programme.docx
 docs.zip
+
+# Student-data backups written by backend/scripts/delete-all-students.js (personal data)
+backend/backups/
+
+# Roster CSVs, generated passwords and account-creation logs (personal data; never commit)
+docs/private-credentials/

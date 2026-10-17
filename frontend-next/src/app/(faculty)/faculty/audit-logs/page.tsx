@@ -41,7 +41,7 @@ function actionColor(a: string): string {
 function AuditLogInner() {
   const [rows, setRows] = React.useState<LogRow[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<unknown>(null);
   const [q, setQ] = React.useState("");
 
   const load = React.useCallback(() => {
@@ -52,7 +52,7 @@ function AuditLogInner() {
       .then((r) => {
         if (r.data?.success) setRows(r.data.data);
       })
-      .catch((e) => setError(e?.response?.data?.error || "Failed to load audit logs"))
+      .catch((e) => setError(e))
       .finally(() => setLoading(false));
   }, []);
 
@@ -81,7 +81,7 @@ function AuditLogInner() {
         </Card>
       ) : error ? (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
-          <ErrorState title="Couldn't load audit logs" description={error} onRetry={load} />
+          <ErrorState error={error} title="Couldn't load audit logs" onRetry={load} />
         </Card>
       ) : filtered.length === 0 ? (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>

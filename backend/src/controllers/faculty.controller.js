@@ -5,7 +5,7 @@ const { logAction } = require('../middleware/audit');
 const { scopeDept, canSeeDepartment, canManageResource, canManageOwnedBy } = require('../middleware/role.middleware');
 const { cached } = require('../utils/cache');
 const { computeStrengthsWeaknesses } = require('../utils/topicScores');
-const { flagFor, weeklyActivity } = require('../utils/studentState');
+const { flagFor, weeklyActivity, funnelFromStats } = require('../utils/studentState');
 const examRepo = require('../repositories/examRepository');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
@@ -20,6 +20,12 @@ const mcqRepo = require('../repositories/mcqRepository');
 const analytics = require('../services/analyticsService');
 const courseAnalyticsService = require('../services/courseAnalyticsService');
 const departmentAnalyticsService = require('../services/departmentAnalyticsService');
+const departmentLeaderboardService = require('../services/departmentLeaderboardService');
+const departmentActivityService = require('../services/departmentActivityService');
+const labsService = require('../services/labsService');
+const departmentInsightsService = require('../services/departmentInsightsService');
+const portfolioService = require('../services/portfolioService');
+const portfolioRepo = require('../repositories/portfolioRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 
@@ -57,36 +63,42 @@ async function assertProblemAccess(req, res, problemId) {
 
 exports.getDashboardData = async (req, res) => {
   try {
-    // 1. Total Students
-    const totalStudents = (await userRepo.listByRole('student')).length;
+    // Same scope as every analytics screen: a faculty member sees the students in the classes they created,
+    // an HOD their own department, an admin everyone. It used to count every student and read every submission
+    // in the college on each load, so a teacher saw college-wide totals (and it cost a full collection scan).
+    const scope = await analytics.resolveAnalyticsScope(req);
+    const snap = await analytics.getSnapshot(scope);
 
-    // 2-4. Active students (7d), total submissions/AC rate, unique problems solved.
-    const allSubs = await submissionRepo.listAll();
     const sevenDaysAgo = Date.now() - 7 * 86400000;
-    const activeStudents = new Set(
-      allSubs.filter(s => (s.submittedAt?.toMillis?.() ?? 0) >= sevenDaysAgo).map(s => s.userId)
-    ).size;
+    const stats = snap.studentStats;
+    const totalSubs = stats.reduce((n, s) => n + s.subs, 0);
+    const totalAccepted = stats.reduce((n, s) => n + s.ac, 0);
+    const dashStats = {
+      totalStudents: snap.totalStudents,
+      activeStudents: stats.filter((s) => (s.lastActiveMs ?? 0) >= sevenDaysAgo).length,
+      totalSubs,
+      acRate: totalSubs > 0 ? Math.round((totalAccepted / totalSubs) * 100) : 0,
+      problemsSolved: snap.problemStats.filter((p) => p.solvers > 0).length,
+    };
 
-    const totalSubs = allSubs.length;
-    const totalAccepted = allSubs.filter(s => s.verdict === 'Accepted').length;
-    const acRate = totalSubs > 0 ? Math.round((totalAccepted / totalSubs) * 100) : 0;
-
-    const problemsSolved = new Set(allSubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId)).size;
-
-    // 5. Assignments list — own for faculty, all for admin/HOD oversight (D1).
-    // An HOD used to see an empty dashboard here because nothing is authored by them.
-    const seesAll = req.user.role === 'admin' || req.user.role === 'hod';
-    const assignments = (seesAll ? await assignmentRepo.getAll() : await assignmentRepo.listByFacultyId(req.user.id))
+    // Assignments: a faculty member's own; an HOD's department's (an HOD authors nothing, so their own list is
+    // empty, D1); an admin sees all.
+    let assignments;
+    if (req.user.role === 'admin') {
+      assignments = await assignmentRepo.getAll();
+    } else if (req.user.role === 'hod') {
+      const dept = req.user.department ?? null;
+      const staff = (await userRepo.listByRole('faculty')).filter((u) => dept !== null && (u.department ?? null) === dept);
+      const ids = new Set(staff.map((u) => u.id));
+      assignments = (await assignmentRepo.getAll()).filter((a) => ids.has(a.facultyId));
+    } else {
+      assignments = await assignmentRepo.listByFacultyId(req.user.id);
+    }
+    assignments = assignments
       .sort((a, b) => (a.deadline?.toMillis?.() ?? new Date(a.deadline).getTime()) - (b.deadline?.toMillis?.() ?? new Date(b.deadline).getTime()))
-      .map(a => ({ id: a.id, title: a.title, deadline: a.deadline, created_at: a.createdAt }));
+      .map((a) => ({ id: a.id, title: a.title, deadline: a.deadline, created_at: a.createdAt }));
 
-    res.json({
-      success: true,
-      data: {
-        stats: { totalStudents, activeStudents, totalSubs, acRate, problemsSolved },
-        assignments
-      }
-    });
+    res.json({ success: true, data: { stats: dashStats, assignments } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -1246,6 +1258,8 @@ exports.getAnalyticsOverview = async (req, res) => {
         verdicts: snap.verdicts,
         languages: snap.languages,
         cohorts,
+        // Where every student in view stands: not started / practising / stuck / gone quiet.
+        funnel: funnelFromStats(snap.studentStats, now),
         // The class-wide shape the averages hide.
         solvedHistogram: analytics.histogram(solvedValues, 5),
         solvedDistribution: analytics.boxStats(solvedValues),
@@ -1331,6 +1345,7 @@ exports.getCohortDetail = async (req, res) => {
             return s ? Math.round((a / s) * 100) : 0;
           })(),
         },
+        funnel: funnelFromStats(members),
         solvedHistogram: analytics.histogram(solved, 5),
         topicMastery: [...masteryByTopic.entries()]
           .map(([topic, t]) => ({
@@ -1658,13 +1673,14 @@ exports.getStudentDetail = async (req, res) => {
 // Runs every query for one student's full profile bundle. Pulled out of the route
 // handler so the (department-check-free) result can be Redis-cached by id alone.
 async function buildStudentProfile(id, student) {
-  const [subs, ratingRows, masteryRes, codingProfilesRes, allExams, allCourses] = await Promise.all([
+  const [subs, ratingRows, masteryRes, codingProfilesRes, allExams, allCourses, portfolioItems] = await Promise.all([
     submissionRepo.listByUser(id),
     ratingHistoryRepo.listByUser(id),
     topicMasteryRepo.listByUser(id),
     codingProfileRepo.listByUser(id),
     examRepo.listPublished(),
     courseRepo.listAll(),
+    portfolioRepo.listByUser(id),
   ]);
   const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
   const subDate = (s) => s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
@@ -1864,6 +1880,11 @@ async function buildStudentProfile(id, student) {
     totals: {
       total, accepted,
       solved: solvedProblemIds.size,
+      attempted: attemptedProblemIds.size,
+      // Days with any submission in the last 12 months — the labelled,
+      // submission-based proxy for "time spent" (FD2 in
+      // docs/FACULTY_HOD_PERSONA_PLAN.md: real session tracking is deferred).
+      activeDays: activityHeatmap.length,
       acRate: total ? Math.round((accepted / total) * 100) : 0,
     },
     learningCurve,
@@ -1882,6 +1903,9 @@ async function buildStudentProfile(id, student) {
     exams,
     examSummary,
     courses,
+    portfolio: portfolioItems.map((i) => ({
+      id: i.id, type: i.type, title: i.title, detail: i.detail || '', date: i.date || null, link: i.link || null,
+    })),
     highlights: {
       topTopic,
       weakTopic,
@@ -2054,15 +2078,100 @@ exports.getFacultyCourseDetail = async (req, res) => {
 // HOD/department dashboard: student-state funnel, flags, section comparison,
 // badge ladder and written insights. Department comes from the caller's token
 // (scopeDept), never the query string.
+// @route GET /api/faculty/department/activity?kind=students|faculty&days=7|30|90 (HOD/admin)
+exports.getDepartmentActivity = async (req, res) => {
+  try {
+    const data = await departmentActivityService.getDepartmentActivity(req, {
+      kind: req.query.kind, days: parseInt(req.query.days, 10) || 7,
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Department activity error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load department activity.' });
+  }
+};
+
+// @route GET /api/faculty/labs (HOD/admin) — the department's classes and their assignments, read-only.
+exports.getLabs = async (req, res) => {
+  try {
+    res.json({ success: true, data: await labsService.getLabs(req) });
+  } catch (error) {
+    console.error('Labs error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load labs.' });
+  }
+};
+
+// @route POST /api/faculty/department/insights (HOD/admin) body { section?, year? }
+// Written recommendations from an AI provider that only ever sees aggregate numbers.
+exports.getDepartmentInsights = async (req, res) => {
+  try {
+    if (!aiGateway.isConfigured()) {
+      return res.status(503).json({ success: false, error: 'No AI provider is configured, so insights cannot be generated.' });
+    }
+    const section = String(req.body?.section || '').trim().slice(0, 40) || null;
+    const year = String(req.body?.year || '').trim().slice(0, 10) || null;
+    const data = await departmentInsightsService.getInsights(req, { section, year });
+    logAction(req, 'ai.department-insights', `${section || 'all sections'} / ${year || 'all years'}`);
+    res.json({ success: true, data });
+  } catch (error) {
+    if (error.name === 'AiError') {
+      return res.status(error.status && error.status >= 400 && error.status < 600 ? error.status : 502).json({
+        success: false, error: `AI provider error: ${error.message}`,
+      });
+    }
+    console.error('Department insights error:', error);
+    res.status(500).json({ success: false, error: 'Failed to generate insights.' });
+  }
+};
+
+// @route GET /api/faculty/portfolio?section&year&mentor (HOD/admin)
+// How complete the department's portfolios are, counted by types covered, never a score.
+exports.getPortfolioOverview = async (req, res) => {
+  try {
+    const clean = (v, n) => String(v || '').trim().slice(0, n) || null;
+    const data = await portfolioService.getOverview(req, {
+      section: clean(req.query.section, 40), year: clean(req.query.year, 10), mentor: clean(req.query.mentor, 80),
+    });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Portfolio overview error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load portfolio completeness.' });
+  }
+};
+
+// @route GET /api/faculty/department-leaderboard (HOD/admin)
+// Every department's aggregate numbers side by side, with the caller's own row marked.
+exports.getDepartmentLeaderboard = async (req, res) => {
+  try {
+    res.json({ success: true, data: await departmentLeaderboardService.getDepartmentLeaderboard(req) });
+  } catch (error) {
+    console.error('Department leaderboard error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the department leaderboard.' });
+  }
+};
+
 exports.getDepartmentAnalytics = async (req, res) => {
   try {
     const section = String(req.query.section || '').trim().slice(0, 40) || null;
     const year = String(req.query.year || '').trim().slice(0, 10) || null;
-    const data = await departmentAnalyticsService.getDepartmentAnalytics(req, { section, year });
+    const mentor = String(req.query.mentor || '').trim().slice(0, 80) || null;
+    const percentile = String(req.query.percentile || '').trim();
+    const data = await departmentAnalyticsService.getDepartmentAnalytics(req, { section, year, mentor, percentile });
     res.json({ success: true, data });
   } catch (error) {
     console.error('Department analytics error:', error);
     res.status(500).json({ success: false, error: 'Failed to load department analytics.' });
+  }
+};
+
+// @route GET /api/faculty/courses/completion
+// Per-course completion for the viewer's own students, keyed by course id.
+exports.getCourseCompletionSummary = async (req, res) => {
+  try {
+    res.json({ success: true, data: await courseAnalyticsService.getCompletionSummary(req) });
+  } catch (error) {
+    console.error('Course completion summary error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load course completion.' });
   }
 };
 
