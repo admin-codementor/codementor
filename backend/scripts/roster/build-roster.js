@@ -28,7 +28,7 @@ const ROLL = /^(?:S?(\d{1,3})\.?\s+)?(\d{2}[A-Z]{2}\d[A-Z][0-9A-Z]{4})\b\s*(.*)$
 const SECTION = /^\s*([234])-([12])\s*(?:SEC-)?\s*([A-D])\b/;
 const HEADER = /Sreyas Institute|Autonomous Institution|Approved by AICTE|Accredited by NAAC|^DEPARTMENT OF|^SNo\.?\b|Roll No\.?|STUDENT NAME|ROLL LIST/i;
 const SNO = /^S?(\d{1,3})\.?$/;
-const NAME_CHARS = /^[A-Za-z][A-Za-z .'\-]*$/;
+const NAME_CHARS = /^[A-Za-z][A-Za-z .'-]*$/;
 
 const titleCase = (s) => s.toLowerCase().replace(/(^|[\s.\-'])([a-z])/g, (_, a, b) => a + b.toUpperCase());
 const base36 = (c) => parseInt(c, 36);
@@ -131,7 +131,7 @@ function main() {
   const lines = [header.join(',')];
   sorted.forEach((r, i) => lines.push([i + 1, r.year, r.sec, titleCase(r.name), r.roll, r.email, r.admission, r.entry, r.flags.join(' | ')].map(csvCell).join(',')));
   fs.mkdirSync(path.dirname(OUT), { recursive: true });
-  fs.writeFileSync(OUT, `﻿${lines.join('\r\n')}\r\n`, 'utf8');
+  fs.writeFileSync(OUT, `\uFEFF${lines.join('\r\n')}\r\n`, 'utf8');
 
   console.log(`Students: ${unique.length} in ${bySection.size} sections`);
   for (const [k, list] of [...bySection].sort()) {

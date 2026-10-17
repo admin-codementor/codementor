@@ -60,7 +60,7 @@ function main() {
   const cols = ['batch', 'missing_roll', 'would_be_email', 'likely_year', 'likely_section', 'listed_just_before', 'listed_just_after', 'student_name'];
   fs.mkdirSync(PRIVATE_DIR, { recursive: true });
   const file = path.join(PRIVATE_DIR, `missing-students-${new Date().toISOString().slice(0, 10)}.csv`);
-  fs.writeFileSync(file, `﻿${[cols.join(','), ...out.map((o) => cols.map((c) => csvCell(o[c])).join(','))].join('\r\n')}\r\n`, 'utf8');
+  fs.writeFileSync(file, `\uFEFF${[cols.join(','), ...out.map((o) => cols.map((c) => csvCell(o[c])).join(','))].join('\r\n')}\r\n`, 'utf8');
 
   const byBatch = new Map();
   out.forEach((o) => byBatch.set(o.batch, (byBatch.get(o.batch) || 0) + 1));

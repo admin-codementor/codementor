@@ -27,7 +27,7 @@ const COLUMNS = ['sno', 'Year', 'Section', 'Name', 'Rollno', 'email', 'Password'
 const { makePassword, parseCsv } = require('../lib/roster-utils');
 
 const cellOut = (v) => { const s = String(v ?? ''); return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
-const toCsv = (rows) => `﻿${[COLUMNS.join(','), ...rows.map((r) => COLUMNS.map((c) => cellOut(r[c])).join(','))].join('\r\n')}\r\n`;
+const toCsv = (rows) => `\uFEFF${[COLUMNS.join(','), ...rows.map((r) => COLUMNS.map((c) => cellOut(r[c])).join(','))].join('\r\n')}\r\n`;
 
 function main() {
   if (!IN) { console.error('Give --in <reviewed draft csv>.'); process.exit(2); }
