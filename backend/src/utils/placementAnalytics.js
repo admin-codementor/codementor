@@ -8,6 +8,7 @@
 //   funnel        nested by construction: applied >= shortlisted >= selected, where
 //                 "shortlisted" includes the selected (they were shortlisted first)
 const { isEligible } = require('./placement');
+const { classLabel } = require('./students');
 
 const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
 
@@ -62,7 +63,7 @@ function buildPlacementAnalytics({ students, drives, applications }) {
       map.set(k, g);
     }
     return [...map.values()].map((g) => ({ ...g, rate: pct(g.placed, g.students) }))
-      .sort((a, b) => String(a.key).localeCompare(String(b.key), undefined, { numeric: true }));
+      .sort((a, b) => (a.key.startsWith('No ') ? 1 : 0) - (b.key.startsWith('No ') ? 1 : 0) || String(a.key).localeCompare(String(b.key), undefined, { numeric: true }));
   };
 
   const companies = drives.map((d) => {
@@ -101,7 +102,7 @@ function buildPlacementAnalytics({ students, drives, applications }) {
     },
     funnel,
     by_year: group((s) => (s.year == null ? 'Unassigned' : String(s.year)), (k) => (k === 'Unassigned' ? 'No year' : `Year ${k}`)),
-    by_section: group((s) => s.section || 'Unassigned', (k) => (k === 'Unassigned' ? 'No section' : `Section ${k}`)),
+    by_section: group((s) => classLabel(s.year, s.section), (k) => k), // year + section: see utils/students.js
     companies, rounds, students: students_,
   };
 }

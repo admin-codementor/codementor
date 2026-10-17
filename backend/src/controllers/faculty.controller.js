@@ -63,36 +63,42 @@ async function assertProblemAccess(req, res, problemId) {
 
 exports.getDashboardData = async (req, res) => {
   try {
-    // 1. Total Students
-    const totalStudents = (await userRepo.listByRole('student')).length;
+    // Same scope as every analytics screen: a faculty member sees the students in the classes they created,
+    // an HOD their own department, an admin everyone. It used to count every student and read every submission
+    // in the college on each load, so a teacher saw college-wide totals (and it cost a full collection scan).
+    const scope = await analytics.resolveAnalyticsScope(req);
+    const snap = await analytics.getSnapshot(scope);
 
-    // 2-4. Active students (7d), total submissions/AC rate, unique problems solved.
-    const allSubs = await submissionRepo.listAll();
     const sevenDaysAgo = Date.now() - 7 * 86400000;
-    const activeStudents = new Set(
-      allSubs.filter(s => (s.submittedAt?.toMillis?.() ?? 0) >= sevenDaysAgo).map(s => s.userId)
-    ).size;
+    const stats = snap.studentStats;
+    const totalSubs = stats.reduce((n, s) => n + s.subs, 0);
+    const totalAccepted = stats.reduce((n, s) => n + s.ac, 0);
+    const dashStats = {
+      totalStudents: snap.totalStudents,
+      activeStudents: stats.filter((s) => (s.lastActiveMs ?? 0) >= sevenDaysAgo).length,
+      totalSubs,
+      acRate: totalSubs > 0 ? Math.round((totalAccepted / totalSubs) * 100) : 0,
+      problemsSolved: snap.problemStats.filter((p) => p.solvers > 0).length,
+    };
 
-    const totalSubs = allSubs.length;
-    const totalAccepted = allSubs.filter(s => s.verdict === 'Accepted').length;
-    const acRate = totalSubs > 0 ? Math.round((totalAccepted / totalSubs) * 100) : 0;
-
-    const problemsSolved = new Set(allSubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId)).size;
-
-    // 5. Assignments list — own for faculty, all for admin/HOD oversight (D1).
-    // An HOD used to see an empty dashboard here because nothing is authored by them.
-    const seesAll = req.user.role === 'admin' || req.user.role === 'hod';
-    const assignments = (seesAll ? await assignmentRepo.getAll() : await assignmentRepo.listByFacultyId(req.user.id))
+    // Assignments: a faculty member's own; an HOD's department's (an HOD authors nothing, so their own list is
+    // empty, D1); an admin sees all.
+    let assignments;
+    if (req.user.role === 'admin') {
+      assignments = await assignmentRepo.getAll();
+    } else if (req.user.role === 'hod') {
+      const dept = req.user.department ?? null;
+      const staff = (await userRepo.listByRole('faculty')).filter((u) => dept !== null && (u.department ?? null) === dept);
+      const ids = new Set(staff.map((u) => u.id));
+      assignments = (await assignmentRepo.getAll()).filter((a) => ids.has(a.facultyId));
+    } else {
+      assignments = await assignmentRepo.listByFacultyId(req.user.id);
+    }
+    assignments = assignments
       .sort((a, b) => (a.deadline?.toMillis?.() ?? new Date(a.deadline).getTime()) - (b.deadline?.toMillis?.() ?? new Date(b.deadline).getTime()))
-      .map(a => ({ id: a.id, title: a.title, deadline: a.deadline, created_at: a.createdAt }));
+      .map((a) => ({ id: a.id, title: a.title, deadline: a.deadline, created_at: a.createdAt }));
 
-    res.json({
-      success: true,
-      data: {
-        stats: { totalStudents, activeStudents, totalSubs, acRate, problemsSolved },
-        assignments
-      }
-    });
+    res.json({ success: true, data: { stats: dashStats, assignments } });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, error: 'Server error' });

@@ -5,6 +5,7 @@
 // a four-state funnel first, then flags, then per-section comparison, then
 // written insights. The funnel is the spine: every other number hangs off it.
 const { flagFor, weeklyActivity, buildFunnel } = require('./studentState');
+const { classLabel, classOrder } = require('./students');
 
 const DAY_MS = 86400000;
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
@@ -108,9 +109,15 @@ function buildDepartmentAnalytics({ students, submissions, now = Date.now(), bas
   }));
 
   // ── Section comparison ────────────────────────────────────────────────────
-  const sectionNames = [...new Set(rows.map((r) => r.section || 'Unassigned'))].sort();
+  // Grouped by year AND section: Section A of the 2nd year and of the 4th year are different classes.
+  const labelOf = (r) => classLabel(r.year, r.section);
+  const sectionNames = [...new Set(rows.map(labelOf))]
+    .sort((a, b) => {
+      const ra = rows.find((r) => labelOf(r) === a); const rb = rows.find((r) => labelOf(r) === b);
+      return classOrder(ra.year, ra.section).localeCompare(classOrder(rb.year, rb.section));
+    });
   const sections = sectionNames.map((name) => {
-    const inSection = rows.filter((r) => (r.section || 'Unassigned') === name);
+    const inSection = rows.filter((r) => labelOf(r) === name);
     const red = inSection.filter((r) => r.flag === 'red').length;
     const green = inSection.filter((r) => r.flag === 'green').length;
     return {
@@ -157,11 +164,14 @@ function buildDepartmentAnalytics({ students, submissions, now = Date.now(), bas
     });
   }
   const worst = [...sections].filter((s) => s.students >= 3).sort((a, b) => b.at_risk_pct - a.at_risk_pct)[0];
-  if (worst && worst.at_risk_pct >= 50 && sections.length > 1) {
+  const deptRedPct = Math.round(rows.filter((r) => r.flag === 'red').length / total * 100);
+  // Only worth saying when one class is clearly behind the rest; if everyone is at the same level (for example
+  // on the first day, when nobody has started) singling one class out is noise.
+  if (worst && worst.at_risk_pct >= 50 && sections.length > 1 && worst.at_risk_pct >= deptRedPct + 10) {
     insights.push({
       severity: 'medium',
-      title: `Section ${worst.name} needs the most attention`,
-      detail: `${worst.at_risk_pct}% of its ${worst.students} students are flagged, against ${Math.round(rows.filter((r) => r.flag === 'red').length / total * 100)}% across the department.`,
+      title: `${worst.name} needs the most attention`,
+      detail: `${worst.at_risk_pct}% of its ${worst.students} students are flagged, against ${deptRedPct}% across the department.`,
     });
   }
   const thisWeek = weekly[weekly.length - 1];

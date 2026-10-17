@@ -9,7 +9,7 @@ const { activeStudents } = require('../utils/students');
 
 const TTL_SECONDS = 120;
 // Bump when the response shape or aggregation changes (the cache outlives deploys).
-const VERSION = 4;
+const VERSION = 5;
 
 const BASELINES = ['view', 'year', 'institution'];
 

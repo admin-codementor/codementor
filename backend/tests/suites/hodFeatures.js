@@ -192,7 +192,13 @@ function portfolioPure(s) {
   s.check('portfolio: ten certificates and nothing else is still one type', o.records.find((r) => r.id === 'b').types === 1);
   s.check('portfolio: items of students outside the view are not counted', o.totals.items === 9, String(o.totals.items));
   s.check('portfolio: records list the emptiest students first', o.records[0].id === 'd' && o.records[0].types === 0);
-  s.check('portfolio: the gap table is worst first (share with nothing)', o.gaps.section[0].label === 'Section B' && o.gaps.section[0].nothing_pct === 50, JSON.stringify(o.gaps.section));
+  s.check('portfolio: the gap table is worst first (share with nothing)', o.gaps.section[0].label === 'Year 2 · B' && o.gaps.section[0].nothing_pct === 50, JSON.stringify(o.gaps.section));
+  // The same section letter in two years is two different classes, never one row.
+  const twoYears = buildPortfolioOverview({
+    students: [{ id: 'p', name: 'P', section: 'A', year: 2 }, { id: 'q', name: 'Q', section: 'A', year: 4 }, { id: 'r', name: 'R', section: 'A', year: 4 }, { id: 's', name: 'S', section: 'A' }],
+    items: [], mentorNames: new Map(),
+  });
+  s.check('portfolio: section A of year 2 and of year 4 are separate rows', twoYears.gaps.section.filter((g) => g.label.endsWith('A')).length === 3 && twoYears.gaps.section.find((g) => g.label === 'Year 4 · A').students === 2 && twoYears.gaps.section.some((g) => g.label === 'Section A'), JSON.stringify(twoYears.gaps.section.map((g) => g.label)));
   s.check('portfolio: gaps can be grouped by mentor, with a "No mentor" group', o.gaps.mentor.some((g) => g.label === 'Mira') && o.gaps.mentor.some((g) => g.label === 'No mentor'));
   s.check('portfolio: an empty department does not throw', (() => { try { return buildPortfolioOverview({ students: [], items: [] }).totals.students === 0; } catch { return false; } })());
 }

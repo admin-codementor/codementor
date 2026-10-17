@@ -6,6 +6,8 @@
 // all three), never by a score: a student with ten certificates and no project
 // has covered one type, and that is what the HOD needs to see.
 
+const { classLabel } = require('./students');
+
 const TYPES = ['certification', 'project', 'achievement'];
 const MAX_TITLE = 120;
 const MAX_DETAIL = 500;
@@ -110,7 +112,7 @@ function buildPortfolioOverview({ students, items, mentorNames = new Map() }) {
     },
     bands,
     gaps: {
-      section: gapsBy((r) => r.section || 'Unassigned', (k) => (k === 'Unassigned' ? 'No section' : `Section ${k}`)),
+      section: gapsBy((r) => classLabel(r.year, r.section), (k) => k), // year + section: see utils/students.js
       year: gapsBy((r) => (r.year == null ? 'Unassigned' : String(r.year)), (k) => (k === 'Unassigned' ? 'No year' : `Year ${k}`)),
       mentor: gapsBy((r) => r.mentor_name || 'none', (k) => (k === 'none' ? 'No mentor' : k)),
     },

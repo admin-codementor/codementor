@@ -134,7 +134,7 @@ exports.searchContacts = async (req, res) => {
     }
     const rows = [
       ...staff,
-      ...students.map((s) => ({ id: s.id, name: s.name || 'Student', role: 'student', detail: [s.rollNo, s.section && `Sec ${s.section}`].filter(Boolean).join(' · ') })),
+      ...students.map((s) => ({ id: s.id, name: s.name || 'Student', role: 'student', detail: [s.rollNo, s.section && `Sec ${s.section}`, s.year && `Year ${s.year}`].filter(Boolean).join(' · ') })),
     ].sort((a, b) => a.name.localeCompare(b.name)).slice(0, 20);
     res.json({ success: true, data: rows });
   } catch (error) {

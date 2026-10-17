@@ -8,7 +8,7 @@ const { buildPortfolioOverview } = require('../utils/portfolio');
 const { activeStudents } = require('../utils/students');
 
 const TTL_SECONDS = 60;
-const VERSION = 1;
+const VERSION = 2;
 
 async function compute({ dept, section, year, mentor }) {
   const [studentsMap, staffMap, items] = await Promise.all([

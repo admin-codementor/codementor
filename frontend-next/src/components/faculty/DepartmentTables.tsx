@@ -164,7 +164,7 @@ export function WeeklyProgressTable({ students }: { students: DeptStudent[] }) {
                     <TableRow key={s.id} hover onClick={() => router.push(`/faculty/students/${s.id}`)} sx={bodyRow}>
                       <TableCell>
                         <Typography variant="body2" fontWeight={500}>{s.name}</Typography>
-                        <Typography variant="caption" color="text.secondary">{[s.roll_no, s.section && `Sec ${s.section}`].filter(Boolean).join(" · ")}</Typography>
+                        <Typography variant="caption" color="text.secondary">{[s.roll_no, s.section && `Sec ${s.section}`, s.year && `Year ${s.year}`].filter(Boolean).join(" · ")}</Typography>
                       </TableCell>
                       <TableCell align="right">{s.week.solved}</TableCell>
                       <TableCell align="right"><Stack alignItems="flex-end"><Delta value={s.week.solved_change} /></Stack></TableCell>

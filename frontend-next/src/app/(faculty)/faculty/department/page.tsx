@@ -249,7 +249,7 @@ export default function DepartmentDashboardPage() {
               subtitle="By problems solved"
               unit=" solved"
               limit={10}
-              rows={d.students.map((s) => ({ id: s.id, label: s.name, hint: s.roll_no ?? undefined, value: s.solved }))}
+              rows={d.students.filter((s) => s.solved > 0).map((s) => ({ id: s.id, label: s.name, hint: s.roll_no ?? undefined, value: s.solved }))}
               onRowClick={(r) => router.push(`/faculty/students/${r.id}`)}
               emptyDescription="Students appear here once they solve something."
             />

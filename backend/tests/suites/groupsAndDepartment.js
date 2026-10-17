@@ -86,6 +86,19 @@ function pureChecks(s) {
   s.check('aggregator: funnel counts sum to the cohort size', sum(r.funnel, 'count') === students.length, r.funnel.map((f) => `${f.key}=${f.count}`).join(' '));
   s.check('aggregator: flag counts sum to the cohort size', r.flags.red + r.flags.orange + r.flags.green === students.length, JSON.stringify(r.flags));
   s.check('aggregator: badge counts sum to the cohort size', sum(r.badges, 'count') === students.length, r.badges.map((b) => `${b.name}=${b.count}`).join(' '));
+  const multi = buildDepartmentAnalytics({
+    students: [{ id: 'a', name: 'A', section: 'A', year: 2 }, { id: 'b', name: 'B', section: 'A', year: 4 }, { id: 'c', name: 'C', section: 'A', year: 4 }, { id: 'd', name: 'D', section: 'B', year: 2 }, { id: 'e', name: 'E', section: null, year: 3 }],
+    submissions: [], now,
+  });
+  s.check('aggregator: the same section letter in two years is two classes, ordered by year then section', multi.sections.map((x) => `${x.name}:${x.students}`).join(' ; ') === 'Year 2 · A:1 ; Year 2 · B:1 ; Year 4 · A:2 ; No section:1', multi.sections.map((x) => `${x.name}:${x.students}`).join(' ; '));
+  const mkClass = (n, sec, yr) => Array.from({ length: n }, (_, i) => ({ id: `${sec}${yr}${i}`, name: 'S', section: sec, year: yr }));
+  const flat = buildDepartmentAnalytics({ students: [...mkClass(5, 'A', 2), ...mkClass(5, 'B', 2)], submissions: [], now });
+  s.check('insights: no class is singled out when everyone is at the same level (e.g. nobody has started)', !flat.insights.some((i) => /needs the most attention/.test(i.title)));
+  const uneven = buildDepartmentAnalytics({
+    students: [...mkClass(5, 'A', 2), ...mkClass(5, 'B', 2)],
+    submissions: mkClass(5, 'B', 2).map((x) => ({ userId: x.id, problemId: `p${x.id}`, verdict: 'Accepted', submittedAt: new Date(now - 86400000) })), now,
+  });
+  s.check('insights: a class that is clearly behind is named, with its year', uneven.insights.some((i) => i.title === 'Year 2 · A needs the most attention'), JSON.stringify(uneven.insights.map((i) => i.title)));
   s.check('aggregator: section student counts sum to the cohort size', sum(r.sections, 'students') === students.length);
   s.check('aggregator: funnel buckets are the expected people',
     r.funnel.find((f) => f.key === 'practising').count === 2
