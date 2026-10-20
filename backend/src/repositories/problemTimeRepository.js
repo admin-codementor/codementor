@@ -28,4 +28,10 @@ async function add(userId, problemId, seconds, solved) {
   });
 }
 
-module.exports = { get, add };
+// Every problem this student has spent time on, with when they last did. One query, no document bodies beyond these fields.
+async function listByUser(userId) {
+  const snap = await col().where('userId', '==', userId).select('problemId', 'seconds', 'solvedAtSeconds', 'updatedAt').get();
+  return snap.docs.map((d) => d.data());
+}
+
+module.exports = { get, add, listByUser };

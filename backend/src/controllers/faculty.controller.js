@@ -33,6 +33,8 @@ const portfolioRepo = require('../repositories/portfolioRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 
+const MAX_LESSON = 8000; // characters of teaching text per problem
+
 // Firestore Timestamp | Date | ISO-string | null -> 'YYYY-MM-DD' (or null).
 const toDateOnly = (value) => {
   if (!value) return null;
@@ -373,7 +375,7 @@ exports.exportMarksCSV = async (req, res) => {
 
 exports.createProblem = async (req, res) => {
   try {
-    const { title, description, difficulty, tags, test_cases, stubs,
+    const { title, description, difficulty, tags, test_cases, stubs, lesson,
             scoring_mode, max_score, editorial, editorial_visible_at,
             uses_checker, checker_code, checker_language_id } = req.body;
 
@@ -382,6 +384,9 @@ exports.createProblem = async (req, res) => {
     }
     if (description != null && (typeof description !== 'string' || description.length > 20000)) {
       return res.status(400).json({ success: false, error: 'Description must be ≤ 20000 characters.' });
+    }
+    if (lesson != null && (typeof lesson !== 'string' || lesson.length > MAX_LESSON)) {
+      return res.status(400).json({ success: false, error: `Lesson must be ≤ ${MAX_LESSON} characters.` });
     }
 
     // Only an explicit 'draft' creates a draft. Everything that existed before the
@@ -403,7 +408,7 @@ exports.createProblem = async (req, res) => {
       : null;
 
     const problem = await problemRepo.create({
-      title, description, difficulty, tags: tags || [], createdBy: req.user.id, stubs: stubsObj,
+      title, description, difficulty, tags: tags || [], createdBy: req.user.id, stubs: stubsObj, lesson: lesson || null,
       scoringMode: mode, maxScore: mScore, editorial: editorial || null,
       editorialVisibleAt: editorial_visible_at || null,
       usesChecker, checkerCode, checkerLanguageId: checkerLangId,
@@ -420,7 +425,7 @@ exports.createProblem = async (req, res) => {
 exports.updateProblem = async (req, res) => {
   try {
     const { id } = req.params;
-    const { title, description, difficulty, tags, stubs, scoring_mode, max_score,
+    const { title, description, difficulty, tags, stubs, lesson, scoring_mode, max_score,
             editorial, editorial_visible_at, test_cases,
             uses_checker, checker_code, checker_language_id } = req.body;
 
@@ -432,6 +437,12 @@ exports.updateProblem = async (req, res) => {
     if (description !== undefined) partial.description = description;
     if (difficulty !== undefined) partial.difficulty = difficulty;
     if (tags !== undefined) partial.tags = tags;
+    if (lesson !== undefined) {
+      if (lesson !== null && (typeof lesson !== 'string' || lesson.length > MAX_LESSON)) {
+        return res.status(400).json({ success: false, error: `Lesson must be ≤ ${MAX_LESSON} characters.` });
+      }
+      partial.lesson = lesson || null;
+    }
     if (stubs && typeof stubs === 'object' && !Array.isArray(stubs)) partial.stubs = stubs;
     if (['acm', 'oi'].includes(scoring_mode)) partial.scoringMode = scoring_mode;
     if (Number.isInteger(max_score) && max_score > 0) partial.maxScore = max_score;
@@ -946,6 +957,7 @@ exports.getProblemDetail = async (req, res) => {
         difficulty: (problem.difficulty || 'easy').toLowerCase(),
         tags: problem.tags || [],
         stubs: problem.stubs || {},
+        lesson: problem.lesson || '',
         scoring_mode: problem.scoringMode || 'acm',
         max_score: problem.maxScore ?? 100,
         editorial: problem.editorial || '',

@@ -44,6 +44,9 @@ import { ErrorState } from "@/components/ui/States";
 import { AITutorSidebar, type FailingTest } from "@/components/problem/AITutorSidebar";
 import { TimerWidget } from "@/components/problem/TimerWidget";
 import { LearningPanel } from "@/components/problem/LearningPanel";
+import { visualizeWhitespace } from "@/lib/whitespace";
+import Switch from "@mui/material/Switch";
+import FormControlLabel from "@mui/material/FormControlLabel";
 import { PerformancePanel } from "@/components/problem/PerformancePanel";
 import { darkScheme, lightScheme, radius } from "@/theme/tokens";
 import type {
@@ -208,7 +211,7 @@ function initials(name?: string) {
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
 
-function ProblemMarkdown({ content }: { content: string }) {
+function ProblemMarkdown({ content, lesson = false }: { content: string; lesson?: boolean }) {
   return (
     <Box
       sx={{
@@ -258,7 +261,10 @@ function ProblemMarkdown({ content }: { content: string }) {
           my: 2,
           "& p": { mb: 0 },
         },
-        "& strong": { fontWeight: 600 },
+        // In a lesson, **bold** marks a key term and is highlighted so the idea can be found at a glance.
+        "& strong": lesson
+          ? { fontWeight: 600, bgcolor: "primaryContainer", color: "onPrimaryContainer", px: 0.75, py: 0.125, borderRadius: 1 }
+          : { fontWeight: 600 },
         // One heading style for every level: a statement is a list of sections (Input, Output, Constraints...),
         // not a document with a hierarchy, and the old h1/h2 sizes overpowered the problem itself.
         "& h1, & h2, & h3, & h4": {
@@ -302,6 +308,7 @@ function TestCaseRow({
   hideErrorText?: boolean;
 }) {
   const [open, setOpen] = React.useState(index === 0);
+  const [showWs, setShowWs] = React.useState(false);
   const passed = result.passed;
 
   return (
@@ -342,14 +349,21 @@ function TestCaseRow({
       </Box>
       <Collapse in={open}>
         <Box sx={{ p: 1.5, bgcolor: "surfaceContainerLowest" }}>
+          {(result.is_public && result.expected != null) || result.stdout ? (
+            <FormControlLabel
+              sx={{ m: 0, mb: 0.5 }}
+              control={<Switch size="small" checked={showWs} onChange={(e) => setShowWs(e.target.checked)} />}
+              label={<Typography variant="caption" color="text.secondary">Show spaces and line ends (· for a space, ↵ for a new line)</Typography>}
+            />
+          ) : null}
           {result.is_public && result.input != null && (
-            <TestIOBlock label="Input" value={result.input} />
+            <TestIOBlock label="Input" value={result.input} showWhitespace={showWs} />
           )}
           {result.is_public && result.expected != null && (
-            <TestIOBlock label="Expected" value={result.expected} />
+            <TestIOBlock label="Expected" value={result.expected} showWhitespace={showWs} />
           )}
           {result.stdout && (
-            <TestIOBlock label="Your output" value={result.stdout} highlight={!passed} />
+            <TestIOBlock label="Your output" value={result.stdout} highlight={!passed} showWhitespace={showWs} />
           )}
           {!hideErrorText && (result.stderr || result.compile_output || result.message) && (
             <TestIOBlock
@@ -529,11 +543,13 @@ function TestIOBlock({
   value,
   highlight,
   isError,
+  showWhitespace,
 }: {
   label: string;
   value: string;
   highlight?: boolean;
   isError?: boolean;
+  showWhitespace?: boolean;
 }) {
   return (
     <Box sx={{ mb: 1.5 }}>
@@ -556,7 +572,7 @@ function TestIOBlock({
           overflow: "auto",
         }}
       >
-        {value || "(empty)"}
+        {value ? (showWhitespace ? visualizeWhitespace(value) : value) : "(empty)"}
       </Box>
     </Box>
   );
@@ -806,13 +822,14 @@ function historyLangName(langId: number): string {
 
 /** A labelled monospace pane for an example's Input/Output, with an optional copy button. */
 function ExampleIO({ label, value, copyable = false }: { label: string; value: string; copyable?: boolean }) {
-  const [copied, setCopied] = React.useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(value).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+  const [copied, setCopied] = React.useState<number | "all" | null>(null);
+  const copyText = (text: string, which: number | "all") => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(which);
+      setTimeout(() => setCopied(null), 1500);
     });
   };
+  const lines = value.replace(/\r\n?/g, "\n").replace(/\n$/, "").split("\n");
   return (
     <Box sx={{ minWidth: 0 }}>
       <Stack direction="row" alignItems="center" justifyContent="space-between" sx={{ mb: 0.5 }}>
@@ -820,29 +837,51 @@ function ExampleIO({ label, value, copyable = false }: { label: string; value: s
           {label}
         </Typography>
         {copyable && (
-          <Tooltip title={copied ? "Copied" : "Copy"}>
-            <IconButton size="small" onClick={copy} aria-label={`Copy ${label.toLowerCase()}`} sx={{ p: 0.25 }}>
-              {copied ? <CheckIcon sx={{ fontSize: 14, color: "success.main" }} /> : <ContentCopyOutlinedIcon sx={{ fontSize: 14 }} />}
+          <Tooltip title={copied === "all" ? "Copied" : lines.length > 1 ? "Copy all lines" : "Copy"}>
+            <IconButton size="small" onClick={() => copyText(value, "all")} aria-label={`Copy ${label.toLowerCase()}`} sx={{ p: 0.25 }}>
+              {copied === "all" ? <CheckIcon sx={{ fontSize: 14, color: "success.main" }} /> : <ContentCopyOutlinedIcon sx={{ fontSize: 14 }} />}
             </IconButton>
           </Tooltip>
         )}
       </Stack>
-      <Box
-        component="pre"
-        sx={{
-          m: 0,
-          p: 1.25,
-          bgcolor: "surfaceContainerHighest",
-          borderRadius: 1,
-          fontFamily: "ui-monospace, monospace",
-          fontSize: "0.8rem",
-          lineHeight: 1.5,
-          overflow: "auto",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
-      >
-        {value}
+      {/* One row per line, each with its own copy button, so a single input line can be pasted into the terminal. */}
+      <Box sx={{ bgcolor: "surfaceContainerHighest", borderRadius: 1, py: 0.5, px: 0.5, overflow: "auto" }}>
+        {value === "" ? (
+          <Typography variant="caption" color="text.disabled" sx={{ px: 0.75, py: 0.5, display: "block" }}>(empty)</Typography>
+        ) : (
+          lines.map((line, i) => (
+            <Box
+              key={i}
+              sx={{
+                display: "flex",
+                alignItems: "flex-start",
+                gap: 0.5,
+                px: 0.75,
+                borderRadius: 0.75,
+                "&:hover, &:focus-within": { bgcolor: "surfaceContainerHigh" },
+                "&:hover .line-copy, &:focus-within .line-copy": { opacity: 1 },
+              }}
+            >
+              <Box
+                component="span"
+                sx={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, monospace", typography: "caption", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+              >
+                {line === "" ? " " : line}
+              </Box>
+              {lines.length > 1 && copyable && (
+                <IconButton
+                  className="line-copy"
+                  size="small"
+                  onClick={() => copyText(line, i)}
+                  aria-label={`Copy line ${i + 1} of ${label.toLowerCase()}`}
+                  sx={{ p: 0.25, opacity: 0, transition: "opacity 120ms", mt: 0.25 }}
+                >
+                  {copied === i ? <CheckIcon sx={{ fontSize: 13, color: "success.main" }} /> : <ContentCopyOutlinedIcon sx={{ fontSize: 13 }} />}
+                </IconButton>
+              )}
+            </Box>
+          ))
+        )}
       </Box>
     </Box>
   );
@@ -1504,6 +1543,16 @@ export default function ProblemSolvingPage() {
                     </Typography>
                   </Tooltip>
                 </Stack>
+
+                {/* Teaching first, then the task */}
+                {problem.lesson && (
+                  <Box sx={{ mb: 3.5, p: 2.25, borderRadius: 2, bgcolor: "surfaceContainerLow", border: "1px solid", borderColor: "outlineVariant" }}>
+                    <Typography variant="caption" fontWeight={700} color="text.secondary" sx={{ textTransform: "uppercase", letterSpacing: "0.05em", display: "block", mb: 1 }}>
+                      Learn the idea
+                    </Typography>
+                    <ProblemMarkdown content={problem.lesson} lesson />
+                  </Box>
+                )}
 
                 {/* Problem description */}
                 <ProblemMarkdown content={problem.description} />

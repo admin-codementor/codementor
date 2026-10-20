@@ -351,20 +351,41 @@ export default function CourseDetailPage() {
                 {totals.solved}/{totals.total} problems solved across {course.modules.length} modules
               </Typography>
             </Box>
-            {/* One obvious action: the next unsolved problem, so nobody has to
-                hunt through the modules for where they left off. */}
-            {course.nextUp?.problemId && (
+            {course.resume == null && course.problemCount > 0 && (
+              <Typography variant="subtitle2" color="success.main" sx={{ flexShrink: 0 }}>
+                Course complete
+              </Typography>
+            )}
+          </Card>
+          {/* Where to carry on: the problem they last worked on and have not solved, else the next one in order. */}
+          {course.resume && (
+            <Card
+              variant="outlined"
+              sx={{ borderColor: "outlineVariant", bgcolor: "surfaceContainerLow", p: 2.5, mb: 3, display: "flex", alignItems: "center", gap: 2, flexWrap: "wrap" }}
+            >
+              <Box sx={{ flex: 1, minWidth: 220 }}>
+                <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {course.resume.reason === "in_progress" ? "Pick up where you left off" : course.solvedCount === 0 ? "Start here" : "Next up"}
+                </Typography>
+                <Typography variant="subtitle1" fontWeight={600} noWrap sx={{ mt: 0.25 }}>
+                  {course.resume.title}
+                </Typography>
+                <Typography variant="body2" color="text.secondary" noWrap>
+                  {course.resume.moduleTitle} · problem {course.resume.position} of {course.resume.moduleTotal}
+                  {course.modulesLeft > 0 && ` · ${course.modulesLeft} ${course.modulesLeft === 1 ? "module" : "modules"} left`}
+                </Typography>
+              </Box>
               <Button
                 component={NextLink}
-                href={`/app/problems/${course.nextUp.problemId}?course=${courseId}&module=${course.nextUp.moduleId}`}
+                href={`/app/problems/${course.resume.problemId}?course=${courseId}&module=${course.resume.moduleId}`}
                 variant="contained"
                 endIcon={<ArrowForwardIcon fontSize="small" />}
                 sx={{ flexShrink: 0 }}
               >
-                Next up: {course.nextUp.moduleTitle}
+                {course.resume.reason === "in_progress" ? "Resume" : course.solvedCount === 0 ? "Start" : "Continue"}
               </Button>
-            )}
-          </Card>
+            </Card>
+          )}
           {course.modules.length === 0 ? (
             <Card variant="outlined" sx={{ borderColor: "outlineVariant" }}>
               <EmptyState icon={<ViewModuleOutlinedIcon />} title="No modules yet" />
@@ -378,7 +399,7 @@ export default function CourseDetailPage() {
                   courseId={courseId}
                   // Open where the work is: the module we were sent to, else
                   // the one with work left, never simply the first.
-                  defaultExpanded={m.id === (focusModuleId ?? course.nextUp?.moduleId)}
+                  defaultExpanded={m.id === (focusModuleId ?? course.resume?.moduleId ?? course.nextUp?.moduleId)}
                 />
               ))}
             </Stack>

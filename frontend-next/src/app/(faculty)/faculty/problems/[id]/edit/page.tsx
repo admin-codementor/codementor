@@ -47,12 +47,13 @@ interface ProblemDraft {
   max_score: number;
   editorial: string;
   editorial_visible_at: string;
+  lesson: string;
   status: string;
 }
 
 const EMPTY: ProblemDraft = {
   title: "", description: "", difficulty: "easy", tags: [], test_cases: [],
-  scoring_mode: "acm", max_score: 100, editorial: "", editorial_visible_at: "", status: "draft",
+  scoring_mode: "acm", max_score: 100, editorial: "", editorial_visible_at: "", lesson: "", status: "draft",
 };
 
 export default function ProblemAuthoringPage() {
@@ -95,6 +96,7 @@ export default function ProblemAuthoringPage() {
           max_score: p.max_score ?? 100,
           editorial: p.editorial ?? "",
           editorial_visible_at: p.editorial_visible_at ? String(p.editorial_visible_at).slice(0, 16) : "",
+          lesson: p.lesson ?? "",
           status: p.status ?? "published",
         };
         draftRef.current = next;
@@ -118,6 +120,7 @@ export default function ProblemAuthoringPage() {
         max_score: cur.max_score,
         editorial: cur.editorial,
         editorial_visible_at: cur.editorial_visible_at || undefined,
+        lesson: cur.lesson,
         // Only send test cases once there is at least one complete pair — the API
         // rejects an all-empty set, and a half-typed row shouldn't fail the autosave.
         ...(cur.test_cases.some((t) => t.input.trim() && t.output.trim())
@@ -324,6 +327,16 @@ export default function ProblemAuthoringPage() {
             )}
           </Box>
         </Box>
+
+        <Divider />
+        <Typography variant="overline" color="text.secondary">Lesson (optional)</Typography>
+        <TextField
+          fullWidth multiline minRows={4} size="small" value={draft.lesson}
+          placeholder="Teach the idea first: a short explanation students read before the task. Put **key terms** in bold and they are highlighted."
+          onChange={(e) => { const v = e.target.value; edit(() => ({ lesson: v })); }}
+          helperText={`${draft.lesson.length}/8000 characters. Shown above the statement.`}
+          slotProps={{ htmlInput: { maxLength: 8000 } }}
+        />
 
         <Divider />
         <Typography variant="overline" color="text.secondary">Editorial (optional)</Typography>

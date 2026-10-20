@@ -21,7 +21,9 @@ function csvRow(o) {
 const issuesOf = () => new lib.Issues();
 const build = (o, ctx = {}) => {
   const issues = issuesOf();
-  const rows = lib.parseCsvObjects(`${HEADER}\n${csvRow(o)}\n`).records;
+  // An optional `lesson` column is appended after the 21 required ones.
+  const withLesson = o.lesson !== undefined;
+  const rows = lib.parseCsvObjects(`${HEADER}${withLesson ? ',lesson' : ''}\n${csvRow(o)}${withLesson ? `,${q(o.lesson)}` : ''}\n`).records;
   const p = lib.buildProblem(rows[0], { issues, moduleNumber: 1, moduleShort: 'Basics', ...ctx });
   return { p, issues };
 };
@@ -95,6 +97,14 @@ module.exports = function (s) {
   r = build({ hint_3: '' });
   s.check('a missing hint is a note, not an error', r.issues.errors.length === 0 && r.issues.warnings.some((w) => /2 of 3 hints/.test(w.msg)));
 
+  // ── lessons ──
+  r = build({ lesson: 'Python is **interpreted**.' });
+  s.check('a lesson column becomes the problem lesson', r.p.data.lesson === 'Python is **interpreted**.');
+  r = build({});
+  s.check('no lesson is null, not an empty string', r.p.data.lesson === null);
+  r = build({ lesson: 'x'.repeat(8001) });
+  s.check('an over-long lesson is an error', r.issues.errors.some((e) => /lesson is 8001/.test(e.msg)));
+
   // ── a whole folder ──
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'pyc-'));
   fs.writeFileSync(path.join(dir, 'm1.csv'), `${HEADER}\n${csvRow({})}\n${csvRow({ question_id: 'M01-02', title: 'Echo two' })}\n`);
@@ -109,5 +119,12 @@ module.exports = function (s) {
   s.check('folder: a duplicate question id is an error', lib.loadCourse(dir).issues.errors.some((e) => /duplicates/.test(e.msg)));
   fs.writeFileSync(path.join(dir, 'm4.csv'), 'question_id,title\nM04-01,x\n');
   s.check('folder: a file with missing columns is an error', lib.loadCourse(dir).issues.errors.some((e) => /missing column/.test(e.msg)));
+  fs.writeFileSync(path.join(dir, 'lessons.csv'), 'question_id,lesson\nM01-02,"Teach **this**"\nPY-M2-01,"And that"\nM09-99,"orphan"\n');
+  const withLessons = lib.loadCourse(dir);
+  const byKey = Object.fromEntries(withLessons.modules.flatMap((m) => m.problems).map((p) => [p.key, p.data.lesson]));
+  s.check('lessons.csv attaches by normalised id (M01-02 and PY-M2-01)', byKey['py-m01-02'] === 'Teach **this**' && byKey['py-m02-01'] === 'And that' && byKey['py-m01-01'] === null, JSON.stringify(byKey));
+  s.check('a lesson for an unknown question is a note, not an error', withLessons.issues.warnings.some((w) => /py-m09-99/.test(w.msg)) && !withLessons.issues.errors.some((e) => /lessons\.csv/.test(e.msg)));
+  fs.writeFileSync(path.join(dir, 'lessons.csv'), 'id,text\n1,2\n');
+  s.check('lessons.csv without the right columns is an error', lib.loadCourse(dir).issues.errors.some((e) => /lessons\.csv needs/.test(e.msg)));
   fs.rmSync(dir, { recursive: true, force: true });
 };

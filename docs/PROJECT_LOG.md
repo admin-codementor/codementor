@@ -5,6 +5,22 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-21 (Wed)
+**Area:** Phase 1 of `docs/COMPETITOR_BUILD_PLAN.md` (branch `feat/phase1-learning`)
+**Did:**
+- **Resume card** on the student course page: "Pick up where you left off" (the last unsolved problem the student visited or
+  submitted, from the time record and submissions), else "Next up" / "Start here"; shows the problem, module, position and modules
+  left; `GET /api/courses/:id` now returns `resume` and `modulesLeft`. Pure rule in `utils/courseResume.js` (9 checks).
+- **Lessons inside problems:** optional `lesson` on a problem (faculty editor field, importer column or `lessons.csv`), shown as
+  "Learn the idea" above the statement with **bold** terms highlighted.
+- **Statement polish:** a copy button on every line of an example, a "show spaces and line ends" switch on test results,
+  problem limits in the right unit (earlier).
+**Found:** PR #42 was merged into #41's branch after #41 had reached main, so main lacked the Python course code; re-opened as #43.
+The Python course is imported but still a draft.
+**Next:** Phase 2 (faculty per-question statistics, course activity report, time and suspicious per problem).
+
+---
+
 ## 2026-10-20 (Tue), later
 **Area:** Python course (branch `feat/python-course`)
 **Did:**
