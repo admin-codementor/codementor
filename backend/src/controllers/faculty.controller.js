@@ -27,6 +27,8 @@ const { resolveCourse, percentOf } = require('../utils/courseProgress');
 const { attemptsUntilFirstAccept } = require('../utils/attempts');
 const { activeStudents, cohortValue } = require('../utils/students');
 const { buildAssignmentMarks } = require('../utils/assignmentMarks');
+const { extensionsByStudent } = require('../utils/reopen');
+const reopenRepo = require('../repositories/reopenRequestRepository');
 const departmentInsightsService = require('../services/departmentInsightsService');
 const portfolioService = require('../services/portfolioService');
 const portfolioRepo = require('../repositories/portfolioRepository');
@@ -280,16 +282,7 @@ async function assertAssignmentAccess(req, res, assignmentId) {
 // The students an assignment was set for: the members of its classes, or the caller's department when it names no class
 // (an assignment with no class goes to everyone, but a faculty member or HOD only ever sees their own students). Only
 // current students; alumni are not part of it.
-async function assignmentStudents(req, assignment) {
-  const active = activeStudents([...(await userRepo.getMapByRole('student')).values()]);
-  const classIds = assignment.classroomIds || [];
-  if (classIds.length) {
-    const memberIds = new Set((await Promise.all(classIds.map((cid) => classroomRepo.listMembers(cid)))).flat().map((m) => m.userId));
-    return active.filter((s) => memberIds.has(s.id));
-  }
-  const dept = scopeDept(req);
-  return active.filter((s) => dept === null || (s.department || null) === dept);
-}
+const { assignmentStudents } = require('../services/assignmentStudentsService');
 
 exports.getAssignmentSubmissions = async (req, res) => {
   try {
@@ -342,7 +335,7 @@ exports.exportMarksCSV = async (req, res) => {
 
     // Best mark made on or before the deadline; a later solve is listed as Late and earns no marks. Every student the
     // assignment was set for gets a row for every problem, including those who never submitted (utils/assignmentMarks.js).
-    const marks = buildAssignmentMarks({ assignment, students, submissions: subs });
+    const marks = buildAssignmentMarks({ assignment, students, submissions: subs, extensions: extensionsByStudent(await reopenRepo.listApprovedForAssignment(id)) });
     const problemsMap = await problemRepo.getMapByIds(assignment.problemIds || []);
     const byId = new Map(students.map((st) => [st.id, st]));
     const rows = marks.flatMap((m) => m.problems.map((p) => {
@@ -999,7 +992,7 @@ exports.getAssignmentProgress = async (req, res) => {
     // Only the students this assignment was set for (not every student in the college).
     const students = (await assignmentStudents(req, assignment)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const subs = (await Promise.all((assignment.problemIds || []).map(pid => submissionRepo.listByProblem(pid)))).flat();
-    const marks = new Map(buildAssignmentMarks({ assignment, students, submissions: subs }).map((m) => [m.id, m]));
+    const marks = new Map(buildAssignmentMarks({ assignment, students, submissions: subs, extensions: extensionsByStudent(await reopenRepo.listApprovedForAssignment(id)) }).map((m) => [m.id, m]));
 
     const progress = students.map((student) => {
       const m = marks.get(student.id);
@@ -2105,6 +2098,8 @@ exports.getFacultyCourseDetail = async (req, res) => {
           id: m.id,
           title: m.title,
           description: m.description || '',
+          dueAt: toISO(m.dueAt),
+          opensAt: toISO(m.opensAt),
           problems: (m.problemIds || [])
             .map((pid) => problemsMap.get(pid))
             .filter(Boolean)
@@ -2381,6 +2376,26 @@ exports.updateModule = async (req, res) => {
           return res.status(400).json({ success: false, error: 'Due date is not a valid date.' });
         }
         patch.dueAt = due;
+      }
+    }
+    // Optional release date: the unit shows as locked to students until then.
+    if (req.body.opens_at !== undefined) {
+      if (!req.body.opens_at) {
+        patch.opensAt = null;
+      } else {
+        const opens = new Date(req.body.opens_at);
+        if (Number.isNaN(opens.getTime())) {
+          return res.status(400).json({ success: false, error: 'The opening date is not a valid date.' });
+        }
+        patch.opensAt = opens;
+      }
+    }
+    {
+      const current = (await courseRepo.getModules(id)).find((m) => m.id === moduleId);
+      const opensMs = patch.opensAt !== undefined ? (patch.opensAt ? patch.opensAt.getTime() : 0) : (current?.opensAt?.toMillis?.() ?? (current?.opensAt ? new Date(current.opensAt).getTime() : 0));
+      const dueMs = patch.dueAt !== undefined ? (patch.dueAt ? patch.dueAt.getTime() : 0) : (current?.dueAt?.toMillis?.() ?? (current?.dueAt ? new Date(current.dueAt).getTime() : 0));
+      if (opensMs && dueMs && opensMs >= dueMs) {
+        return res.status(400).json({ success: false, error: 'A unit has to open before it is due.' });
       }
     }
 

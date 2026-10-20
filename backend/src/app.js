@@ -39,6 +39,7 @@ const courseRoutes = require('./routes/courses.routes');
 const roadmapRoutes = require('./routes/roadmaps.routes');
 const publicRoutes = require('./routes/public.routes');
 const messageRoutes = require('./routes/message.routes');
+const calendarRoutes = require('./routes/calendar.routes');
 const { publicRoute } = require('./middleware/routeGuard');
 
 const { validateSubmission } = require('./middleware/security');
@@ -91,6 +92,7 @@ app.use('/api/courses', courseRoutes);
 app.use('/api/roadmaps', roadmapRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/calendar', calendarRoutes);
 
 // ── Health check ────────────────────────────────────────────────────────────
 app.get('/health', publicRoute('liveness probe for the host, no data'), (req, res) => {

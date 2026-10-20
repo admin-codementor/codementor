@@ -4,6 +4,7 @@ const { protect } = require('../middleware/auth.middleware');
 const { authorize, facultyStaff } = require('../middleware/role.middleware');
 const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../middleware/permissions');
 const facultyController = require('../controllers/faculty.controller');
+const reportsController = require('../controllers/reports.controller');
 const plagiarismController = require('../controllers/plagiarism.controller');
 const groupController = require('../controllers/studentGroup.controller');
 const mentorController = require('../controllers/mentor.controller');
@@ -150,6 +151,14 @@ router.get('/courses/completion', facultyController.getCourseCompletionSummary);
 router.get('/courses/:id', facultyController.getFacultyCourseDetail);
 router.get('/courses/:id/analytics', facultyController.getCourseAnalytics);
 router.get('/problems/:id/statistics', facultyController.getProblemStatistics);
+
+// Report catalogue and reopen requests (controllers/reports.controller.js).
+router.get('/reports/summary', reportsController.getSummary);
+router.get('/reports/daily', reportsController.getDaily);
+router.get('/reports/late/assignments', reportsController.listLateCandidates);
+router.get('/reports/late', reportsController.getLate);
+router.get('/reopen-requests', reportsController.listReopenRequests);
+router.patch('/reopen-requests/:id', reportsController.decideReopenRequest);
 router.post('/courses',
   requirePermission('manage_problems'),
   facultyController.createCourse

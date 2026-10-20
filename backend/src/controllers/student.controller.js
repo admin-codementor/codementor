@@ -9,6 +9,9 @@ const { isActive } = require('../utils/students');
 const { learningView } = require('../utils/problemLearning');
 const { performanceDistribution } = require('../utils/performanceDistribution');
 const problemTimeRepo = require('../repositories/problemTimeRepository');
+const reopenRepo = require('../repositories/reopenRequestRepository');
+const courseRepoForReopen = require('../repositories/courseRepository');
+const { validateRequest } = require('../utils/reopen');
 const submissionRepo = require('../repositories/submissionRepository');
 const mistakeNoteRepo = require('../repositories/mistakeNoteRepository');
 const publicHandleRepo = require('../repositories/publicHandleRepository');
@@ -224,6 +227,11 @@ exports.getAssignments = async (req, res) => {
     const solvedSet = new Set(
       (await submissionRepo.listByUser(userId)).filter(s => s.verdict === 'Accepted').map(s => s.problemId)
     );
+    // This student's own requests: the newest per assignment, so the page can show "waiting", "approved until ..." or "declined".
+    const myRequests = (await reopenRepo.listByUser(userId)).filter((r) => r.targetType === 'assignment')
+      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+    const latestRequest = new Map();
+    for (const r of myRequests) if (!latestRequest.has(r.assignmentId)) latestRequest.set(r.assignmentId, r);
 
     const data = assignments
       .sort((a, b) => (a.deadline?.toMillis?.() ?? new Date(a.deadline).getTime()) - (b.deadline?.toMillis?.() ?? new Date(b.deadline).getTime()))
@@ -240,6 +248,10 @@ exports.getAssignments = async (req, res) => {
           // whether or not it is watched.
           proctored: (a.proctored ?? a.isExam) === true,
           isExam: (a.proctored ?? a.isExam) === true,
+          reopen: (() => {
+            const r = latestRequest.get(a.id);
+            return r ? { status: r.status, until: r.reopenUntil ? toISO(r.reopenUntil) : null, note: r.decisionNote || '' } : null;
+          })(),
           problems, total: problems.length, solved: problems.filter(p => p.is_solved).length,
         };
       });
@@ -799,6 +811,69 @@ exports.addProblemTime = async (req, res) => {
   } catch (error) {
     console.error('Problem time save error:', error);
     res.status(500).json({ success: false, error: 'Failed to save the time' });
+  }
+};
+
+// ── Reopen requests ─────────────────────────────────────────────────────────────
+// A student asks for more time on an assignment or course unit whose deadline has passed. Staff decide in the reports page
+// (controllers/reports.controller.js); an approval gives this student a later cut-off, nobody else.
+
+// @route GET /api/student/reopen-requests
+exports.visibleAssignmentsFor = visibleAssignmentsFor;
+
+exports.listMyReopenRequests = async (req, res) => {
+  try {
+    const rows = (await reopenRepo.listByUser(req.user.id))
+      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0))
+      .map((r) => ({
+        id: r.id, targetType: r.targetType, assignmentId: r.assignmentId || null, courseId: r.courseId || null, moduleId: r.moduleId || null,
+        title: r.targetTitle, reason: r.reason, status: r.status, decisionNote: r.decisionNote || '',
+        reopenUntil: r.reopenUntil ? toISO(r.reopenUntil) : null, createdAt: toISO(r.createdAt),
+      }));
+    res.json({ success: true, data: rows });
+  } catch (error) {
+    console.error('List reopen requests error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load your requests' });
+  }
+};
+
+// @route POST /api/student/reopen-requests   { assignment_id } or { course_id, module_id }, plus { reason }
+exports.createReopenRequest = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { assignment_id: assignmentId, course_id: courseId, module_id: moduleId, reason } = req.body || {};
+    let target;
+    if (assignmentId) {
+      // Only an assignment this student was actually set.
+      const mine = (await visibleAssignmentsFor(userId)).find((a) => a.id === assignmentId);
+      if (!mine) return res.status(404).json({ success: false, error: 'Assignment not found.' });
+      if (mine.proctored || mine.isExam) return res.status(400).json({ success: false, error: 'An exam cannot be reopened here. Please ask your faculty.' });
+      target = { targetType: 'assignment', assignmentId, targetTitle: mine.title, deadline: mine.deadline, ownerId: mine.facultyId };
+    } else if (courseId && moduleId) {
+      const course = await courseRepoForReopen.getById(courseId);
+      if (!course || !course.isPublished) return res.status(404).json({ success: false, error: 'Course not found.' });
+      const mod = (await courseRepoForReopen.getModules(courseId)).find((m) => m.id === moduleId);
+      if (!mod) return res.status(404).json({ success: false, error: 'Unit not found.' });
+      target = { targetType: 'module', courseId, moduleId, targetTitle: `${course.title}: ${mod.title}`, deadline: mod.dueAt, ownerId: course.createdBy };
+    } else {
+      return res.status(400).json({ success: false, error: 'Say which assignment or course unit.' });
+    }
+
+    const key = reopenRepo.targetKey(target);
+    const existing = (await reopenRepo.listByUser(userId)).filter((r) => r.targetKey === key);
+    const checked = validateRequest({ targetType: target.targetType, deadline: target.deadline, reason, existing });
+    if (checked.error) return res.status(400).json({ success: false, error: checked.error });
+
+    const me = await userRepo.getById(userId, 'student');
+    const created = await reopenRepo.create({
+      userId, userName: me?.name || null, rollNo: me?.rollNo || null, department: me?.department || null,
+      targetType: target.targetType, assignmentId: target.assignmentId || null, courseId: target.courseId || null, moduleId: target.moduleId || null,
+      targetTitle: target.targetTitle, ownerId: target.ownerId || null, deadline: target.deadline || null, reason: checked.reason,
+    });
+    res.status(201).json({ success: true, data: { id: created.id, status: created.status } });
+  } catch (error) {
+    console.error('Create reopen request error:', error);
+    res.status(500).json({ success: false, error: 'Failed to send the request' });
   }
 };
 

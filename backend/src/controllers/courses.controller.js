@@ -4,6 +4,8 @@ const submissionRepo = require('../repositories/submissionRepository');
 const { resolveCourse, percentOf } = require('../utils/courseProgress');
 const { resolveResume } = require('../utils/courseResume');
 const problemTimeRepo = require('../repositories/problemTimeRepository');
+const reopenRepo = require('../repositories/reopenRequestRepository');
+const { effectiveDeadline } = require('../utils/reopen');
 
 const toISO = (value) => {
   if (!value) return null;
@@ -133,9 +135,20 @@ exports.getCourseById = async (req, res) => {
     const touch = (pid, ms) => { if (ms && idSet.has(pid) && ms > (touchedAt.get(pid) || 0)) touchedAt.set(pid, ms); };
     mySubs.forEach((s) => touch(s.problemId, toMs(s.submittedAt)));
     (await problemTimeRepo.listByUser(userId)).forEach((t) => touch(t.problemId, toMs(t.updatedAt)));
-    const ordered = modules.flatMap((m) => m.problemIds.map((pid, i) => ({
+    const nowMs = Date.now();
+    const isLocked = (m) => toMs(m.opensAt) > nowMs;
+    // A unit that has not opened yet is not somewhere to resume to.
+    const ordered = modules.filter((m) => !isLocked(m)).flatMap((m) => m.problemIds.map((pid, i) => ({
       id: pid, title: problemsMap.get(pid).title, moduleId: m.id, moduleTitle: m.title, position: i + 1, moduleTotal: m.problemIds.length,
     })));
+
+    // This student's reopen requests for this course's units: an approved one moves their own due date later, and the
+    // newest request per unit is returned so the page can show "waiting", "approved until ..." or "declined".
+    const myRequests = (await reopenRepo.listByUser(userId)).filter((r) => r.targetType === 'module' && r.courseId === id)
+      .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
+    const latestRequest = new Map();
+    for (const r of myRequests) if (!latestRequest.has(r.moduleId)) latestRequest.set(r.moduleId, r);
+    const extension = new Map(myRequests.filter((r) => r.status === 'approved' && r.reopenUntil).map((r) => [r.moduleId, toMs(r.reopenUntil)]));
 
     const now = Date.now();
     const moduleRows = modules.map((m) => {
@@ -150,8 +163,14 @@ exports.getCourseById = async (req, res) => {
         id: m.id,
         title: m.title,
         description: m.description || null,
+        opensAt: toISO(m.opensAt),
+        locked: isLocked(m),
         problems,
-        ...moduleProgress(problems.map((p) => p.id), solvedSet, m.dueAt, now),
+        ...moduleProgress(problems.map((p) => p.id), solvedSet, m.dueAt ? new Date(effectiveDeadline(m.dueAt, extension.get(m.id))) : m.dueAt, now),
+        reopen: (() => {
+          const r = latestRequest.get(m.id);
+          return r ? { status: r.status, until: r.reopenUntil ? toISO(r.reopenUntil) : null, note: r.decisionNote || '' } : null;
+        })(),
         // The first unsolved problem here — what "continue" should open.
         nextProblemId: problems.find((p) => !p.is_solved)?.id ?? null,
       };
@@ -160,7 +179,7 @@ exports.getCourseById = async (req, res) => {
     // Deduplicated across modules: a problem shared by two modules must not be
     // counted twice in the course total.
     const solvedTotal = allProblemIds.filter((pid) => solvedSet.has(pid)).length;
-    const nextModule = moduleRows.find((m) => m.status !== 'done' && m.total > 0) || null;
+    const nextModule = moduleRows.find((m) => !m.locked && m.status !== 'done' && m.total > 0) || null;
 
     res.json({
       success: true,
