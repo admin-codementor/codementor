@@ -11,6 +11,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import Tooltip from "@mui/material/Tooltip";
 import Tabs from "@mui/material/Tabs";
 import Tab from "@mui/material/Tab";
@@ -43,6 +44,7 @@ import { ErrorState } from "@/components/ui/States";
 import { AITutorSidebar, type FailingTest } from "@/components/problem/AITutorSidebar";
 import { TimerWidget } from "@/components/problem/TimerWidget";
 import { LearningPanel } from "@/components/problem/LearningPanel";
+import { PerformancePanel } from "@/components/problem/PerformancePanel";
 import { darkScheme, lightScheme, radius } from "@/theme/tokens";
 import type {
   ProblemDetail,
@@ -178,6 +180,12 @@ function allowedLanguageIds(languages: number[] | null | undefined): number[] {
 const LS_LANG   = "cm:lang";
 const lsCode    = (pid: string, lid: number) => `cm:code:${pid}:${lid}`;
 
+/** Problem limits are stored as milliseconds on older problems and whole seconds on newer ones. */
+function formatLimit(t: number): string {
+  const ms = t < 100 ? t * 1000 : t;
+  return ms >= 1000 ? `${ms / 1000} s` : `${ms} ms`;
+}
+
 function formatMs(secs: number): string {
   return secs < 1 ? `${Math.round(secs * 1000)} ms` : `${secs.toFixed(2)} s`;
 }
@@ -204,9 +212,22 @@ function ProblemMarkdown({ content }: { content: string }) {
   return (
     <Box
       sx={{
-        "& p": { mb: 1.5, lineHeight: 1.7 },
-        "& ul, & ol": { pl: 3, mb: 1.5 },
-        "& li": { mb: 0.5 },
+        typography: "body2",
+        lineHeight: 1.75,
+        "& > :first-child": { mt: 0 },
+        "& p": { mb: 1.75, lineHeight: 1.75 },
+        "& ul, & ol": { pl: 3, mb: 2 },
+        "& li": { mb: 0.75, lineHeight: 1.7 },
+        // "Note:" / "Tip:" paragraphs stand out as a callout instead of disappearing into the text.
+        "& .callout": {
+          bgcolor: "surfaceContainerLow",
+          borderLeft: "4px solid",
+          borderColor: "primary.main",
+          borderRadius: 1.5,
+          px: 2,
+          py: 1.25,
+          mb: 2,
+        },
         "& code": {
           fontFamily: "monospace",
           fontSize: "0.85em",
@@ -227,12 +248,43 @@ function ProblemMarkdown({ content }: { content: string }) {
         "& table": { width: "100%", borderCollapse: "collapse", mb: 1.5 },
         "& th, & td": { border: "1px solid", borderColor: "outlineVariant", px: 1.5, py: 0.75 },
         "& th": { bgcolor: "surfaceContainerHigh", fontWeight: 600 },
-        "& blockquote": { borderLeft: "3px solid", borderColor: "primary.main", pl: 2, my: 1.5, color: "text.secondary" },
+        "& blockquote": {
+          bgcolor: "surfaceContainerLow",
+          borderLeft: "4px solid",
+          borderColor: "primary.main",
+          borderRadius: 1.5,
+          px: 2,
+          py: 1.25,
+          my: 2,
+          "& p": { mb: 0 },
+        },
         "& strong": { fontWeight: 600 },
-        "& h1, & h2, & h3": { mt: 2, mb: 1, fontWeight: 600 },
+        // One heading style for every level: a statement is a list of sections (Input, Output, Constraints...),
+        // not a document with a hierarchy, and the old h1/h2 sizes overpowered the problem itself.
+        "& h1, & h2, & h3, & h4": {
+          typography: "subtitle2",
+          fontWeight: 700,
+          mt: 3.5,
+          mb: 1.25,
+          pl: 1.25,
+          borderLeft: "3px solid",
+          borderColor: "primary.main",
+          lineHeight: 1.4,
+        },
       }}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={{
+          p: ({ children }) => {
+            const first = React.Children.toArray(children)[0];
+            const callout = typeof first === "string" && /^\s*(Note|Tip|Important|Remember|Warning)\s*:/i.test(first);
+            return callout ? <p className="callout">{children}</p> : <p>{children}</p>;
+          },
+        }}
+      >
+        {content}
+      </ReactMarkdown>
     </Box>
   );
 }
@@ -667,7 +719,7 @@ function IDEHeader({
           real weight — the clock is the thing that matters in a sitting.
           In ordinary practice it's a quiet chip and hides on narrow screens. */}
       <Box sx={{ mr: 0.5, flexShrink: 0, display: proctored ? "block" : { xs: "none", sm: "block" } }}>
-        <TimerWidget problemId={problemId} solved={solved} prominent={proctored} />
+        <TimerWidget key={problemId} problemId={problemId} solved={solved} prominent={proctored} />
       </Box>
 
       {/* Run */}
@@ -880,6 +932,39 @@ export default function ProblemSolvingPage() {
   // ── Solved state (stops the timer, celebrates) + mobile panel toggle ──
   const [solved, setSolved] = React.useState(false);
   const [mobilePane, setMobilePane] = React.useState<"problem" | "code">("problem");
+
+  // Draggable divider between the problem and the editor; the width is remembered.
+  const splitRef = React.useRef<HTMLDivElement | null>(null);
+  const [leftPct, setLeftPct] = React.useState<number>(() => {
+    try {
+      const saved = Number(localStorage.getItem("cm:split"));
+      return saved >= 25 && saved <= 70 ? saved : 45;
+    } catch {
+      return 45;
+    }
+  });
+  const setSplit = React.useCallback((pct: number) => {
+    const clamped = Math.min(70, Math.max(25, pct));
+    setLeftPct(clamped);
+    try {
+      localStorage.setItem("cm:split", String(Math.round(clamped * 10) / 10));
+    } catch {
+      /* the divider still works for this visit */
+    }
+  }, []);
+  const onSplitDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    const el = splitRef.current;
+    if (!el) return;
+    e.currentTarget.setPointerCapture(e.pointerId);
+    const rect = el.getBoundingClientRect();
+    const move = (ev: PointerEvent) => setSplit(((ev.clientX - rect.left) / rect.width) * 100);
+    const up = () => {
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+    };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
 
   // Timer (session + Pomodoro) lives in <TimerWidget>, keyed by problemId + solved.
 
@@ -1327,7 +1412,7 @@ export default function ProblemSolvingPage() {
         adjacent={adjacent}
         submitting={submitting}
         running={running}
-        solved={solved}
+        solved={solved || !!learning?.solved}
         onRun={() => { setOutputTab("testcases"); setOutputOpen(true); execute("run"); }}
         onSubmit={() => execute("submit")}
         examId={examId}
@@ -1353,9 +1438,10 @@ export default function ProblemSolvingPage() {
       {/* ── Workspace: split pane + optional AI Tutor sidebar ── */}
       <Box sx={{ flex: 1, display: "flex", minHeight: 0, overflow: "hidden" }}>
       <Box
+        ref={splitRef}
         sx={{
           display: "grid",
-          gridTemplateColumns: { xs: "1fr", lg: "45fr 55fr" },
+          gridTemplateColumns: { xs: "1fr", lg: `${leftPct}fr 6px ${100 - leftPct}fr` },
           gridTemplateRows: "1fr",
           flex: 1,
           minWidth: 0,
@@ -1367,9 +1453,8 @@ export default function ProblemSolvingPage() {
           sx={{
             display: isMobile && mobilePane !== "problem" ? "none" : "flex",
             flexDirection: "column",
-            borderRight: { lg: "1px solid" },
-            borderColor: { lg: "outlineVariant" },
             overflow: "hidden",
+            minWidth: 0,
           }}
         >
           {/* Tabs */}
@@ -1390,39 +1475,44 @@ export default function ProblemSolvingPage() {
             {panelTab === "description" && (
               <Box>
                 {/* Title + metadata */}
-                <Typography variant="h5" fontWeight={600} gutterBottom>
+                <Typography variant="h5" fontWeight={700} sx={{ lineHeight: 1.3 }}>
                   {problem.title}
                 </Typography>
-                <Stack direction="row" spacing={1} alignItems="center" sx={{ mb: 2, flexWrap: "wrap", gap: 1 }}>
+                <Stack direction="row" alignItems="center" sx={{ mt: 1.25, flexWrap: "wrap", gap: 1 }}>
                   <DifficultyChip difficulty={cap(problem.difficulty)} />
                   {problem.tags.map((tag) => (
                     <TagChip key={tag} tag={tag} />
                   ))}
                 </Stack>
 
-                {/* Limits */}
-                <Stack direction="row" spacing={1} sx={{ mb: 2.5 }}>
-                  <Box sx={{ px: 1.25, py: 0.625, borderRadius: 1.5, bgcolor: "surfaceContainerHigh" }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Time limit</Typography>
-                    <Typography variant="caption" fontWeight={700}>{problem.time_limit} ms</Typography>
-                  </Box>
-                  <Box sx={{ px: 1.25, py: 0.625, borderRadius: 1.5, bgcolor: "surfaceContainerHigh" }}>
-                    <Typography variant="caption" color="text.secondary" sx={{ mr: 0.5 }}>Memory limit</Typography>
-                    <Typography variant="caption" fontWeight={700}>{problem.memory_limit} MB</Typography>
-                  </Box>
+                {/* Limits and how the answer is checked, one quiet row */}
+                <Stack
+                  direction="row"
+                  divider={<Divider orientation="vertical" flexItem />}
+                  spacing={1.5}
+                  sx={{ mt: 2, mb: 3, py: 1, px: 1.5, borderRadius: 2, bgcolor: "surfaceContainerLow", border: "1px solid", borderColor: "outlineVariant", flexWrap: "wrap", rowGap: 0.5 }}
+                >
+                  <Typography variant="caption" color="text.secondary">
+                    Time <Box component="span" sx={{ fontWeight: 700, color: "text.primary" }}>{formatLimit(problem.time_limit)}</Box>
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Memory <Box component="span" sx={{ fontWeight: 700, color: "text.primary" }}>{problem.memory_limit} MB</Box>
+                  </Typography>
+                  <Tooltip title={problem.exact_output ? "Your output must match line for line: spaces inside a line, blank lines in the middle and capital letters all count." : "Spacing between values is not important; the values are."}>
+                    <Typography variant="caption" color="text.secondary">
+                      Output <Box component="span" sx={{ fontWeight: 700, color: "text.primary" }}>{problem.exact_output ? "exact match" : "flexible spacing"}</Box>
+                    </Typography>
+                  </Tooltip>
                 </Stack>
-
-                <Divider sx={{ mb: 2.5 }} />
 
                 {/* Problem description */}
                 <ProblemMarkdown content={problem.description} />
 
                 {/* Examples */}
                 {problem.examples.length > 0 && (
-                  <Box sx={{ mt: 3.5 }}>
-                    <Divider sx={{ mb: 2.5 }} />
-                    <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", fontSize: "0.72rem", color: "text.secondary" }}>
-                      Examples
+                  <Box sx={{ mt: 4 }}>
+                    <Typography variant="subtitle2" sx={{ mb: 1.5, fontWeight: 700, pl: 1.25, borderLeft: "3px solid", borderColor: "primary.main", lineHeight: 1.4 }}>
+                      {problem.examples.length === 1 ? "Example" : "Examples"}
                     </Typography>
                     <Stack spacing={2}>
                       {problem.examples.map((ex, i) => (
@@ -1444,14 +1534,23 @@ export default function ProblemSolvingPage() {
                               borderColor: "outlineVariant",
                             }}
                           >
-                            <Typography variant="caption" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: "0.05em", color: "text.secondary" }}>
-                              Example {i + 1}
-                            </Typography>
+                            <Stack direction="row" alignItems="center" justifyContent="space-between">
+                              <Typography variant="caption" fontWeight={700} sx={{ textTransform: "uppercase", letterSpacing: "0.05em", color: "text.secondary" }}>
+                                Example {i + 1}
+                              </Typography>
+                              <Button
+                                size="small"
+                                onClick={() => { setCustomInput(ex.input); setOutputTab("custom"); setOutputOpen(true); }}
+                                sx={{ py: 0, minHeight: 0 }}
+                              >
+                                Try in terminal
+                              </Button>
+                            </Stack>
                           </Box>
                           <Stack spacing={1.5} sx={{ p: 1.75 }}>
                             <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5 }}>
                               <ExampleIO label="Input" value={ex.input} copyable />
-                              <ExampleIO label="Output" value={ex.output} />
+                              <ExampleIO label="Output" value={ex.output} copyable />
                             </Box>
                             {ex.explanation && (
                               <Box>
@@ -1497,6 +1596,9 @@ export default function ProblemSolvingPage() {
                   </Box>
                 ) : (
                   <Stack spacing={1}>
+                    <Box sx={{ mb: 2, p: 2, borderRadius: 2, bgcolor: "surfaceContainerLow", border: "1px solid", borderColor: "outlineVariant" }}>
+                      <PerformancePanel problemId={problemId} refreshKey={acceptedHistory.length} />
+                    </Box>
                     {/* Accepted work only. A list of failed attempts is not a
                         useful record; unsolved problems collect in the Mistakes
                         notebook instead, where there is something to do. */}
@@ -1540,6 +1642,31 @@ export default function ProblemSolvingPage() {
           </Box>
         </Box>
 
+        {/* ── Divider: drag, or focus it and use the arrow keys ── */}
+        <Box
+          role="separator"
+          aria-orientation="vertical"
+          aria-label="Resize problem and editor panels"
+          aria-valuemin={25}
+          aria-valuemax={70}
+          aria-valuenow={Math.round(leftPct)}
+          tabIndex={0}
+          onPointerDown={onSplitDown}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowLeft") { e.preventDefault(); setSplit(leftPct - 2); }
+            if (e.key === "ArrowRight") { e.preventDefault(); setSplit(leftPct + 2); }
+          }}
+          sx={{
+            display: { xs: "none", lg: "block" },
+            cursor: "col-resize",
+            touchAction: "none",
+            bgcolor: "outlineVariant",
+            transition: "background-color 120ms",
+            "&:hover, &:focus-visible": { bgcolor: "primary.main" },
+            outline: "none",
+          }}
+        />
+
         {/* ── Right panel: editor + output ── */}
         <Box sx={{ display: isMobile && mobilePane !== "code" ? "none" : "flex", flexDirection: "column", overflow: "hidden" }}>
           {/* Editor toolbar */}
@@ -1578,7 +1705,7 @@ export default function ProblemSolvingPage() {
               onChange={(e) => setFontSize(Number(e.target.value))}
               size="small"
               variant="outlined"
-              sx={{ height: 28, "& .MuiSelect-select": { py: 0.5, fontSize: "0.8rem" }, width: 72 }}
+              sx={{ height: 28, "& .MuiSelect-select": { py: 0.5, fontSize: "0.8rem" }, width: 88 }}
               aria-label="Font size"
             >
               {[12, 14, 16, 18].map((s) => (
@@ -1707,7 +1834,7 @@ export default function ProblemSolvingPage() {
 
             {/* Output content */}
             <Collapse in={outputOpen}>
-              <Box sx={{ maxHeight: 260, overflow: "auto", px: 1.5, pb: 1.5, pt: 1 }}>
+              <Box sx={{ maxHeight: "min(42vh, 380px)", overflow: "auto", px: 1.5, pb: 1.5, pt: 1 }}>
                 {outputTab === "testcases" && (
                   <Box>
                     {(submitting || running) && (
@@ -1719,6 +1846,11 @@ export default function ProblemSolvingPage() {
                     {!submitting && !running && verdictResult && !verdictResult.custom_run && (
                       <Box>
                         <ResultsSummary result={verdictResult} />
+                        {verdictResult.verdict?.description === "Accepted" && !verdictResult.sample_only && (
+                          <Box sx={{ my: 1.5, p: 2, borderRadius: 2, bgcolor: "surfaceContainerLow", border: "1px solid", borderColor: "outlineVariant" }}>
+                            <PerformancePanel problemId={problemId} refreshKey={verdictResult.submission_id ?? "now"} />
+                          </Box>
+                        )}
                         {verdictResult.error && (
                           <ErrorTerminal error={verdictResult.error} onGoToLine={goToLine} />
                         )}
@@ -1764,14 +1896,19 @@ export default function ProblemSolvingPage() {
                 {outputTab === "custom" && (
                   <Stack spacing={1.5}>
                     <Box>
-                      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 0.5 }}>
-                        Standard input (stdin)
-                      </Typography>
+                      <Stack direction="row" alignItems="center" spacing={1} sx={{ mb: 0.75, flexWrap: "wrap", rowGap: 0.5 }}>
+                        <Typography variant="caption" color="text.secondary">
+                          Input (what your program reads)
+                        </Typography>
+                        {problem.examples.slice(0, 3).map((ex, i) => (
+                          <Chip key={i} label={`Example ${i + 1}`} size="small" variant="outlined" onClick={() => setCustomInput(ex.input)} />
+                        ))}
+                      </Stack>
                       <Box
                         component="textarea"
                         value={customInput}
                         onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setCustomInput(e.target.value)}
-                        placeholder="Enter custom input here…"
+                        placeholder={problem.examples[0] ? `Type your own input, or pick an example above.\ne.g. ${problem.examples[0].input.split("\n")[0]}` : "Type your own input here"}
                         rows={4}
                         sx={{
                           width: "100%",

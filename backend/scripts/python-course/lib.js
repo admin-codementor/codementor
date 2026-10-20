@@ -252,7 +252,7 @@ function buildProblem(row, ctx) {
     stubs: { [PYTHON_LANGUAGE_ID]: starterCode(mode) },
     scoringMode: 'acm',
     maxScore: 100,
-    timeLimit: 2,
+    timeLimit: 2, // seconds, as the faculty editor stores it; the problem page now reads both units
     memoryLimit: 256,
     languages: [PYTHON_LANGUAGE_ID],
     comparison: 'exact',

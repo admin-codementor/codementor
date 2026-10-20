@@ -184,6 +184,27 @@ export interface ProblemLearning {
   has_complexity: boolean;
 }
 
+export interface PerformanceBin { from: number; to: number; count: number; mine: boolean }
+export interface PerformanceMetric {
+  mine: number | null;
+  bins: PerformanceBin[];
+  others: number;
+  fasterThanPercent: number | null;
+  best: number | null;
+  median: number | null;
+}
+/** GET /api/student/problems/:id/performance — runtime (ms) and memory (KB) against other students. */
+export interface ProblemPerformance {
+  language: string | null;
+  mine: boolean;
+  students: number;
+  runtime: PerformanceMetric;
+  memory: PerformanceMetric;
+}
+
+/** GET /api/student/problems/:id/time — active time spent on the problem, saved on the server. */
+export interface ProblemTime { seconds: number; solvedAtSeconds: number | null }
+
 export interface AdjacentProblems {
   prev: string | number | null;
   next: string | number | null;

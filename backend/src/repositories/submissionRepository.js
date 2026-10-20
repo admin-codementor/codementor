@@ -35,6 +35,12 @@ async function listByProblem(problemId) {
   return snap.docs.map(toSubmission);
 }
 
+// Just what the runtime / memory comparison needs: the (large) source code is not downloaded.
+async function listByProblemForPerformance(problemId) {
+  const snap = await col().where('problemId', '==', problemId).select('userId', 'verdict', 'runtime', 'memory', 'language').get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
 async function listByUserAndProblem(userId, problemId) {
   return (await listByUser(userId)).filter((s) => s.problemId === problemId);
 }
@@ -58,4 +64,4 @@ async function listAll() {
   return snap.docs.map(toSubmission);
 }
 
-module.exports = { create, getById, listByUser, listByProblem, listByUserAndProblem, listAll, listAllForAnalytics };
+module.exports = { create, getById, listByUser, listByProblem, listByProblemForPerformance, listByUserAndProblem, listAll, listAllForAnalytics };

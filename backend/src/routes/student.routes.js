@@ -15,6 +15,9 @@ const {
   getBadges,
   getProblemSolutions,
   getProblemLearning,
+  getProblemPerformance,
+  getProblemTime,
+  addProblemTime,
   getStats,
   getSkills
 } = require('../controllers/student.controller');
@@ -48,6 +51,9 @@ router.get('/badges', getBadges);
 router.get('/problems/:id/solutions', getProblemSolutions);
 // Hints are help: switched off, like the AI tutor, while a graded exam is in progress.
 router.get('/problems/:id/learning', blockDuringExam, getProblemLearning);
+router.get('/problems/:id/performance', getProblemPerformance);
+router.get('/problems/:id/time', getProblemTime);
+router.post('/problems/:id/time', addProblemTime);
 router.put('/profile', updateProfile);
 // Lives with the student's own settings rather than under /api/roadmaps: it
 // writes to the user, not to a roadmap.
