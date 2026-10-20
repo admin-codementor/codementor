@@ -773,6 +773,8 @@ exports.getProblemPerformance = async (req, res) => {
 };
 
 // Active time spent on a problem, saved on the server so it follows the student across devices.
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 exports.getProblemTime = async (req, res) => {
   try {
     res.json({ success: true, data: await problemTimeRepo.get(req.user.id, req.params.id) });
@@ -791,7 +793,9 @@ exports.addProblemTime = async (req, res) => {
     }
     const problem = await problemRepo.getById(req.params.id);
     if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
-    res.json({ success: true, data: await problemTimeRepo.add(req.user.id, req.params.id, seconds, req.body?.solved === true) });
+    // course_id (optional) feeds the per-course time roll-up that the faculty activity report reads.
+    const courseId = UUID_RE.test(String(req.body?.course_id || '')) ? String(req.body.course_id) : null;
+    res.json({ success: true, data: await problemTimeRepo.add(req.user.id, req.params.id, seconds, req.body?.solved === true, courseId) });
   } catch (error) {
     console.error('Problem time save error:', error);
     res.status(500).json({ success: false, error: 'Failed to save the time' });

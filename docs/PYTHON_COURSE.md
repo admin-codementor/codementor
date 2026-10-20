@@ -19,6 +19,17 @@ runbook: what the platform does differently for this course, and the exact comma
 
 Everything above is optional on a problem. Problems without these fields behave exactly as before.
 
+## Lessons (optional teaching text)
+
+A problem can carry a `lesson` (markdown, up to 8,000 characters) that students read above the statement: **the idea first, then
+the task**. Words in `**bold**` are highlighted as key terms. Two ways to supply it:
+
+- a `lesson` column added to a module CSV, or
+- a separate `lessons.csv` in the same folder with two columns, `question_id` and `lesson` (any id form works: `M01-01`, `PY-M8-01`).
+
+Re-running the import keeps a lesson that is not in the files, so lessons typed in the faculty editor (Problems > edit > Lesson)
+are not wiped. The dry run reports a lesson whose question id is not in any module file.
+
 ## Ids
 
 CSV ids are `M01-01` in modules 1 to 7 and `PY-M8-01` / `PY-M08-01` in modules 8 to 18. All become the key `py-m08-01`,

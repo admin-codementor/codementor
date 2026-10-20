@@ -10,6 +10,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState } from "@/components/ui/States";
+import { fmtDuration } from "@/lib/duration";
 import {
   AssignmentOutlinedIcon, ChevronLeftIcon, ChevronRightIcon, ExpandLessIcon, ExpandMoreIcon, MenuBookOutlinedIcon,
   TrendingDownIcon, TrendingUpIcon,
@@ -39,6 +40,8 @@ export interface ExamRow {
 export interface CourseUnit { id: string; title: string; total: number; solved: number; attempted: number }
 export interface CourseRow {
   id: string; title: string; total: number; solved: number; percent: number;
+  /** Active time on this course, from the problem timer (0 before it existed). */
+  time_seconds?: number;
   pending_units: number; units: CourseUnit[];
 }
 
@@ -213,7 +216,7 @@ export function CourseProgressCard({ courses }: { courses: CourseRow[] }) {
                     <Stack direction="row" justifyContent="space-between" sx={{ mb: 0.5 }}>
                       <Typography variant="body2" fontWeight={500} noWrap>{c.title}</Typography>
                       <Typography variant="caption" color="text.secondary" sx={{ ml: 2, flexShrink: 0 }}>
-                        {c.solved}/{c.total} · {c.percent}%
+                        {c.solved}/{c.total} · {c.percent}%{c.time_seconds ? ` · ${fmtDuration(c.time_seconds)} spent` : ""}
                       </Typography>
                     </Stack>
                     <LinearProgress

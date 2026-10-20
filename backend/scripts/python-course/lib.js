@@ -27,6 +27,7 @@ const COLUMNS = [
 ];
 const DIFFICULTIES = new Set(['easy', 'medium', 'hard']);
 const MAX_DESCRIPTION = 20000;
+const MAX_LESSON = 8000;
 
 const stableId = (key) => uuidv5(`${COURSE_KEY}:${key}`, NAMESPACE);
 
@@ -238,6 +239,10 @@ function buildProblem(row, ctx) {
   const complexity = { time: row.time_complexity.trim(), space: row.space_complexity.trim() };
   if (!complexity.time || !complexity.space) issues.warn(row, 'time or space complexity is empty');
 
+  // Optional teaching text: a `lesson` column in the module file, or a row in lessons.csv (question_id, lesson).
+  const lesson = (row.lesson || '').trim() || ctx.lessons?.get(id.key) || null;
+  if (lesson && lesson.length > MAX_LESSON) issues.error(row, `lesson is ${lesson.length} characters (limit ${MAX_LESSON})`);
+
   const description = buildDescription(row);
   if (description.length > MAX_DESCRIPTION) issues.error(row, `assembled description is ${description.length} characters (limit ${MAX_DESCRIPTION})`);
 
@@ -258,6 +263,7 @@ function buildProblem(row, ctx) {
     comparison: 'exact',
     harness,
     objective: row.objective.trim(),
+    lesson,
     hints,
     complexity,
     referenceSolution: row.reference_solution.replace(/\r\n?/g, '\n').replace(/\s+$/, '') + '\n',
@@ -291,6 +297,23 @@ function loadCourse(dir) {
     .sort((a, b) => a.number - b.number);
   if (!files.length) throw new Error(`No m1.csv ... m18.csv files found in ${dir}`);
 
+  // lessons.csv is optional and may sit beside the module files.
+  const lessons = new Map();
+  const lessonsPath = path.join(dir, 'lessons.csv');
+  if (fs.existsSync(lessonsPath)) {
+    const { header, records } = parseCsvObjects(fs.readFileSync(lessonsPath, 'utf8'));
+    if (!header.includes('question_id') || !header.includes('lesson')) {
+      issues.error(null, 'lessons.csv needs the columns question_id and lesson');
+    } else {
+      for (const r of records) {
+        const nid = normaliseQuestionId(r.question_id);
+        if (!nid) { issues.error(r, `lessons.csv: question_id "${r.question_id}" is not like M01-01 or PY-M08-01`); continue; }
+        if (r.lesson.trim()) lessons.set(nid.key, r.lesson.trim());
+      }
+    }
+  }
+  const usedLessons = new Set();
+
   const modules = [];
   const seen = new Map();
   const seenTitles = new Map();
@@ -305,8 +328,9 @@ function loadCourse(dir) {
     const problems = [];
     for (const row of records) {
       if (row._cells !== header.length) issues.error(row, `has ${row._cells} columns, expected ${header.length}`);
-      const p = buildProblem(row, { issues, moduleNumber: number, moduleShort });
+      const p = buildProblem(row, { issues, moduleNumber: number, moduleShort, lessons });
       if (!p) continue;
+      if (lessons.has(p.key)) usedLessons.add(p.key);
       if (seen.has(p.key)) issues.error(row, `duplicates ${seen.get(p.key)} (both become ${p.key})`);
       seen.set(p.key, row.question_id);
       const t = p.data.title.toLowerCase();
@@ -319,6 +343,7 @@ function loadCourse(dir) {
       id: stableId(`module:${number}`),
     });
   }
+  for (const k of lessons.keys()) if (!usedLessons.has(k)) issues.warn(null, `lessons.csv has a lesson for ${k}, which is not in any module file`);
   return { modules, issues };
 }
 

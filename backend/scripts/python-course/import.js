@@ -86,7 +86,7 @@ async function writeAll(course, ownerEmail) {
     for (const p of m.problems) {
       const existing = await problemRepo.getById(p.id);
       // A re-run refreshes the content but never changes whether students can see it.
-      await problemRepo.upsert(p.id, { ...p.data, createdBy: existing?.createdBy || owner.id, status: existing?.status || 'draft' }, p.testCases);
+      await problemRepo.upsert(p.id, { ...p.data, lesson: p.data.lesson ?? existing?.lesson ?? null, createdBy: existing?.createdBy || owner.id, status: existing?.status || 'draft' }, p.testCases);
       if (++done % 25 === 0 || done === total) line(`  problems written: ${done}/${total}`);
     }
   }

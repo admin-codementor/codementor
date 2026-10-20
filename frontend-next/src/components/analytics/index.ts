@@ -14,4 +14,6 @@ export type { Flag, StudentState, StatusInfo } from "./StatusFlag";
 export { ExportButton, toCsv } from "./ExportButton";
 export { ThresholdsDialog } from "./ThresholdsDialog";
 export { StudentFunnel } from "./StudentFunnel";
+export { WhatToLookAt } from "./WhatToLookAt";
+export type { Insight } from "./WhatToLookAt";
 export type { FunnelBucket, FunnelStudent } from "./StudentFunnel";

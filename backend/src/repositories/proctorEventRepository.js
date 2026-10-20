@@ -39,4 +39,10 @@ async function listByExam(examId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-module.exports = { create, listByAssignment, listByUserAndType, listAllForAnalytics, listByExam };
+// Events logged on one problem (blocked paste attempts, exam events), reduced to who and what.
+async function listByProblem(problemId) {
+  const snap = await col().where('problemId', '==', problemId).select('userId', 'eventType').get();
+  return snap.docs.map((d) => d.data());
+}
+
+module.exports = { create, listByAssignment, listByUserAndType, listAllForAnalytics, listByExam, listByProblem };

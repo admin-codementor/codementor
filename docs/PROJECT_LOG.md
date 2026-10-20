@@ -5,6 +5,44 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-21 (Wed), Phase 2
+**Area:** Phase 2 of `docs/COMPETITOR_BUILD_PLAN.md` (branch `feat/phase2-faculty-insight`, includes Phase 1 which never reached main)
+**Did:**
+- **Question statistics** (Problems list > chart icon): drawer with a class picker, completed / in progress / not started,
+  average time spent and to solve, attempts to solve, best and weakest, failures by kind (compile, runtime, time limit,
+  wrong answer), time-spent histogram, flagged students (3+ flag events on that question), and a per-student table with CSV.
+  `GET /api/faculty/problems/:id/statistics`; rules in `utils/problemStatistics.js` (17 checks).
+- **Course time:** the problem timer now also feeds a per-student, per-course roll-up (`courseTimes`, total plus a per-day
+  map on the IST day). Course analytics gains average active time, learning time per day and per weekday, and per-student
+  columns (solved, submissions, active time in the period, flag), all in the CSV. The per-student page shows time per course.
+- **What to look at** on course analytics (`utils/courseInsights.js`, 13 checks): not started, gone quiet, stuck, weakest
+  unit, flagged, activity direction, completions.
+**Found:** PRs #43 and #44 were merged one minute apart, #44 into a branch that had just been merged, so Phase 1 is not on main
+(same trap as #42). From now on every PR targets `main`. The Python course is still a draft in the database (course not
+published, all 312 problems draft), so its analytics page shows 0 problems per unit until `--publish` is run.
+**Quota note:** each timer flush is now two writes (problem record and course roll-up). Watch the daily total.
+**Verified:** 248 offline checks; lint, `tsc`, production build, route audit; drawer and course analytics checked in the browser
+as the test HOD against the real roster. **Not verified:** time figures with real data (nobody has used the timer on a course
+problem yet).
+
+---
+
+## 2026-10-21 (Wed)
+**Area:** Phase 1 of `docs/COMPETITOR_BUILD_PLAN.md` (branch `feat/phase1-learning`)
+**Did:**
+- **Resume card** on the student course page: "Pick up where you left off" (the last unsolved problem the student visited or
+  submitted, from the time record and submissions), else "Next up" / "Start here"; shows the problem, module, position and modules
+  left; `GET /api/courses/:id` now returns `resume` and `modulesLeft`. Pure rule in `utils/courseResume.js` (9 checks).
+- **Lessons inside problems:** optional `lesson` on a problem (faculty editor field, importer column or `lessons.csv`), shown as
+  "Learn the idea" above the statement with **bold** terms highlighted.
+- **Statement polish:** a copy button on every line of an example, a "show spaces and line ends" switch on test results,
+  problem limits in the right unit (earlier).
+**Found:** PR #42 was merged into #41's branch after #41 had reached main, so main lacked the Python course code; re-opened as #43.
+The Python course is imported but still a draft.
+**Next:** Phase 2 (faculty per-question statistics, course activity report, time and suspicious per problem).
+
+---
+
 ## 2026-10-20 (Tue), later
 **Area:** Python course (branch `feat/python-course`)
 **Did:**

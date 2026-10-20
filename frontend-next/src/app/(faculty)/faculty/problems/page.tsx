@@ -27,7 +27,8 @@ import TextField from "@mui/material/TextField";
 import MenuItem from "@mui/material/MenuItem";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Alert from "@mui/material/Alert";
-import { AddIcon, EditOutlinedIcon, DeleteOutlineIcon, UploadFileOutlinedIcon, DescriptionOutlinedIcon, AutoAwesomeOutlinedIcon, CloseIcon, ExpandMoreIcon, CodeOffOutlinedIcon } from "@/components/ui/icons";
+import { ProblemStatsDrawer } from "@/components/faculty/ProblemStatsDrawer";
+import { BarChartOutlinedIcon, AddIcon, EditOutlinedIcon, DeleteOutlineIcon, UploadFileOutlinedIcon, DescriptionOutlinedIcon, AutoAwesomeOutlinedIcon, CloseIcon, ExpandMoreIcon, CodeOffOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -413,6 +414,7 @@ function ProblemDialog({
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 export default function FacultyProblemsPage() {
+  const [statsFor, setStatsFor] = React.useState<{ id: string; title: string } | null>(null);
   const [problems, setProblems] = React.useState<Problem[]>([]);
   const [loading, setLoading] = React.useState(true);
   const [dialogOpen, setDialogOpen] = React.useState(false);
@@ -633,6 +635,9 @@ export default function FacultyProblemsPage() {
                               catalogue but may only modify problems inside their scope. */}
                           {/* Editing opens the full authoring flow (autosaved, with
                               a publish step) rather than the quick dialog. */}
+                          <Tooltip title="Question statistics: who finished, who is stuck, time and mistakes">
+                            <IconButton size="small" onClick={() => setStatsFor({ id: p.id, title: p.title })} aria-label={`Statistics for ${p.title}`}><BarChartOutlinedIcon fontSize="small" /></IconButton>
+                          </Tooltip>
                           <Tooltip title={p.canEdit === false ? `Authored by ${p.author ?? "another faculty member"}` : "Open in the authoring flow"}>
                             <span>
                               <IconButton size="small" disabled={p.canEdit === false} onClick={() => router.push(`/faculty/problems/${p.id}/edit`)} aria-label="Edit problem"><EditOutlinedIcon fontSize="small" /></IconButton>
@@ -657,6 +662,7 @@ export default function FacultyProblemsPage() {
 
       <ProblemDialog open={dialogOpen} editing={editing} onClose={() => setDialogOpen(false)} onSaved={fetchProblems} toast={showToast} />
       <ImportWizard open={importOpen} onClose={() => setImportOpen(false)} onPublished={fetchProblems} />
+      <ProblemStatsDrawer problemId={statsFor?.id ?? null} title={statsFor?.title} onClose={() => setStatsFor(null)} />
     </Box>
   );
 }
