@@ -158,6 +158,7 @@ router.get('/problems/:id/statistics', facultyController.getProblemStatistics);
 router.get('/reports/summary', reportsController.getSummary);
 
 // Coding score (utils/platformScore.js). Reading is for all staff; changing thresholds and refreshing are HOD / admin.
+router.post('/nudges', require('../controllers/nudge.controller').send);
 router.get('/platform-scores', platformScoreController.getScores);
 router.put('/platform-thresholds', authorize('hod', 'admin'), platformScoreController.putThresholds);
 router.post('/platform-scores/refresh', authorize('hod', 'admin'), platformScoreController.refresh);

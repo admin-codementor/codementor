@@ -55,6 +55,8 @@ router.get('/problems/:id/solutions', getProblemSolutions);
 router.get('/problems/:id/learning', blockDuringExam, getProblemLearning);
 router.get('/problems/:id/performance', getProblemPerformance);
 router.get('/problems/:id/time', getProblemTime);
+router.get('/reminders', require('../controllers/nudge.controller').listMine);
+router.post('/reminders/read', require('../controllers/nudge.controller').markRead);
 router.get('/reopen-requests', listMyReopenRequests);
 router.post('/reopen-requests', createReopenRequest);
 router.post('/problems/:id/time', addProblemTime);

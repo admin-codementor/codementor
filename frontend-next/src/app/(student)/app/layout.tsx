@@ -39,7 +39,7 @@ const NAV_ITEMS: NavItem[] = [
   { label: "Job-Ready", href: "/app/placement", icon: <WorkOutlineOutlinedIcon />, section: "Progress" },
   { label: "Career", href: "/app/career", icon: <DescriptionOutlinedIcon />, section: "Progress" },
   { label: "AI Tutor", href: "/app/ai-tutor", icon: <SmartToyOutlinedIcon />, section: "Assistant" },
-  { label: "Messages", href: "/app/messages", icon: <MailOutlineIcon />, section: "Assistant" },
+  { label: "Messages", href: "/app/messages", icon: <MailOutlineIcon />, section: "Assistant", badge: "messages" },
 ];
 
 export default function StudentLayout({ children }: { children: React.ReactNode }) {

@@ -39,6 +39,19 @@ exports.listThreads = async (req, res) => {
   }
 };
 
+// @route GET /api/messages/unread-count — how many conversations have something new, for the menu badge
+exports.unreadCount = async (req, res) => {
+  try {
+    const threads = await messageRepo.listForUser(req.user.id);
+    // A conversation the caller has blocked or that was declined is not something to be nagged about.
+    const count = threads.filter((t) => t.status !== 'declined' && !(t.blockedBy || []).includes(req.user.id) && M.isUnread(t, req.user.id)).length;
+    res.json({ success: true, data: { count } });
+  } catch (error) {
+    console.error('Unread count error:', error);
+    fail(res, 500, 'Failed to load messages.');
+  }
+};
+
 // @route GET /api/messages/threads/:id — one conversation with its messages; marks it read
 exports.getThread = async (req, res) => {
   try {

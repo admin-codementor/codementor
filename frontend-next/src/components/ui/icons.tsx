@@ -23,7 +23,7 @@ import {
   ShieldCheck, Users, History, House, Hourglass, Network, ChartLine, Layers,
   ChartNoAxesColumn, Sun, Link, Flame, Lock, LogIn, LogOut, Mail, MemoryStick, Menu,
   BookOpen, Medal, Activity, Pause, Clock4, User, Play, ShieldAlert, Brain, CircleHelp,
-  Circle, ReceiptText, RefreshCw, RotateCcw, Save, GraduationCap, Search, Tag, Send,
+  Circle, Bell, ReceiptText, RefreshCw, RotateCcw, Save, GraduationCap, Search, Tag, Send,
   Shield, Bot, LayoutDashboard, Timer, Lightbulb, Target, FileUp, Upload, LayoutGrid, Flag,
   Eye, EyeOff, TriangleAlert, Briefcase,
   SignalLow, SignalMedium, SignalHigh, Type, Hash, ArrowRightLeft, ArrowDownUp, GitFork,
@@ -172,6 +172,7 @@ export const SchoolOutlinedIcon = makeIcon(GraduationCap, "SchoolOutlinedIcon");
 export const SearchIcon = makeIcon(Search, "SearchIcon");
 export const SellOutlinedIcon = makeIcon(Tag, "SellOutlinedIcon");
 export const SendIcon = makeIcon(Send, "SendIcon");
+export const NotificationsNoneOutlinedIcon = makeIcon(Bell, "NotificationsNoneOutlinedIcon");
 export const ShieldOutlinedIcon = makeIcon(Shield, "ShieldOutlinedIcon");
 export const SmartToyOutlinedIcon = makeIcon(Bot, "SmartToyOutlinedIcon");
 export const SpaceDashboardOutlinedIcon = makeIcon(LayoutDashboard, "SpaceDashboardOutlinedIcon");

@@ -25,6 +25,7 @@ const codingProfileRepo = require('../repositories/codingProfileRepository');
 const roadmapRepo = require('../repositories/roadmapRepository');
 const { buildCatalog, resolveRoadmap } = require('../services/roadmapService');
 const { jobReadinessFor } = require('./jobReadiness.controller');
+const { standingFor } = require('../services/cohortStandingService');
 
 const HANDLE_RE = /^[a-z0-9][a-z0-9-]{2,29}$/;
 const DAY_MS = 86_400_000;
@@ -200,6 +201,10 @@ exports.getPublicProfile = async (req, res) => {
       jobReady = readiness.targets.map((t) => ({ key: t.key, label: t.label, score: t.score }));
     }
 
+    // Shown under the same switch as the Job-Ready Score: both say how the student compares, so one consent covers both.
+    // Null for a small cohort (a percentile among a handful of people means nothing and can point at one person).
+    const standing = student.publicProfile?.showScore ? await standingFor(student, solvedIds.size).catch(() => null) : null;
+
     const externals = codingProfiles
       // Q-F: verified only. An unverified handle is a claim, and the whole
       // point of this page is that a recruiter does not have to take claims.
@@ -231,6 +236,7 @@ exports.getPublicProfile = async (req, res) => {
         completedCourses,
         roadmap,
         jobReady,
+        standing: standing && { badge: standing.badge, percentile: standing.percentile, cohortSize: standing.cohortSize },
         externals,
       },
     });

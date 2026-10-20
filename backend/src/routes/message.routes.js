@@ -13,6 +13,7 @@ const sendLimiter = createLimiter({ windowMs: 60 * 1000, max: 30, prefix: 'messa
 const startLimiter = createLimiter({ windowMs: 10 * 60 * 1000, max: 15, prefix: 'messages:start', keyGenerator: keyByUser, message: 'You have started a lot of conversations. Please wait a few minutes.' });
 
 // Everyone signed in may read and answer their own conversations; starting one is staff-only (enforced per recipient).
+router.get('/unread-count', c.unreadCount);
 router.get('/threads', c.listThreads);
 router.get('/threads/:id', c.getThread);
 router.post('/threads', startLimiter, c.startThread);

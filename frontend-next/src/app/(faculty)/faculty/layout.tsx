@@ -12,7 +12,7 @@ import { getRole } from "@/lib/auth";
 const BASE_NAV: NavItem[] = [
   { label: "Dashboard", href: "/faculty/dashboard", icon: <SpaceDashboardOutlinedIcon />, section: "Overview" },
   { label: "Analytics", href: "/faculty/analytics", icon: <InsightsOutlinedIcon />, section: "Overview" },
-  { label: "Messages", href: "/faculty/messages", icon: <MailOutlineIcon />, section: "Overview" },
+  { label: "Messages", href: "/faculty/messages", icon: <MailOutlineIcon />, section: "Overview", badge: "messages" },
   { label: "Reports", href: "/faculty/reports", icon: <ListAltOutlinedIcon />, section: "Overview" },
   { label: "Calendar", href: "/faculty/calendar", icon: <CalendarMonthOutlinedIcon />, section: "Overview" },
   { label: "Courses", href: "/faculty/courses", icon: <MenuBookOutlinedIcon />, section: "Content" },

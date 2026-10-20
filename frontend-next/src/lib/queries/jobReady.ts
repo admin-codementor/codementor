@@ -173,6 +173,8 @@ export interface PublicProfile {
   completedCourses: { title: string; problems: number }[];
   roadmap: { role: string; percent: number; step: number | null; steps: number } | null;
   jobReady: { key: string; label: string; score: number }[] | null;
+  /** Standing among the student's year and department; null unless they chose to show it and the cohort is big enough. */
+  standing: { badge: string; percentile: number; cohortSize: number } | null;
   externals: { platform: string; handle: string; solved: number; rating: number | null; verifiedAt: number | null }[];
 }
 

@@ -311,7 +311,7 @@ export function PublicProfilePanel() {
                   onChange={(e) => toggle({ showScore: e.target.checked })}
                 />
               }
-              label="Show my Job-Ready Score on it"
+              label="Show my Job-Ready Score and cohort badge on it"
             />
           </Box>
 

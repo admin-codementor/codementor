@@ -188,6 +188,18 @@ function ProfileBody({ profile }: { profile: PublicProfile }) {
         )}
       </Card>
 
+      {/* Standing among classmates, under the same switch as the score */}
+      {profile.standing && (
+        <Card variant="outlined" sx={{ borderColor: "outlineVariant", p: layout.cardPadding }}>
+          <Stack direction="row" spacing={1.5} alignItems="center" flexWrap="wrap" useFlexGap>
+            <Chip label={profile.standing.badge} color="primary" sx={{ fontWeight: 700 }} />
+            <Typography variant="body2">
+              Ahead of {profile.standing.percentile}% of {profile.standing.cohortSize} students in the same year and department, by problems solved.
+            </Typography>
+          </Stack>
+        </Card>
+      )}
+
       {/* Score, if the student chose to show it */}
       {profile.jobReady && profile.jobReady.length > 0 && (
         <Card variant="outlined" sx={{ borderColor: "outlineVariant", p: layout.cardPadding }}>
