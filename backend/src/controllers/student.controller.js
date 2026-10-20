@@ -6,6 +6,9 @@ const classroomRepo = require('../repositories/classroomRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const { rankRows, sameClass } = require('../utils/ranking');
 const { isActive } = require('../utils/students');
+const { learningView } = require('../utils/problemLearning');
+const { performanceDistribution } = require('../utils/performanceDistribution');
+const problemTimeRepo = require('../repositories/problemTimeRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const mistakeNoteRepo = require('../repositories/mistakeNoteRepository');
 const publicHandleRepo = require('../repositories/publicHandleRepository');
@@ -737,6 +740,61 @@ exports.getProblemSolutions = async (req, res) => {
   } catch (error) {
     console.error('Peer solutions error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch solutions' });
+  }
+};
+
+// Teaching material for one problem: objective and hints always, the reference solution and complexity
+// only after the student's own accepted submission (staff always). See utils/problemLearning.js.
+exports.getProblemLearning = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const problem = await problemRepo.getById(id);
+    const staff = ['faculty', 'hod', 'admin'].includes(req.user.role);
+    if (!problem || (problem.status === 'draft' && !staff)) {
+      return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    const solved = (await submissionRepo.listByUserAndProblem(req.user.id, id)).some((s) => s.verdict === 'Accepted');
+    res.json({ success: true, data: learningView(problem, { solved, role: req.user.role }) });
+  } catch (error) {
+    console.error('Problem learning error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the problem notes' });
+  }
+};
+
+// Runtime and memory of this student's accepted solution against everyone else's (graph + "faster than X%").
+exports.getProblemPerformance = async (req, res) => {
+  try {
+    const subs = await submissionRepo.listByProblemForPerformance(req.params.id);
+    res.json({ success: true, data: performanceDistribution(subs, req.user.id) });
+  } catch (error) {
+    console.error('Problem performance error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the comparison' });
+  }
+};
+
+// Active time spent on a problem, saved on the server so it follows the student across devices.
+exports.getProblemTime = async (req, res) => {
+  try {
+    res.json({ success: true, data: await problemTimeRepo.get(req.user.id, req.params.id) });
+  } catch (error) {
+    console.error('Problem time error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the time' });
+  }
+};
+
+exports.addProblemTime = async (req, res) => {
+  try {
+    const seconds = Number(req.body?.seconds);
+    // One call carries at most ten minutes: the page reports about once a minute, so more is a bug or a cheat.
+    if (!Number.isInteger(seconds) || seconds < 1 || seconds > 600) {
+      return res.status(400).json({ success: false, error: 'seconds must be a whole number from 1 to 600.' });
+    }
+    const problem = await problemRepo.getById(req.params.id);
+    if (!problem) return res.status(404).json({ success: false, error: 'Problem not found' });
+    res.json({ success: true, data: await problemTimeRepo.add(req.user.id, req.params.id, seconds, req.body?.solved === true) });
+  } catch (error) {
+    console.error('Problem time save error:', error);
+    res.status(500).json({ success: false, error: 'Failed to save the time' });
   }
 };
 

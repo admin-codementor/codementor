@@ -36,7 +36,7 @@ const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 
 // Judge0 language ids → readable names, for the language mix panel.
 const LANGUAGE_NAMES = {
-  71: 'Python', 70: 'Python 2', 63: 'JavaScript', 62: 'Java',
+  71: 'Python', 92: 'Python', 100: 'Python', 109: 'Python', 113: 'Python', 70: 'Python 2', 63: 'JavaScript', 62: 'Java',
   54: 'C++', 53: 'C++', 52: 'C++', 76: 'C++', 50: 'C', 51: 'C#',
   60: 'Go', 72: 'Ruby', 73: 'Rust', 74: 'TypeScript', 68: 'PHP', 78: 'Kotlin', 83: 'Swift',
 };

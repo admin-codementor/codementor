@@ -5,6 +5,28 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-20 (Tue), later
+**Area:** Python course (branch `feat/python-course`)
+**Did:**
+- Analysed the 18 CSV modules: 312 problems, 2,818 tests (936 visible, 1,882 hidden). Every reference solution reproduces
+  every expected output (2,818 of 2,818, including the function problems that expect an exception name).
+- Judge changes that the course needs, all optional per problem so existing problems are unchanged: exact output
+  comparison (full output, line by line; the old comparison ignores line breaks, quotes and brackets and stops at 4,096
+  characters), a source driver appended after the student's code for the 32 function-style problems, a language
+  allow-list, Python 3.12 (Judge0 id 100, verified present on ce.judge0.com).
+- `GET /api/student/problems/:id/learning` plus a Hints tab in the IDE: goal and hints always, reference solution and
+  complexity only after an accepted submission, nothing during exams.
+- `backend/scripts/python-course/`: dry-run importer with validation, `--check` (local Python), `--verify` (real Judge0),
+  `--confirm` (Firestore, draft), `--publish`/`--unpublish`, and `rollback.js`. Runbook: `docs/PYTHON_COURSE.md`.
+**Decisions (defaults, one line each to change):** Python 3.12 only for this course; exact comparison; imported as a
+draft and published after review; solution and complexity unlock after solving.
+**Found:** the repository is public, so the CSV files (solutions and hidden tests) are kept out of it. PY-M17-18 has a
+blank sample-input cell (matched by output). Ids were written two ways (M01-01 and PY-M8-01).
+**Verified:** 182 offline checks, lint, `tsc`, production build, route audit; local run 2,818/2,818.
+**Next:** import as a draft (needs the owner's go-ahead), review the draft course, publish after the PR is deployed.
+
+---
+
 ## 2026-10-20 (Tue)
 **Area:** Course view and accuracy (branch `feat/course-view-and-accuracy`)
 **Did:**

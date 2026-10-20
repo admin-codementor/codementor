@@ -147,6 +147,10 @@ exports.getProblemById = async (req, res) => {
       id: p.id, title: p.title, description: p.description, difficulty: p.difficulty, tags: p.tags || [],
       time_limit: p.timeLimit, memory_limit: p.memoryLimit,
       stubs: p.stubs || {},
+      // A problem may accept only certain Judge0 languages (the Python course); null means any. How the output
+      // is compared and the function driver stay server-side.
+      languages: Array.isArray(p.languages) && p.languages.length ? p.languages.map(Number) : null,
+      exact_output: p.comparison === 'exact',
       editorial: editorialUnlocked ? p.editorial : null,
       editorial_visible_at: editorialVisibleAt ? editorialVisibleAt.toISOString() : null,
       editorial_unlocked: editorialUnlocked,
