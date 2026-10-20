@@ -2,6 +2,8 @@ const courseRepo = require('../repositories/courseRepository');
 const problemRepo = require('../repositories/problemRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const { resolveCourse, percentOf } = require('../utils/courseProgress');
+const { resolveResume } = require('../utils/courseResume');
+const problemTimeRepo = require('../repositories/problemTimeRepository');
 
 const toISO = (value) => {
   if (!value) return null;
@@ -124,6 +126,17 @@ exports.getCourseById = async (req, res) => {
     const mySubs = await submissionRepo.listByUser(userId);
     const solvedSet = new Set(mySubs.filter(s => s.verdict === 'Accepted' && idSet.has(s.problemId)).map(s => s.problemId));
 
+    // Where to continue: the last unsolved problem the student worked on (a visit counts, via the time record),
+    // else the first unsolved in course order.
+    const toMs = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
+    const touchedAt = new Map();
+    const touch = (pid, ms) => { if (ms && idSet.has(pid) && ms > (touchedAt.get(pid) || 0)) touchedAt.set(pid, ms); };
+    mySubs.forEach((s) => touch(s.problemId, toMs(s.submittedAt)));
+    (await problemTimeRepo.listByUser(userId)).forEach((t) => touch(t.problemId, toMs(t.updatedAt)));
+    const ordered = modules.flatMap((m) => m.problemIds.map((pid, i) => ({
+      id: pid, title: problemsMap.get(pid).title, moduleId: m.id, moduleTitle: m.title, position: i + 1, moduleTotal: m.problemIds.length,
+    })));
+
     const now = Date.now();
     const moduleRows = modules.map((m) => {
       const problems = m.problemIds
@@ -158,6 +171,8 @@ exports.getCourseById = async (req, res) => {
         problemCount: allProblemIds.length,
         solvedCount: solvedTotal,
         percent: percentOf(solvedTotal, allProblemIds.length),
+        resume: resolveResume(ordered, solvedSet, touchedAt),
+        modulesLeft: moduleRows.filter((m) => m.total > 0 && m.status !== 'done').length,
         nextUp: nextModule
           ? { moduleId: nextModule.id, moduleTitle: nextModule.title, problemId: nextModule.nextProblemId }
           : null,

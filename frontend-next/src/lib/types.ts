@@ -165,6 +165,8 @@ export interface ProblemDetail {
   editorial: string | null;
   editorial_visible_at: string | null;
   editorial_unlocked: boolean;
+  /** Optional teaching text (markdown) shown above the statement. */
+  lesson?: string | null;
   /** Judge0 language ids this problem accepts; null/absent = the usual set. */
   languages?: number[] | null;
   /** True when the output must match line for line (formatting counts). */
@@ -342,6 +344,17 @@ export interface CourseModule extends ModuleProgress {
   nextProblemId: string | null;
 }
 
+export interface CourseResume {
+  problemId: string;
+  title: string;
+  moduleId: string;
+  moduleTitle: string;
+  position: number;
+  moduleTotal: number;
+  reason: "in_progress" | "next";
+  touchedAt: number | null;
+}
+
 export interface CourseDetail {
   id: string;
   title: string;
@@ -350,5 +363,8 @@ export interface CourseDetail {
   solvedCount: number;
   percent: number;
   nextUp: { moduleId: string; moduleTitle: string; problemId: string | null } | null;
+  /** Where to continue: the last unsolved problem worked on (in_progress), else the first unsolved (next); null when finished. */
+  resume: CourseResume | null;
+  modulesLeft: number;
   modules: CourseModule[];
 }
