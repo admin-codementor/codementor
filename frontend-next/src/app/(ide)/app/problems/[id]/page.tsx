@@ -28,7 +28,7 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import { Sparkline } from "@/components/ui/Sparkline";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { CodeIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
+import { ArrowBackIcon, ChevronLeftIcon, ChevronRightIcon, PlayArrowOutlinedIcon, UploadOutlinedIcon, RestartAltOutlinedIcon, ExpandMoreIcon, ExpandLessIcon, CheckCircleOutlineIcon, CancelOutlinedIcon, LogoutIcon, PersonOutlineIcon, SmartToyOutlinedIcon, ContentCopyOutlinedIcon, CheckIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
 import Alert from "@mui/material/Alert";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
@@ -48,6 +48,7 @@ import { visualizeWhitespace } from "@/lib/whitespace";
 import Switch from "@mui/material/Switch";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import { PerformancePanel } from "@/components/problem/PerformancePanel";
+import { ModuleProblemsMenu } from "@/components/problem/ModuleProblemsMenu";
 import { darkScheme, lightScheme, radius } from "@/theme/tokens";
 import type {
   ProblemDetail,
@@ -619,6 +620,20 @@ function IDEHeader({
   const [anchorEl, setAnchorEl] = React.useState<null | HTMLElement>(null);
   const user = React.useMemo(() => getUser(), []);
 
+  // Where "back" goes: the course (and module) the student opened this problem from, else the assignment list, else
+  // the screen they were just on. Never the home page.
+  const ctx = React.useMemo(() => new URLSearchParams(navContext), [navContext]);
+  const courseId = ctx.get("course");
+  const moduleId = ctx.get("module");
+  const backHref = courseId
+    ? `/app/courses/${courseId}${moduleId ? `?module=${moduleId}` : ""}`
+    : ctx.get("assignment") ? "/app/assignments" : null;
+  const backLabel = courseId ? "Back to the course" : ctx.get("assignment") ? "Back to assignments" : "Back";
+  const goBack = () => {
+    if (typeof window !== "undefined" && window.history.length > 1) router.back();
+    else router.push("/app/problems");
+  };
+
   const handleSignOut = () => {
     clearSession();
     router.replace("/login");
@@ -628,7 +643,7 @@ function IDEHeader({
     <Box
       component="header"
       sx={{
-        height: 52,
+        height: 60,
         display: "flex",
         alignItems: "center",
         px: 1.5,
@@ -645,12 +660,20 @@ function IDEHeader({
         overflowX: "auto",
       }}
     >
-      {/* Logo — goes home, the way a logo is expected to. Hidden during a live
-          exam so a student can't browse away mid-sitting. */}
+      {/* Back — to the course this problem belongs to (not home). Hidden during a live exam so a student can't
+          browse away mid-sitting. */}
       {!examId && (
-        <IconButton component={NextLink} href="/app" aria-label="CodeMentor home" size="small" sx={{ flexShrink: 0 }}>
-          <CodeIcon fontSize="small" />
-        </IconButton>
+        <Tooltip title={backLabel}>
+          {backHref ? (
+            <IconButton component={NextLink} href={backHref} aria-label={backLabel} size="small" sx={{ flexShrink: 0 }}>
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          ) : (
+            <IconButton onClick={goBack} aria-label={backLabel} size="small" sx={{ flexShrink: 0 }}>
+              <ArrowBackIcon fontSize="small" />
+            </IconButton>
+          )}
+        </Tooltip>
       )}
 
       <Divider orientation="vertical" flexItem sx={{ mx: 0.5, flexShrink: 0 }} />
@@ -675,26 +698,6 @@ function IDEHeader({
             </span>
           </Tooltip>
 
-          {adjacent && (
-            // The count alone is ambiguous — "1/22" of what? Naming the module
-            // is the whole point of the context the API already returns, and
-            // without it a student cannot tell a module walk from a walk of the
-            // entire catalogue. Dropped first on narrow screens, then the count.
-            <Typography
-              variant="caption"
-              color="text.secondary"
-              noWrap
-              sx={{ minWidth: 52, textAlign: "center", flexShrink: 0, display: { xs: "none", sm: "block" } }}
-            >
-              {adjacent.position}/{adjacent.total}
-              {adjacent.context && (
-                <Box component="span" sx={{ display: { xs: "none", md: "inline" } }}>
-                  {" "}in {adjacent.context}
-                </Box>
-              )}
-            </Typography>
-          )}
-
           <Tooltip title="Next problem">
             <span>
               <IconButton
@@ -712,24 +715,48 @@ function IDEHeader({
         </>
       )}
 
-      {/* Problem title and difficulty. minWidth:0 is required for a flex item
-          to actually shrink/ellipsis instead of forcing the row wider than the
-          viewport (a flex item's default min-width is `auto`, not 0). */}
-      <Stack direction="row" spacing={1} alignItems="center" sx={{ flex: 1, minWidth: 0, mx: 1 }}>
-        <Typography
-          variant="body2"
-          fontWeight={600}
-          noWrap
-          sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis" }}
-        >
-          {problem?.title ?? "Loading…"}
-        </Typography>
-        {problem?.difficulty && (
-          <Box sx={{ flexShrink: 0, display: { xs: "none", md: "block" } }}>
-            <DifficultyChip difficulty={problem.difficulty} />
+      {/* Where you are, then what you are solving. The small line names the module and the position in it (and opens the
+          list of that module's problems); the title under it is the thing to read. minWidth:0 is required for a flex
+          item to shrink and ellipsis instead of forcing the row wider than the viewport. */}
+      <Box sx={{ flex: 1, minWidth: 0, mx: 1, display: "flex", flexDirection: "column", justifyContent: "center", gap: 0.125 }}>
+        {!examId && adjacent?.context && (
+          <Box sx={{ display: { xs: "none", sm: "block" }, minWidth: 0 }}>
+            {courseId ? (
+              <ModuleProblemsMenu
+                courseId={courseId}
+                moduleId={moduleId}
+                problemId={problemId}
+                label={adjacent.context}
+                position={adjacent.position}
+                total={adjacent.total}
+                navContext={navContext}
+                solvedNow={solved}
+              />
+            ) : (
+              <Typography variant="caption" color="text.secondary" noWrap sx={{ fontWeight: 600, display: "block" }}>
+                {adjacent.context}
+                <Box component="span" sx={{ opacity: 0.75, fontWeight: 500 }}>{`  ·  ${adjacent.position} / ${adjacent.total}`}</Box>
+              </Typography>
+            )}
           </Box>
         )}
-      </Stack>
+        <Stack direction="row" spacing={1.25} alignItems="center" sx={{ minWidth: 0 }}>
+          <Typography
+            variant="subtitle1"
+            component="h1"
+            fontWeight={700}
+            noWrap
+            sx={{ minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", lineHeight: 1.25 }}
+          >
+            {problem?.title ?? "Loading…"}
+          </Typography>
+          {problem?.difficulty && (
+            <Box sx={{ flexShrink: 0, display: { xs: "none", md: "block" } }}>
+              <DifficultyChip difficulty={problem.difficulty} />
+            </Box>
+          )}
+        </Stack>
+      </Box>
 
       {/* Timer. Under proctoring it stays visible even on a phone and is given
           real weight — the clock is the thing that matters in a sitting.
