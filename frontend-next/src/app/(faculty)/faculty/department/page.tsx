@@ -27,6 +27,7 @@ import { RankingsTable, WeeklyProgressTable, type DeptStudent } from "@/componen
 import { DepartmentLeaderboard } from "@/components/faculty/DepartmentLeaderboard";
 import { DepartmentActivity } from "@/components/faculty/DepartmentActivity";
 import { DepartmentInsights } from "@/components/faculty/DepartmentInsights";
+import { CodingScoreTab } from "@/components/faculty/CodingScoreTab";
 import { MentorsTab } from "@/components/faculty/MentorsTab";
 import { PortfolioTab } from "@/components/faculty/PortfolioTab";
 import { PlacementTab } from "@/components/faculty/PlacementTab";
@@ -53,7 +54,7 @@ interface DeptData {
   };
 }
 
-type DeptTab = "overview" | "weekly" | "rankings" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni" | "labs";
+type DeptTab = "overview" | "weekly" | "rankings" | "coding" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni" | "labs";
 type Baseline = "view" | "year" | "institution";
 const BASELINES: { value: Baseline; label: string }[] = [
   { value: "view", label: "This view" },
@@ -155,6 +156,7 @@ export default function DepartmentDashboardPage() {
             <Tab value="overview" label="Overview" />
             <Tab value="weekly" label="Weekly progress" />
             <Tab value="rankings" label="Rankings" />
+            <Tab value="coding" label="Coding score" />
             <Tab value="departments" label="Departments" />
             <Tab value="activity" label="Activity" />
             <Tab value="mentors" label="Mentors" />
@@ -166,6 +168,7 @@ export default function DepartmentDashboardPage() {
 
           {tab === "weekly" && <WeeklyProgressTable students={d.students} />}
           {tab === "rankings" && <RankingsTable students={d.students} />}
+          {tab === "coding" && <CodingScoreTab section={section} year={year} />}
           {tab === "departments" && <DepartmentLeaderboard />}
           {tab === "activity" && <DepartmentActivity />}
           {tab === "mentors" && <MentorsTab />}
