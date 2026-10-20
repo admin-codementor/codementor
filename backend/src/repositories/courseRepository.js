@@ -45,6 +45,19 @@ async function update(id, data) {
   return getById(id);
 }
 
+// Create-or-replace under a caller-chosen id (re-runnable imports).
+async function upsert(id, data) {
+  const ref = col().doc(id);
+  const existing = await ref.get();
+  await ref.set({ ...data, createdAt: existing.exists && existing.data().createdAt ? existing.data().createdAt : FieldValue.serverTimestamp() });
+  return getById(id);
+}
+
+async function upsertModule(courseId, moduleId, data) {
+  await modulesCol(courseId).doc(moduleId).set(data);
+  return { id: moduleId, ...data };
+}
+
 async function addModule(courseId, data) {
   const id = uuidv4();
   await modulesCol(courseId).doc(id).set(data);
@@ -75,5 +88,5 @@ async function removeAll() {
 }
 
 module.exports = {
-  listPublished, listAll, getById, getModules, create, update, addModule, updateModule, deleteModule, removeAll,
+  listPublished, listAll, getById, getModules, create, update, upsert, upsertModule, addModule, updateModule, deleteModule, removeAll,
 };

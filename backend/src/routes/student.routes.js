@@ -14,6 +14,7 @@ const {
   getPlacementReadiness,
   getBadges,
   getProblemSolutions,
+  getProblemLearning,
   getStats,
   getSkills
 } = require('../controllers/student.controller');
@@ -22,6 +23,7 @@ const { getJobReadiness } = require('../controllers/jobReadiness.controller');
 const { getSettings, updateSettings } = require('../controllers/publicProfile.controller');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
+const { blockDuringExam } = require('../middleware/examLock');
 const portfolio = require('../controllers/portfolio.controller');
 
 const router = express.Router();
@@ -44,6 +46,8 @@ router.get('/placement', getPlacementReadiness);
 router.get('/job-ready', getJobReadiness);
 router.get('/badges', getBadges);
 router.get('/problems/:id/solutions', getProblemSolutions);
+// Hints are help: switched off, like the AI tutor, while a graded exam is in progress.
+router.get('/problems/:id/learning', blockDuringExam, getProblemLearning);
 router.put('/profile', updateProfile);
 // Lives with the student's own settings rather than under /api/roadmaps: it
 // writes to the user, not to a roadmap.

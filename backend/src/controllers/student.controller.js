@@ -6,6 +6,7 @@ const classroomRepo = require('../repositories/classroomRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const { rankRows, sameClass } = require('../utils/ranking');
 const { isActive } = require('../utils/students');
+const { learningView } = require('../utils/problemLearning');
 const submissionRepo = require('../repositories/submissionRepository');
 const mistakeNoteRepo = require('../repositories/mistakeNoteRepository');
 const publicHandleRepo = require('../repositories/publicHandleRepository');
@@ -737,6 +738,24 @@ exports.getProblemSolutions = async (req, res) => {
   } catch (error) {
     console.error('Peer solutions error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch solutions' });
+  }
+};
+
+// Teaching material for one problem: objective and hints always, the reference solution and complexity
+// only after the student's own accepted submission (staff always). See utils/problemLearning.js.
+exports.getProblemLearning = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const problem = await problemRepo.getById(id);
+    const staff = ['faculty', 'hod', 'admin'].includes(req.user.role);
+    if (!problem || (problem.status === 'draft' && !staff)) {
+      return res.status(404).json({ success: false, error: 'Problem not found' });
+    }
+    const solved = (await submissionRepo.listByUserAndProblem(req.user.id, id)).some((s) => s.verdict === 'Accepted');
+    res.json({ success: true, data: learningView(problem, { solved, role: req.user.role }) });
+  } catch (error) {
+    console.error('Problem learning error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the problem notes' });
   }
 };
 

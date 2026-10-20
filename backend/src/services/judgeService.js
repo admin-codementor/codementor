@@ -23,6 +23,8 @@ const { submitCheckerBatch, pollCheckerBatch } = require('../utils/checkerRunner
 const problemRepo = require('../repositories/problemRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const examScoring = require('../utils/examScoring');
+const { outputsMatch } = require('../utils/outputCompare');
+const { buildSource } = require('../utils/sourceBuilder');
 const contestRepo = require('../repositories/contestRepository');
 const examRepo = require('../repositories/examRepository');
 const submissionRepo = require('../repositories/submissionRepository');
@@ -79,6 +81,7 @@ const LANG_MULTIPLIERS = {
   62: 2, // Java
   63: 3, // JavaScript
   71: 3, 72: 3, // Python 3
+  92: 3, 100: 3, 109: 3, 113: 3, // Python 3.11 / 3.12 / 3.13 / 3.14
   73: 3, 74: 2, // TypeScript
   75: 2, // Go
 };
@@ -108,11 +111,20 @@ const sanitizeResult = (r) => ({
   message: capOutput(r.message),
 });
 
-const normalizeOutput = (str) => {
-  if (!str) return '';
-  const s = str.length > 4096 ? str.slice(0, 4096) : str;
-  return s.replace(/\[|\]|\{|\}|"|'|,/g, ' ').trim().split(/\s+/).join(' ');
-};
+// Output comparison (loose by default, exact per problem) lives in utils/outputCompare.js.
+
+// A problem can restrict which languages it accepts (the Python course accepts only the Python version it
+// was written and verified against). Anything else is refused before a single test runs.
+function assertLanguageAllowed(problem, language_id) {
+  const allowed = Array.isArray(problem?.languages) ? problem.languages.map(Number) : [];
+  if (allowed.length && !allowed.includes(Number(language_id))) {
+    const err = new Error('This problem accepts a different language. Switch the language in the editor and try again.');
+    err.code = 'LANGUAGE_NOT_ALLOWED';
+    throw err;
+  }
+}
+
+const harnessOf = (problem) => (problem?.harness && typeof problem.harness === 'object' ? problem.harness : null);
 
 // ── Judge0 calls — every one is fire-and-check-later, never blocking ────────
 
@@ -251,14 +263,12 @@ function scoreChunk(batchResults, tcSlice, relevantIndices, { isOI, useEvenSplit
 }
 
 // Non-checker WA determination — string-compare, ported unchanged.
-function applyStringCompare(batchResults, tcSlice, relevantIndices) {
+function applyStringCompare(batchResults, tcSlice, relevantIndices, comparison) {
   for (const i of relevantIndices) {
     const result = batchResults[i];
     if (result.status.id !== 3) continue;
     const tc = tcSlice[i];
-    const userOutput = normalizeOutput(result.stdout);
-    const expectedOut = normalizeOutput(tc.expected_output);
-    if (userOutput !== expectedOut) {
+    if (!outputsMatch(result.stdout, tc.expected_output, comparison)) {
       result.status = { id: 4, description: 'Wrong Answer' };
       result.message = tc.is_public
         ? `Expected: ${tc.expected_output}\nGot: ${result.stdout}`
@@ -504,7 +514,15 @@ async function startJudging(jobId, jobData) {
   const { problem_id, source_code, language_id, user_id, custom_input, contest_id, assignment_id, exam_id, section_id, sample_only } = jobData;
 
   if (custom_input !== null && custom_input !== undefined) {
-    const token = await submitSingleAsync(source_code, language_id, custom_input);
+    // A custom run on a problem page goes through the problem's driver too, so a function-style problem
+    // can be tried with "1, 2" as the input exactly like a sample.
+    let runnable = source_code;
+    if (problem_id) {
+      const prob = await problemRepo.getById(problem_id);
+      assertLanguageAllowed(prob, language_id);
+      runnable = buildSource(source_code, language_id, harnessOf(prob));
+    }
+    const token = await submitSingleAsync(runnable, language_id, custom_input);
     await judgeJobRepo.create(jobId, {
       job: { source_code, language_id, custom_input },
       phase: 'single',
@@ -545,6 +563,7 @@ async function startJudging(jobId, jobData) {
   }
 
   const probMeta = await problemRepo.getById(problem_id);
+  assertLanguageAllowed(probMeta, language_id);
   const scoringMode = probMeta?.scoringMode || 'acm';
   const isOI = scoringMode === 'oi';
   const maxScore = probMeta?.maxScore || 100;
@@ -564,6 +583,8 @@ async function startJudging(jobId, jobData) {
     meta: {
       scoringMode, isOI, maxScore, usesChecker, checkerCode, checkerLanguageId,
       useEvenSplit, perTcScore, testCasesLength, sampleOnly: !!sample_only,
+      comparison: probMeta?.comparison || 'loose',
+      harness: harnessOf(probMeta),
       // Captured up front: ACM scoring stops at the first failure, so the
       // results array only covers the cases that actually ran. Counting shown
       // and hidden cases from it reported "2 of 2 hidden passed" when there
@@ -575,7 +596,7 @@ async function startJudging(jobId, jobData) {
 
   const chunk = testCasesRaw.slice(0, BATCH_SIZE).map((tc) => ({
     input_data: tc.inputData, expected_output: tc.expectedOutput,
-    score: tc.score || 0, is_public: !!tc.isPublic, source_code,
+    score: tc.score || 0, is_public: !!tc.isPublic, source_code: buildSource(source_code, language_id, job.meta.harness),
   }));
 
   const tokens = await submitTestBatch(chunk, language_id);
@@ -638,7 +659,7 @@ async function stepTests(jobId, doc) {
     .slice(chunkIndex * BATCH_SIZE, chunkIndex * BATCH_SIZE + BATCH_SIZE)
     .map((tc) => ({ input_data: tc.inputData, expected_output: tc.expectedOutput, score: tc.score || 0, is_public: !!tc.isPublic }));
 
-  if (!meta.usesChecker) applyStringCompare(batchResults, tcSlice, batchResults.map((_, i) => i));
+  if (!meta.usesChecker) applyStringCompare(batchResults, tcSlice, batchResults.map((_, i) => i), meta.comparison);
 
   const { relevantIndices, checkerNeededIndices } = planChunk(batchResults, meta);
 
@@ -706,7 +727,7 @@ async function advanceAfterChunk(jobId, doc, acc, testCasesLength) {
   const testCasesRaw = await getGradingTestCases(job.problem_id, job.meta.sampleOnly);
   const chunk = testCasesRaw.slice(nextStart, nextStart + BATCH_SIZE).map((tc) => ({
     input_data: tc.inputData, expected_output: tc.expectedOutput,
-    score: tc.score || 0, is_public: !!tc.isPublic, source_code: job.source_code,
+    score: tc.score || 0, is_public: !!tc.isPublic, source_code: buildSource(job.source_code, job.language_id, job.meta.harness),
   }));
   const tokens = await submitTestBatch(chunk, job.language_id);
 

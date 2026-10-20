@@ -42,9 +42,11 @@ import { TagChip } from "@/components/ui/TagChip";
 import { ErrorState } from "@/components/ui/States";
 import { AITutorSidebar, type FailingTest } from "@/components/problem/AITutorSidebar";
 import { TimerWidget } from "@/components/problem/TimerWidget";
+import { LearningPanel } from "@/components/problem/LearningPanel";
 import { darkScheme, lightScheme, radius } from "@/theme/tokens";
 import type {
   ProblemDetail,
+  ProblemLearning,
   AdjacentProblems,
   VerdictPayload,
   VerdictResult,
@@ -157,13 +159,21 @@ function defineEditorThemes(monaco: MonacoNamespace) {
 // ── Constants ─────────────────────────────────────────────────────────────────
 
 const LANGUAGES = [
-  { id: 71, name: "Python 3", monaco: "python" },
+  { id: 71, name: "Python 3.8", monaco: "python" },
+  { id: 100, name: "Python 3.12", monaco: "python" },
   { id: 62, name: "Java",     monaco: "java" },
   { id: 54, name: "C++",      monaco: "cpp" },
   { id: 63, name: "JavaScript", monaco: "javascript" },
 ] as const;
 
 type LangId = (typeof LANGUAGES)[number]["id"];
+
+// Python 3.12 is offered only where a problem asks for it (the Python course); every other problem keeps
+// the usual set, so nothing changes for existing problems.
+function allowedLanguageIds(languages: number[] | null | undefined): number[] {
+  if (languages && languages.length) return languages;
+  return LANGUAGES.filter((l) => l.id !== 100).map((l) => l.id);
+}
 
 const LS_LANG   = "cm:lang";
 const lsCode    = (pid: string, lid: number) => `cm:code:${pid}:${lid}`;
@@ -789,7 +799,7 @@ function ExampleIO({ label, value, copyable = false }: { label: string; value: s
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 type OutputTab = "testcases" | "custom";
-type PanelTab  = "description" | "submissions";
+type PanelTab  = "description" | "help" | "submissions";
 
 export default function ProblemSolvingPage() {
   const params  = useParams<{ id: string }>();
@@ -858,6 +868,8 @@ export default function ProblemSolvingPage() {
 
   // ── Panel / tab state ──
   const [panelTab, setPanelTab] = React.useState<PanelTab>("description");
+  const [learning, setLearning] = React.useState<ProblemLearning | null>(null);
+  const [learningLoading, setLearningLoading] = React.useState(false);
   const [history, setHistory]   = React.useState<ProblemHistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = React.useState(false);
 
@@ -905,12 +917,44 @@ export default function ProblemSolvingPage() {
       if (adjRes.status === "fulfilled") setAdjacent(adjRes.value.data.data);
 
       // Load saved code or stub
-      const saved = localStorage.getItem(lsCode(problemId, langId));
-      setCode(saved ?? prob.stubs?.[String(langId)] ?? "");
+      // Use a language this problem accepts (the saved one may be Java on a Python-only course problem,
+      // or Python 3.12 left over from the course on an ordinary problem).
+      const allowed = allowedLanguageIds(prob.languages);
+      const useLang = (allowed.includes(langId) ? langId : allowed[0]) as LangId;
+      if (useLang !== langId) setLangId(useLang);
+      const saved = localStorage.getItem(lsCode(problemId, useLang));
+      setCode(saved ?? prob.stubs?.[String(useLang)] ?? "");
       setLoading(false);
     });
     return () => { active = false; };
   }, [problemId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Hints, goal and (once solved) the reference solution ──
+  // Off during an exam or a proctored assignment: hints are help, like the AI tutor.
+  const helpEnabled = !proctored;
+  const loadLearning = React.useCallback(async () => {
+    setLearningLoading(true);
+    try {
+      const res = await api.get<{ success: boolean; data: ProblemLearning }>(`/api/student/problems/${problemId}/learning`);
+      setLearning(res.data.data);
+    } catch {
+      setLearning(null);
+    } finally {
+      setLearningLoading(false);
+    }
+  }, [problemId]);
+
+  React.useEffect(() => {
+    setLearning(null);
+    if (helpEnabled) loadLearning();
+  }, [problemId, helpEnabled, loadLearning]);
+
+  // The answer unlocks the moment the problem is solved, without a reload.
+  React.useEffect(() => {
+    if (solved && helpEnabled) loadLearning();
+  }, [solved]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const hasHelp = !!learning && (learning.hints.length > 0 || learning.has_solution || learning.has_complexity || !!learning.objective);
 
   // ── Language switch ──
   React.useEffect(() => {
@@ -1336,6 +1380,7 @@ export default function ProblemSolvingPage() {
               sx={{ minHeight: 42, "& .MuiTab-root": { minHeight: 42, py: 1, fontSize: "0.8rem" } }}
             >
               <Tab label="Description" value="description" />
+              {helpEnabled && hasHelp && <Tab label="Hints" value="help" />}
               <Tab label="My solution" value="submissions" />
             </Tabs>
           </Box>
@@ -1427,6 +1472,10 @@ export default function ProblemSolvingPage() {
               </Box>
             )}
 
+            {panelTab === "help" && helpEnabled && (
+              <LearningPanel key={problemId} problemId={problemId} learning={learning} loading={learningLoading} />
+            )}
+
             {panelTab === "submissions" && (
               <Box>
                 {historyLoading ? (
@@ -1516,7 +1565,7 @@ export default function ProblemSolvingPage() {
               sx={{ height: 28, "& .MuiSelect-select": { py: 0.5, fontSize: "0.8rem" }, minWidth: 130 }}
               aria-label="Select language"
             >
-              {LANGUAGES.map((l) => (
+              {LANGUAGES.filter((l) => allowedLanguageIds(problem.languages).includes(l.id)).map((l) => (
                 <MenuItem key={l.id} value={l.id} sx={{ fontSize: "0.85rem" }}>
                   {l.name}
                 </MenuItem>

@@ -165,6 +165,23 @@ export interface ProblemDetail {
   editorial: string | null;
   editorial_visible_at: string | null;
   editorial_unlocked: boolean;
+  /** Judge0 language ids this problem accepts; null/absent = the usual set. */
+  languages?: number[] | null;
+  /** True when the output must match line for line (formatting counts). */
+  exact_output?: boolean;
+}
+
+/** Teaching material for one problem (GET /api/student/problems/:id/learning). The solution and complexity
+ *  are null until the student has an accepted submission (staff always see them). */
+export interface ProblemLearning {
+  objective: string | null;
+  hints: string[];
+  solved: boolean;
+  unlocked: boolean;
+  complexity: { time?: string; space?: string } | null;
+  reference_solution: string | null;
+  has_solution: boolean;
+  has_complexity: boolean;
 }
 
 export interface AdjacentProblems {
