@@ -37,8 +37,8 @@ const extractUserId = (req) => {
   return null;
 };
 
-// Allowed Judge0 language IDs (C++, Java, Python3, JavaScript, C, Go, Rust, TypeScript)
-const ALLOWED_LANGUAGE_IDS = new Set([50, 51, 52, 54, 62, 63, 71, 72, 73, 74, 75, 76]);
+// Allowed Judge0 language IDs (C++, Java, Python 3.8 / 3.11 / 3.12, JavaScript, C, Go, Rust, TypeScript)
+const ALLOWED_LANGUAGE_IDS = new Set([50, 51, 52, 54, 62, 63, 71, 72, 73, 74, 75, 76, 92, 100]);
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MAX_CODE_BYTES = 64 * 1024; // 64 KB
 const MAX_INPUT_BYTES = 8 * 1024; // 8 KB
@@ -114,6 +114,9 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
     } catch (startErr) {
       if (startErr.code === 'EXAM_PROBLEM_OUT_OF_SCOPE') {
         return res.status(403).json({ success: false, code: startErr.code, error: startErr.message });
+      }
+      if (startErr.code === 'LANGUAGE_NOT_ALLOWED') {
+        return res.status(400).json({ success: false, code: startErr.code, error: startErr.message });
       }
       console.error('Failed to start judging:', startErr.message);
       // Distinguish "Judge0 is offline" from "Judge0's queue is full" so the

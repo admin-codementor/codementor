@@ -13,6 +13,8 @@ export const JUDGE0_LANGUAGES: Record<string, string> = {
   "68": "PHP",
   "70": "Python 2",
   "71": "Python",
+  "92": "Python",
+  "100": "Python",
   "72": "Ruby",
   "73": "Rust",
   "74": "TypeScript",

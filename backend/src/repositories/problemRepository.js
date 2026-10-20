@@ -69,6 +69,16 @@ async function create(data, testCases = []) {
   return getById(id);
 }
 
+// Create-or-replace a problem under a caller-chosen id, with its whole test set. For bulk imports that must be
+// re-runnable: the same id always lands on the same document. createdAt of an existing problem is kept.
+async function upsert(id, data, testCases = []) {
+  const ref = col().doc(id);
+  const existing = await ref.get();
+  await ref.set({ ...data, createdAt: existing.exists && existing.data().createdAt ? existing.data().createdAt : FieldValue.serverTimestamp() });
+  await replaceTestCases(id, testCases);
+  return getById(id);
+}
+
 async function update(id, partial) {
   await col().doc(id).set(partial, { merge: true });
   return getById(id);
@@ -133,5 +143,5 @@ async function listCatalog() {
 
 module.exports = {
   getAll, listCatalog, getById, getMapByIds, getTestCases, getPublicTestCases,
-  create, update, remove, replaceTestCases, addTestCases,
+  create, upsert, update, remove, replaceTestCases, addTestCases,
 };
