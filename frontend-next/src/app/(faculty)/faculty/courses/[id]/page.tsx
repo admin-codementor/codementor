@@ -35,7 +35,16 @@ import { useConfirm } from "@/components/feedback/ConfirmProvider";
 import { radius, typeScale } from "@/theme/tokens";
 
 interface ModuleProblem { id: string; title: string; difficulty: string; tags: string[] }
-interface CourseModule { id: string; title: string; description: string; problems: ModuleProblem[] }
+interface CourseModule { id: string; title: string; description: string; dueAt?: string | null; opensAt?: string | null; problems: ModuleProblem[] }
+type ModulePatch = { title?: string; description?: string; problem_ids?: string[]; due_at?: string | null; opens_at?: string | null };
+
+/** An ISO date as the value of a datetime-local input (local time, no seconds). */
+const toLocalInput = (iso?: string | null) => {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+};
 interface CourseDetail {
   id: string; title: string; description: string; isPublished: boolean; canEdit: boolean;
   modules: CourseModule[];
@@ -134,7 +143,7 @@ function ModuleCard({
 }: {
   module: CourseModule;
   canEdit: boolean;
-  onChange: (patch: { title?: string; description?: string; problem_ids?: string[] }) => void;
+  onChange: (patch: ModulePatch) => void;
   onDelete: () => void;
 }) {
   const [title, setTitle] = React.useState(module.title);
@@ -173,6 +182,22 @@ function ModuleCard({
             size="small" variant="standard" disabled={!canEdit} fullWidth placeholder="Description (optional)"
             slotProps={{ input: { disableUnderline: !canEdit } }}
           />
+
+          {/* When the unit opens to students (locked until then) and when it is due. Both optional; blank clears it. */}
+          <Stack direction={{ xs: "column", sm: "row" }} spacing={1.5}>
+            <TextField
+              label="Opens" type="datetime-local" size="small" disabled={!canEdit}
+              defaultValue={toLocalInput(module.opensAt)} key={`o-${module.opensAt ?? ""}`}
+              onBlur={(e) => { const v = e.target.value; if (v !== toLocalInput(module.opensAt)) onChange({ opens_at: v ? new Date(v).toISOString() : null }); }}
+              slotProps={{ inputLabel: { shrink: true } }} helperText="Students see it locked until then."
+            />
+            <TextField
+              label="Due" type="datetime-local" size="small" disabled={!canEdit}
+              defaultValue={toLocalInput(module.dueAt)} key={`d-${module.dueAt ?? ""}`}
+              onBlur={(e) => { const v = e.target.value; if (v !== toLocalInput(module.dueAt)) onChange({ due_at: v ? new Date(v).toISOString() : null }); }}
+              slotProps={{ inputLabel: { shrink: true } }} helperText="After this, students can ask for more time."
+            />
+          </Stack>
 
           {module.problems.length === 0 ? (
             <Typography variant="caption" color="text.secondary">No problems yet.</Typography>
@@ -268,7 +293,7 @@ export default function CourseEditorPage() {
     }
   };
 
-  const updateModule = async (moduleId: string, patch: { title?: string; description?: string; problem_ids?: string[] }) => {
+  const updateModule = async (moduleId: string, patch: ModulePatch) => {
     try {
       const r = await api.patch(`/api/faculty/courses/${id}/modules/${moduleId}`, patch);
       if (patch.problem_ids) {

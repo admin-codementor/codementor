@@ -28,7 +28,7 @@ import {
   Eye, EyeOff, TriangleAlert, Briefcase,
   SignalLow, SignalMedium, SignalHigh, Type, Hash, ArrowRightLeft, ArrowDownUp, GitFork,
   Boxes, Binary, PenTool, Waypoints, TrendingUp, TrendingDown, GripVertical,
-  CloudOff, Inbox, FilterX, Info,
+  CloudOff, Inbox, FilterX, Info, CalendarDays,
 } from "lucide-react";
 
 export type IconFontSize = "small" | "medium" | "large" | "inherit";
@@ -92,6 +92,7 @@ export const ArrowForwardIcon = makeIcon(ArrowRight, "ArrowForwardIcon");
 export const AssignmentOutlinedIcon = makeIcon(ClipboardList, "AssignmentOutlinedIcon");
 export const AutoAwesomeOutlinedIcon = makeIcon(Sparkles, "AutoAwesomeOutlinedIcon");
 export const BarChartOutlinedIcon = makeIcon(ChartColumn, "BarChartOutlinedIcon");
+export const CalendarMonthOutlinedIcon = makeIcon(CalendarDays, "CalendarMonthOutlinedIcon");
 export const BoltOutlinedIcon = makeIcon(Zap, "BoltOutlinedIcon");
 export const BugReportOutlinedIcon = makeIcon(Bug, "BugReportOutlinedIcon");
 export const BusinessOutlinedIcon = makeIcon(Building2, "BusinessOutlinedIcon");

@@ -21,6 +21,7 @@ import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { Reveal } from "@/components/ui/motion";
+import { ReopenPanel, reopenSummary } from "@/components/student/ReopenRequest";
 import { hoverTransition } from "@/theme/tokens";
 import type { Assignment } from "@/lib/types";
 
@@ -106,7 +107,7 @@ function ProgressRing({ pct, color }: { pct: number; color: string }) {
 
 // ── Assignment card ───────────────────────────────────────────────────────────
 
-function AssignmentCard({ assignment }: { assignment: Assignment }) {
+function AssignmentCard({ assignment, onChanged }: { assignment: Assignment; onChanged: () => void }) {
   const [expanded, setExpanded] = React.useState(false);
   const pct =
     assignment.total > 0
@@ -181,6 +182,9 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
               {assignment.solved}/{assignment.total} solved
             </Typography>
             <DeadlineBadge deadline={assignment.deadline} />
+            {assignment.reopen?.status === "approved" && assignment.reopen.until && (
+              <Typography variant="caption" color="success.main" fontWeight={600}>{reopenSummary(assignment.reopen)}</Typography>
+            )}
           </Stack>
         </Box>
 
@@ -208,6 +212,16 @@ function AssignmentCard({ assignment }: { assignment: Assignment }) {
 
       <Collapse in={expanded} unmountOnExit>
         <Divider sx={{ borderColor: "outlineVariant" }} />
+        {/* Past the deadline: ask for more time, or see how that request stands. Proctored work is decided by faculty directly. */}
+        {!assignment.isExam && (overdue || assignment.reopen) && (
+          <>
+            <ReopenPanel
+              target={{ assignmentId: String(assignment.id) }} title={assignment.title}
+              state={assignment.reopen ?? null} onChanged={onChanged}
+            />
+            <Divider sx={{ borderColor: "outlineVariant" }} />
+          </>
+        )}
         <Box>
           {assignment.problems.map((prob, idx) => (
             <React.Fragment key={prob.id}>
@@ -368,7 +382,7 @@ export default function AssignmentsPage() {
         <Reveal>
           <Stack spacing={2}>
             {filtered.map((a) => (
-              <AssignmentCard key={a.id} assignment={a} />
+              <AssignmentCard key={a.id} assignment={a} onChanged={load} />
             ))}
           </Stack>
         </Reveal>

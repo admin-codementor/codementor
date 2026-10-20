@@ -28,6 +28,7 @@ import { DifficultyChip } from "@/components/ui/DifficultyChip";
 import { TagChip } from "@/components/ui/TagChip";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { hoverTransition } from "@/theme/tokens";
+import { ReopenPanel } from "@/components/student/ReopenRequest";
 import type { CourseDetail, CourseModule } from "@/lib/types";
 
 // Pick a topic-appropriate icon for a module subcategory (varies per section instead
@@ -85,16 +86,17 @@ function moduleDueLabel(iso: string): string {
   return new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "short" });
 }
 
-function ModuleSection({ module, courseId, defaultExpanded }: { module: CourseModule; courseId: string; defaultExpanded?: boolean }) {
+function ModuleSection({ module, courseId, defaultExpanded, onChanged }: { module: CourseModule; courseId: string; defaultExpanded?: boolean; onChanged: () => void }) {
   const solved = module.problems.filter((p) => p.is_solved).length;
   const total = module.problems.length;
   const pct = total > 0 ? Math.round((solved / total) * 100) : 0;
   const company = companyName(module.title);
   const isEmpty = total === 0;
+  const locked = !!module.locked;
   return (
     <Accordion
       id={`module-${module.id}`}
-      defaultExpanded={defaultExpanded && !isEmpty}
+      defaultExpanded={defaultExpanded && !isEmpty && !locked}
       disableGutters
       elevation={0}
       sx={{
@@ -150,7 +152,12 @@ function ModuleSection({ module, courseId, defaultExpanded }: { module: CourseMo
           <Typography variant="subtitle2" fontWeight={600} noWrap>
             {module.title}
           </Typography>
-          {module.dueAt && (
+          {locked && module.opensAt && (
+            <Typography variant="caption" color="text.secondary" noWrap>
+              Opens {new Date(module.opensAt).toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" })}
+            </Typography>
+          )}
+          {!locked && module.dueAt && (
             <Typography
               variant="caption"
               color={module.status === "overdue" ? "error.main" : "text.secondary"}
@@ -185,7 +192,19 @@ function ModuleSection({ module, courseId, defaultExpanded }: { module: CourseMo
         )}
       </AccordionSummary>
       <AccordionDetails sx={{ px: 1, pt: 0, pb: 1 }}>
-        {total === 0 ? (
+        {!locked && (module.status === "overdue" || module.reopen) && module.status !== "done" && (
+          <Box sx={{ px: 1.5, pt: 1, pb: 0.5 }}>
+            <ReopenPanel
+              compact target={{ courseId, moduleId: module.id }} title={module.title}
+              state={module.reopen ?? null} onChanged={onChanged}
+            />
+          </Box>
+        )}
+        {locked ? (
+          <Typography variant="body2" color="text.secondary" sx={{ py: 1, px: 1 }}>
+            This unit opens {module.opensAt ? new Date(module.opensAt).toLocaleString(undefined, { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : "soon"}. Your faculty has set the date.
+          </Typography>
+        ) : total === 0 ? (
           <Typography variant="body2" color="text.secondary" sx={{ py: 1, px: 1 }}>
             Problems coming soon.
           </Typography>
@@ -397,6 +416,7 @@ export default function CourseDetailPage() {
                   key={m.id}
                   module={m}
                   courseId={courseId}
+                  onChanged={load}
                   // Open where the work is: the module we were sent to, else
                   // the one with work left, never simply the first.
                   defaultExpanded={m.id === (focusModuleId ?? course.resume?.moduleId ?? course.nextUp?.moduleId)}
