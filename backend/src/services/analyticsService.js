@@ -11,6 +11,7 @@
 // be produced from incrementally-maintained daily rollups without any caller
 // noticing — that is why callers get a snapshot object rather than raw rows.
 const { cached } = require('../utils/cache');
+const { activeStudents } = require('../utils/students');
 const { attemptsUntilFirstAccept } = require('../utils/attempts');
 const submissionRepo = require('../repositories/submissionRepository');
 const userRepo = require('../repositories/userRepository');
@@ -70,7 +71,8 @@ async function buildSnapshot(scope) {
     problemRepo.getAll(),
   ]);
 
-  const students = [...studentsMap.values()].filter((s) => (
+  // Alumni leave every active view (utils/students.js): they would sit at "inactive" in the at-risk list forever.
+  const students = activeStudents([...studentsMap.values()]).filter((s) => (
     memberIds ? memberIds.has(s.id) : (dept === null || (s.department || null) === dept)
   ));
   const studentIds = new Set(students.map((s) => s.id));
@@ -333,44 +335,8 @@ async function getSnapshot(scope) {
 }
 
 // ── Risk model ─────────────────────────────────────────────────────────────
-// One definition of "at risk", shared by the Dashboard card and the Analytics
-// Pulse tab. These used to disagree — the Dashboard card required 5+
-// submissions before flagging low accuracy (<30%) and only looked at
-// inactivity, while the Analytics cohort view flagged any accuracy under 25%
-// and also weighed attempts-per-solve. This is the single source of truth for
-// both, now also aware of assignment deadlines.
-const RISK_IDLE_DAYS = 14;
-const RISK_LOW_ACCURACY_PCT = 25;
-const RISK_HIGH_ATTEMPTS_PER_SOLVE = 5;
-
-/**
- * `deadlineInfo` is this student's entry from `computeDeadlineRisk` (or
- * undefined) — `{ missed: string[], unsolved: string[] }`, assignment titles
- * the student never submitted to vs. submitted to but never got Accepted on,
- * before the deadline. Collapsed to a count once there is more than one, so
- * the reason list stays short regardless of how many assignments a class runs.
- */
-function riskReasonsForStudent(s, deadlineInfo, now = Date.now()) {
-  const idleMs = now - RISK_IDLE_DAYS * DAY_MS;
-  const reasons = [
-    s.subs === 0 ? 'never submitted' : null,
-    s.subs > 0 && s.acRate < RISK_LOW_ACCURACY_PCT ? `low accuracy (${s.acRate}%)` : null,
-    s.lastActiveMs && s.lastActiveMs < idleMs ? `inactive ${RISK_IDLE_DAYS}+ days` : null,
-    s.avgAttemptsToSolve != null && s.avgAttemptsToSolve >= RISK_HIGH_ATTEMPTS_PER_SOLVE
-      ? `${s.avgAttemptsToSolve} attempts per solve` : null,
-  ].filter(Boolean);
-  if (deadlineInfo?.missed.length) {
-    reasons.push(deadlineInfo.missed.length === 1
-      ? `missed deadline: "${deadlineInfo.missed[0]}"`
-      : `missed ${deadlineInfo.missed.length} assignment deadlines`);
-  }
-  if (deadlineInfo?.unsolved.length) {
-    reasons.push(deadlineInfo.unsolved.length === 1
-      ? `attempted but unsolved: "${deadlineInfo.unsolved[0]}"`
-      : `attempted but unsolved on ${deadlineInfo.unsolved.length} assignments`);
-  }
-  return reasons;
-}
+// One definition of "at risk" for the whole app: utils/risk.js, built on the same flag rule the HOD pages use.
+const { riskReasonsForStudent } = require('../utils/risk');
 
 /**
  * Cross-references past-deadline, non-exam assignments against submissions to

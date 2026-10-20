@@ -25,6 +25,7 @@ const departmentActivityService = require('../services/departmentActivityService
 const labsService = require('../services/labsService');
 const { resolveCourse, percentOf } = require('../utils/courseProgress');
 const { attemptsUntilFirstAccept } = require('../utils/attempts');
+const { activeStudents } = require('../utils/students');
 const departmentInsightsService = require('../services/departmentInsightsService');
 const portfolioService = require('../services/portfolioService');
 const portfolioRepo = require('../repositories/portfolioRepository');
@@ -524,13 +525,18 @@ exports.generateAITestCases = async (req, res) => {
 
 exports.getStudents = async (req, res) => {
   try {
-    const studentsMap = await userRepo.getMapByRole('student');
+    // Current students of the caller's own department (an admin sees all); it used to list every student in the college.
+    const dept = scopeDept(req);
+    const allStudents = await userRepo.getMapByRole('student');
+    const studentsMap = new Map(activeStudents([...allStudents.values()])
+      .filter((s) => dept === null || (s.department || null) === dept)
+      .map((s) => [s.id, s]));
     const studentIds = [...studentsMap.keys()];
     if (studentIds.length === 0) {
       return res.json({ success: true, data: [] });
     }
 
-    const allSubs = await submissionRepo.listAll();
+    const allSubs = await submissionRepo.listAllForAnalytics(); // not listAll(): that downloads every student's source code
     const statsByStudent = new Map(studentIds.map(id => [id, { total: 0, accepted: 0, solved: new Set() }]));
     for (const s of allSubs) {
       const stat = statsByStudent.get(s.userId);
