@@ -105,6 +105,13 @@ Effort: S = about a day, M = 2 to 4 days, L = a week or more (one person, includ
 - Public profile percentile badge with a Year / College toggle. **S**
 - "Online now": only if the college wants it, since it needs a heartbeat every minute (quota). **S, defer**
 
+### Status after Phases 3 to 6 (branch `feat/phases-3-7`)
+Built: Phase 3 (reopen, reports, calendar, unit release), Phase 4 (coding score), Phase 5 (resume, mock interview, readiness), Phase 6 (unread badge, in-app reminders, cohort badge).
+Where it differs from the plan above: the **resume check is rule-based and pasted as text**, not AI-scored and not uploaded (free, same answer every time, no resume stored);
+the **coding score refreshes by a manual HOD button** (20 profiles per click), no weekly cron yet; **reminders are in-app only**, no email digest; the **cohort badge ranks within the student's
+year and department** (no Year / College toggle), under the existing "show my score" switch; **unit release is a soft lock** in the UI, the direct URL still opens.
+Not built (scope stopped at Phase 6): Phase 7 (environment check, co-faculty), Phase 8, email digest, "online now".
+
 ### Phase 7: Exam-day and class tools (F18, F19)
 - Environment check page (browser, camera, microphone, fullscreen, network, clock) students run before an exam. **M**
 - Co-faculty on a class or group (read for co-faculty, write stays with the owner). **S**

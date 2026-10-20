@@ -5,6 +5,29 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-21 (Wed), Phases 3 to 6
+**Area:** Phases 3 to 6 of `docs/COMPETITOR_BUILD_PLAN.md` (branch `feat/phases-3-7`, one PR to `main`). Phase 7 and 8 were not built (scope stopped at Phase 6 by request).
+**Did:**
+- **Phase 3, reopen requests, reports, calendar, unit release.** A student asks for more time on an assignment or course unit; faculty approve or decline from
+  Reports and an approved request gives that student a later due date (`utils/reopen.js`). Reports: summary, late work, daily activity, requests
+  (`utils/reports.js`). Calendar for students and staff (`utils/calendarEvents.js`). Course units can have an opens-at date (shown locked; a soft lock, not a block on the direct URL).
+- **Phase 4, coding score.** LeetCode, Codeforces, GitHub and CodeMentor, each capped at 100, overall = average of the four, red/orange/green with
+  college thresholds per year (`utils/platformScore.js`). New "Coding score" tab on the Department page and a card on the student's profile. Platforms that cannot be read reliably stay link-only.
+- **Phase 5, career.** `/app/career`: resume check (rule-based, free, same answer every time: `utils/resumeScore.js`), AI mock interview (5 questions then a scorecard;
+  server keeps no conversation, overall is averaged on our side, answers are fenced as data: `utils/mockInterview.js`), and a personal readiness band. HOD Placement tab gets a
+  Readiness view (`utils/placementReadiness.js`: resume 60+, interview 6+/10, 30+ problems solved; all three = Ready). The resume text is never stored.
+- **Job-Ready arithmetic:** audited and tested (headline equals the sum of the rounded contributions, weights sum to 100). No defect found in the sum. One inconsistency left alone: the course component
+  says it uses a fixed bar but uses `min(40, assigned)`, so a college with few assigned problems can reach 100 on few.
+- **Phase 6.** Unread count badge on Messages in the student and staff menus (`GET /api/messages/unread-count`, checked once a minute and on navigation). Faculty "Remind N" on the question statistics drawer sends an in-app reminder
+  (`POST /api/faculty/nudges`, max 100 at a time, a student is reminded by the same sender once a day, only students the sender can see); students see it on their dashboard.
+  Public profile shows a cohort badge (percentile among the same year and department by problems solved, hidden under 10 students) under the existing "show my score" switch.
+**Not built on purpose:** email digest, "online now" (write cost), exam environment check, co-faculty on classes (Phase 7), debugger, paper scanning, T&P/Admin, NBA/NAAC (Phase 8).
+**Verified:** 368 offline checks; backend lint and route audit; frontend `tsc`, eslint (0 errors) and production build; new routes answer 401 without a token on the running backend.
+**Not verified:** none of the new pages were opened in a browser with a signed-in session (a login token could not be minted here); no student-side page seen live; the mock interview was never run against a real model; reminders and the unread badge were not seen with real data.
+**Quota note:** HOD Readiness and the coding-score tab each read all students and submissions (cached two minutes); a reminder send reads all students once.
+
+---
+
 ## 2026-10-21 (Wed), Phase 2
 **Area:** Phase 2 of `docs/COMPETITOR_BUILD_PLAN.md` (branch `feat/phase2-faculty-insight`, includes Phase 1 which never reached main)
 **Did:**
