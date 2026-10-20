@@ -10,7 +10,7 @@ const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 
 
 /** Flagged at this many non-benign proctor events (the proctor report's "medium" risk). */
 const PROCTOR_FLAG_THRESHOLD = 3;
-const BENIGN_PROCTOR_EVENTS = new Set(['fullscreen_enter', 'exam_start', 'copy']);
+const { BENIGN_PROCTOR_EVENTS } = require('./proctorEvents');
 
 /**
  * How far along each student is, as a share of the course's problems solved.

@@ -24,6 +24,7 @@ const departmentLeaderboardService = require('../services/departmentLeaderboardS
 const departmentActivityService = require('../services/departmentActivityService');
 const labsService = require('../services/labsService');
 const { resolveCourse, percentOf } = require('../utils/courseProgress');
+const { attemptsUntilFirstAccept } = require('../utils/attempts');
 const departmentInsightsService = require('../services/departmentInsightsService');
 const portfolioService = require('../services/portfolioService');
 const portfolioRepo = require('../repositories/portfolioRepository');
@@ -1396,16 +1397,19 @@ exports.getProblemAnalytics = async (req, res) => {
     const mine = subs.filter((s) => inScope.has(s.userId));
 
     const attemptsByUser = new Map();
+    const timesByUser = new Map();
     const firstSub = new Map();
     const firstAc = new Map();
     for (const s of mine) {
       attemptsByUser.set(s.userId, (attemptsByUser.get(s.userId) || 0) + 1);
       const ms = analytics.toMillis(s.submittedAt);
+      timesByUser.set(s.userId, [...(timesByUser.get(s.userId) || []), ms]);
       if (!firstSub.has(s.userId) || ms < firstSub.get(s.userId)) firstSub.set(s.userId, ms);
       if (s.verdict === 'Accepted' && (!firstAc.has(s.userId) || ms < firstAc.get(s.userId))) firstAc.set(s.userId, ms);
     }
 
-    const attemptsToSolve = [...firstAc.keys()].map((u) => attemptsByUser.get(u) || 1);
+    // Submissions up to the first accepted one, not every submission the student ever made (utils/attempts.js).
+    const attemptsToSolve = [...firstAc.entries()].map(([u, ac]) => attemptsUntilFirstAccept(timesByUser.get(u) || [], ac) ?? attemptsByUser.get(u) ?? 1);
     const timeToSolveMin = [...firstAc.entries()]
       .map(([u, ac]) => Math.round((ac - (firstSub.get(u) ?? ac)) / 60000))
       .filter((m) => m >= 0);
@@ -1446,7 +1450,7 @@ exports.getProblemAnalytics = async (req, res) => {
           solvers: firstAc.size,
           solveRate: attemptsByUser.size ? Math.round((firstAc.size / attemptsByUser.size) * 100) : 0,
           // Struggle signals, deliberately outside the funnel.
-          neededMultipleAttempts: [...attemptsByUser.values()].filter((n) => n > 1).length,
+          neededMultipleAttempts: attemptsToSolve.filter((n) => n > 1).length, // solvers who needed more than one try
           gaveUp: [...attemptsByUser.keys()].filter((u) => !firstAc.has(u)).length,
           attemptsToSolve: analytics.boxStats(attemptsToSolve),
           timeToSolveMinutes: analytics.boxStats(timeToSolveMin),

@@ -3,7 +3,7 @@
 
 /** Proctor events that are routine bookkeeping, not signals of anything. */
 const { scoreAttempt } = require('./examScoring');
-const BENIGN_PROCTOR_EVENTS = new Set(['fullscreen_enter', 'exam_start']);
+const { BENIGN_PROCTOR_EVENTS } = require('./proctorEvents');
 
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
 

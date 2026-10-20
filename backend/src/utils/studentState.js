@@ -110,15 +110,18 @@ function weeklyActivity(submissions, weeks = 8, now = Date.now()) {
     const start = end - 7 * DAY_MS;
     buckets.push({ start, end, subs: 0, accepted: 0, days: new Set(), solvedIds: new Set() });
   }
-  // A problem counts as "solved this week" in the week it was FIRST accepted,
-  // so re-solving an old problem doesn't inflate a later week.
+  // A problem counts as "solved this week" in the week it was FIRST accepted by that student,
+  // so re-solving an old problem doesn't inflate a later week. Keyed by student AND problem: the
+  // department view passes everyone's submissions, and keying by problem alone counted a problem
+  // once for the whole department (30 students solving it in week 3 read as "1 solved").
   const firstAccepted = new Map();
   for (const s of submissions) {
     if (s.verdict !== 'Accepted') continue;
     const ms = toMillis(s.submittedAt);
     if (!ms) continue;
-    const prev = firstAccepted.get(s.problemId);
-    if (!prev || ms < prev) firstAccepted.set(s.problemId, ms);
+    const key = `${s.userId}|${s.problemId}`;
+    const prev = firstAccepted.get(key);
+    if (!prev || ms < prev) firstAccepted.set(key, ms);
   }
 
   for (const s of submissions) {
@@ -130,9 +133,9 @@ function weeklyActivity(submissions, weeks = 8, now = Date.now()) {
     b.days.add(dayKey(ms));
     if (s.verdict === 'Accepted') b.accepted += 1;
   }
-  for (const [pid, ms] of firstAccepted) {
+  for (const [key, ms] of firstAccepted) {
     const b = buckets.find((x) => ms >= x.start && ms < x.end);
-    if (b) b.solvedIds.add(pid);
+    if (b) b.solvedIds.add(key);
   }
 
   return buckets.map((b, i) => {

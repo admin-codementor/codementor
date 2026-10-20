@@ -11,6 +11,7 @@
 // be produced from incrementally-maintained daily rollups without any caller
 // noticing — that is why callers get a snapshot object rather than raw rows.
 const { cached } = require('../utils/cache');
+const { attemptsUntilFirstAccept } = require('../utils/attempts');
 const submissionRepo = require('../repositories/submissionRepository');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
@@ -89,6 +90,7 @@ async function buildSnapshot(scope) {
     solved: new Set(),
     attempted: new Set(),
     attemptsByProblem: new Map(),
+    subTimesByProblem: new Map(),
     firstAcByProblem: new Map(),
     firstSubByProblem: new Map(),
     lastActiveMs: 0,
@@ -117,6 +119,9 @@ async function buildSnapshot(scope) {
     if (ms) {
       st.lastActiveMs = Math.max(st.lastActiveMs, ms);
       st.activeDays.add(dayKey(ms));
+      const times = st.subTimesByProblem.get(s.problemId) || [];
+      times.push(ms);
+      st.subTimesByProblem.set(s.problemId, times);
       const cur = st.firstSubByProblem.get(s.problemId);
       if (!cur || ms < cur) st.firstSubByProblem.set(s.problemId, ms);
       if (accepted) {
@@ -159,7 +164,8 @@ async function buildSnapshot(scope) {
   const studentStats = [...perStudent.values()].map((st) => {
     // Attempts taken on problems the student actually solved — the honest measure
     // of efficiency (counting unsolved problems would punish anyone still trying).
-    const solvedAttempts = [...st.solved].map((pid) => st.attemptsByProblem.get(pid) || 1);
+    // Submissions up to the first accepted one, not every submission ever made (utils/attempts.js).
+    const solvedAttempts = [...st.solved].map((pid) => attemptsUntilFirstAccept(st.subTimesByProblem.get(pid) || [], st.firstAcByProblem.get(pid)) ?? st.attemptsByProblem.get(pid) ?? 1);
     const avgAttemptsToSolve = solvedAttempts.length
       ? solvedAttempts.reduce((a, b) => a + b, 0) / solvedAttempts.length
       : null;
