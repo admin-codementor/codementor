@@ -5,6 +5,39 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-20 (Tue)
+**Area:** Course view and accuracy (branch `feat/course-view-and-accuracy`)
+**Did:**
+- **Course view (faculty and HOD).** One definition of progress (`backend/src/utils/courseProgress.js`) shared by
+  the faculty course analytics, the per-student course card and the student's own course pages: only existing,
+  published problems count, each once; a student is completed, in progress or not started and the three add up to the
+  class; percent never reads 100 before the course is finished. The analytics page now has In progress and average /
+  median progress, a per-unit table, completion by class (year + section), and a sortable, filterable, exportable
+  table of every student with clickable KPI tiles and chart bars, plus a note defining every figure.
+- **Accuracy fixes** (each with an offline test, `npm run test:pure`, now also run in CI, 118 checks): topic mastery
+  counted every accepted re-submission; the cohort topic-mastery view read fields that are never stored; the exam
+  report scored MCQ sections with the wrong field names; the exam's default negative marking was never applied;
+  an exam's coding mark was the last submission, not the best; timed-out exam attempts were never scored;
+  department weekly "solved" counted a problem once for the whole department; attempts per solve counted
+  submissions after the first accept; proctor "copy" counted as a flag on one screen only; faculty and HOD used
+  different at-risk rules; dashboard and leaderboard ranks disagreed (ties, unranked day-one students, class =
+  year + section); graduated students were still in faculty analytics, leaderboards and the student list;
+  assignment marks ignored the deadline and class; cohorts merged every year's Section A.
+**Decisions (taken by default, one line each to change):** the HOD at-risk rule is used everywhere; graduated
+students are hidden everywhere; a student who has solved nothing is unranked (rank 0), not tied for first.
+**Verified:** 118 offline checks; backend and frontend lint, `tsc`, production build, route audit; signed in as the
+test HOD against the live roster for the course list, course analytics, and analytics cohorts. **Not verified:** the
+live smoke suites were not run (each department call reads all 657 students and a full run can use most of the day's
+free Firestore quota); numbers with real submissions were proven by fixtures, not seen on screen, because no student
+has submitted yet.
+**Left for later (needs product decisions):** contests and ratings (penalties, virtual contests, rating timing),
+Job-Ready Score arithmetic, badges, exam/contest submissions counted as practice, UTC vs IST for streaks and
+heatmaps, unscoped `getCohortTopics`, and the Python course import (waiting for the CSV).
+**Next:** merge, then the Python course import and the feature list.
+**Branch:** `feat/course-view-and-accuracy`
+
+---
+
 ## 2026-10-15 (Thu)
 **Area:** Faculty + HOD persona (branch `feat/faculty-persona`, off `main` after PR #39)
 **Did:**
