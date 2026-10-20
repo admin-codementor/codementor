@@ -10,10 +10,6 @@ const API_TARGET =
   "http://localhost:3001";
 
 const nextConfig: NextConfig = {
-  // Pin the workspace root to this folder. Without it, Next.js scans upward for
-  // lockfiles to guess the root — a sibling project's lockfile elsewhere under
-  // D:\Projects made it pick the wrong directory and warn on every `next dev`.
-  outputFileTracingRoot: __dirname,
   // Emit .next/standalone for the Docker image — a self-contained server.js
   // that runs without node_modules.
   output: "standalone",
