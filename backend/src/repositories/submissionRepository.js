@@ -41,6 +41,12 @@ async function listByProblemForPerformance(problemId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+// Who submitted a problem, with what verdict and when. No source code, so a class-sized read stays small.
+async function listByProblemForStats(problemId) {
+  const snap = await col().where('problemId', '==', problemId).select('userId', 'verdict', 'submittedAt').get();
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+}
+
 async function listByUserAndProblem(userId, problemId) {
   return (await listByUser(userId)).filter((s) => s.problemId === problemId);
 }
@@ -64,4 +70,4 @@ async function listAll() {
   return snap.docs.map(toSubmission);
 }
 
-module.exports = { create, getById, listByUser, listByProblem, listByProblemForPerformance, listByUserAndProblem, listAll, listAllForAnalytics };
+module.exports = { create, getById, listByUser, listByProblem, listByProblemForPerformance, listByProblemForStats, listByUserAndProblem, listAll, listAllForAnalytics };

@@ -9,6 +9,8 @@ export interface CourseStudentRow {
   id: string; name: string; rollNo: string | null; section: string | null; year: number | null; classLabel: string;
   solved: number; total: number; percent: number; status: CourseStatus; unitsDone: number; unitsTotal: number;
   lastActiveMs: number | null; activeInWindow: boolean;
+  /** Within the selected period: submissions, distinct problems solved, active time (seconds). */
+  subsInWindow: number; solvedInWindow: number; timeSeconds: number; timeInWindowSeconds: number; suspicious: boolean;
 }
 
 /** Class-level figures; the three counts always add up to `students`. */
@@ -28,12 +30,16 @@ export interface CourseAnalytics {
     inProgressUsers: { value: number; total: number };
     notStartedUsers: { value: number; total: number };
     suspicious: { value: number; total: number };
+    avgActiveSeconds: { value: number; series: number[] };
   };
+  /** Written findings, worst first. */
+  insights: { key: string; severity: "high" | "medium" | "low"; title: string; detail: string }[];
+  time: { hasData: boolean; weekdayMinutes: number[] };
   summary: CourseSummary;
   students: CourseStudentRow[];
   byClass: ({ label: string } & CourseSummary)[];
   units: { id: string; title: string; problemCount: number; empty: boolean; solved: number; partial: number; notStarted: number; avgPercent: number }[];
-  daily: { date: string; subs: number; solved: number; activeUsers: number }[];
+  daily: { date: string; subs: number; solved: number; activeUsers: number; minutes: number }[];
   mostActiveUsers: { id: string; name: string; rollNo: string | null; activeDays: number; subs: number }[];
   mostActiveGroups: { id: string; name: string; students: number; activeStudents: number; subs: number }[];
   flagged: { id: string; name: string; rollNo: string | null; reasons: string[] }[];

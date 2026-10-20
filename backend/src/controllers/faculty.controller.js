@@ -33,6 +33,8 @@ const portfolioRepo = require('../repositories/portfolioRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 
+const problemStatisticsService = require('../services/problemStatisticsService');
+const problemTimeRepo = require('../repositories/problemTimeRepository');
 const MAX_LESSON = 8000; // characters of teaching text per problem
 
 // Firestore Timestamp | Date | ISO-string | null -> 'YYYY-MM-DD' (or null).
@@ -1882,6 +1884,8 @@ async function buildStudentProfile(id, student) {
   // Required problems = distinct, existing, published problems (utils/courseProgress.js), so a problem that sits in
   // two modules counts once and a deleted one cannot hold the student below 100%.
   const courses = [];
+  // Active time per course from the timer (zero for courses worked on before it existed).
+  const courseSeconds = new Map((await problemTimeRepo.listCourseTimesByUser(student.id)).map((t) => [t.courseId, t.seconds || 0]));
   const publishedCourses = allCourses.filter((c) => c.isPublished);
   const modulesByCourse = await Promise.all(publishedCourses.map((c) => courseRepo.getModules(c.id)));
   const courseProblems = await problemRepo.getMapByIds([...new Set(modulesByCourse.flatMap((ms) => ms.flatMap((m) => m.problemIds || [])))]);
@@ -1902,6 +1906,7 @@ async function buildStudentProfile(id, student) {
       total: required.size,
       solved: solvedCount,
       percent: percentOf(solvedCount, required.size),
+      time_seconds: courseSeconds.get(c.id) ?? 0,
       // "Pending" is what the faculty member actually acts on: units started
       // but not finished, plus units never touched. An empty unit has nothing to do.
       pending_units: units.filter((u) => u.total > 0 && u.solved < u.total).length,
@@ -1921,9 +1926,8 @@ async function buildStudentProfile(id, student) {
       total, accepted,
       solved: solvedProblemIds.size,
       attempted: attemptedProblemIds.size,
-      // Days with any submission in the last 12 months — the labelled,
-      // submission-based proxy for "time spent" (FD2 in
-      // docs/FACULTY_HOD_PERSONA_PLAN.md: real session tracking is deferred).
+      // Days with any submission in the last 12 months. Real active time per course is in courses[].time_seconds
+      // (recorded by the problem timer since it was switched on).
       activeDays: activityHeatmap.length,
       acRate: total ? Math.round((accepted / total) * 100) : 0,
     },
@@ -2251,6 +2255,20 @@ exports.createCourse = async (req, res) => {
   } catch (error) {
     console.error('Create Course Error:', error);
     res.status(500).json({ success: false, error: 'Failed to create course' });
+  }
+};
+
+// @route GET /api/faculty/problems/:id/statistics?classroomIds=a,b
+// Per-question statistics for the viewer's own population: who finished, who is stuck, time, failure kinds, suspicion.
+exports.getProblemStatistics = async (req, res) => {
+  try {
+    const classroomIds = String(req.query.classroomIds || '').split(',').map((x) => x.trim()).filter(Boolean).slice(0, 50);
+    const data = await problemStatisticsService.getProblemStatistics(req, req.params.id, classroomIds);
+    if (!data) return res.status(404).json({ success: false, error: 'Problem not found' });
+    res.json({ success: true, data });
+  } catch (error) {
+    console.error('Problem statistics error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the question statistics.' });
   }
 };
 

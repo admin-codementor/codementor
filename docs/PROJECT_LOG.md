@@ -5,6 +5,28 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-21 (Wed), Phase 2
+**Area:** Phase 2 of `docs/COMPETITOR_BUILD_PLAN.md` (branch `feat/phase2-faculty-insight`, includes Phase 1 which never reached main)
+**Did:**
+- **Question statistics** (Problems list > chart icon): drawer with a class picker, completed / in progress / not started,
+  average time spent and to solve, attempts to solve, best and weakest, failures by kind (compile, runtime, time limit,
+  wrong answer), time-spent histogram, flagged students (3+ flag events on that question), and a per-student table with CSV.
+  `GET /api/faculty/problems/:id/statistics`; rules in `utils/problemStatistics.js` (17 checks).
+- **Course time:** the problem timer now also feeds a per-student, per-course roll-up (`courseTimes`, total plus a per-day
+  map on the IST day). Course analytics gains average active time, learning time per day and per weekday, and per-student
+  columns (solved, submissions, active time in the period, flag), all in the CSV. The per-student page shows time per course.
+- **What to look at** on course analytics (`utils/courseInsights.js`, 13 checks): not started, gone quiet, stuck, weakest
+  unit, flagged, activity direction, completions.
+**Found:** PRs #43 and #44 were merged one minute apart, #44 into a branch that had just been merged, so Phase 1 is not on main
+(same trap as #42). From now on every PR targets `main`. The Python course is still a draft in the database (course not
+published, all 312 problems draft), so its analytics page shows 0 problems per unit until `--publish` is run.
+**Quota note:** each timer flush is now two writes (problem record and course roll-up). Watch the daily total.
+**Verified:** 248 offline checks; lint, `tsc`, production build, route audit; drawer and course analytics checked in the browser
+as the test HOD against the real roster. **Not verified:** time figures with real data (nobody has used the timer on a course
+problem yet).
+
+---
+
 ## 2026-10-21 (Wed)
 **Area:** Phase 1 of `docs/COMPETITOR_BUILD_PLAN.md` (branch `feat/phase1-learning`)
 **Did:**

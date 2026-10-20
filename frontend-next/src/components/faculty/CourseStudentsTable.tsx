@@ -22,6 +22,7 @@ import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { GroupsOutlinedIcon } from "@/components/ui/icons";
 import type { CourseStatus, CourseStudentRow } from "@/lib/queries/courseAnalytics";
+import { fmtDuration } from "@/lib/duration";
 import { radius, typeScale } from "@/theme/tokens";
 import { Head, Pager, bodyRow, headRow, useTable } from "./DepartmentTables";
 
@@ -44,6 +45,9 @@ const SORT = {
   solved: (r: CourseStudentRow) => r.solved,
   units: (r: CourseStudentRow) => r.unitsDone,
   last: (r: CourseStudentRow) => r.lastActiveMs ?? 0,
+  time: (r: CourseStudentRow) => r.timeInWindowSeconds,
+  solvedWin: (r: CourseStudentRow) => r.solvedInWindow,
+  subsWin: (r: CourseStudentRow) => r.subsInWindow,
 };
 type SortKey = keyof typeof SORT;
 
@@ -63,7 +67,7 @@ export function bucketOf(solved: number, total: number): number {
  * active. Filter by state, class or a completion bucket; sort; export. A row opens that student's profile.
  */
 export function CourseStudentsTable({
-  rows, status, onStatus, bucket, onBucket, bucketLabel, courseTitle,
+  rows, status, onStatus, bucket, onBucket, bucketLabel, courseTitle, days,
 }: {
   rows: CourseStudentRow[];
   status: StatusFilter;
@@ -73,6 +77,8 @@ export function CourseStudentsTable({
   onBucket: (b: number | null) => void;
   bucketLabel: string | null;
   courseTitle: string;
+  /** The selected period, for the column headings and the export. */
+  days: number;
 }) {
   const router = useRouter();
   const [cls, setCls] = React.useState("");
@@ -91,6 +97,9 @@ export function CourseStudentsTable({
     name: r.name, roll_no: r.rollNo ?? "", class: r.classLabel, solved: r.solved, total_problems: r.total,
     percent: r.percent, status: STATUS_LABEL[r.status], units_done: `${r.unitsDone}/${r.unitsTotal}`,
     last_active: r.lastActiveMs ? new Date(r.lastActiveMs).toISOString().slice(0, 10) : "",
+    [`solved_last_${days}_days`]: r.solvedInWindow, [`submissions_last_${days}_days`]: r.subsInWindow,
+    [`active_minutes_last_${days}_days`]: Math.round(r.timeInWindowSeconds / 60), total_active_minutes: Math.round(r.timeSeconds / 60),
+    flagged: r.suspicious ? "yes" : "no",
   })));
 
   return (
@@ -117,7 +126,7 @@ export function CourseStudentsTable({
         ) : (
           <>
             <TableContainer sx={{ overflowX: "auto" }}>
-              <Table size="small" aria-label="Students and their progress in this course" sx={{ minWidth: 760 }}>
+              <Table size="small" aria-label="Students and their progress in this course" sx={{ minWidth: 1040 }}>
                 <TableHead>
                   <TableRow sx={headRow}>
                     <Head<SortKey> id="name" label="Student" sort={t.sort} toggle={t.toggle} />
@@ -127,6 +136,10 @@ export function CourseStudentsTable({
                     <Head<SortKey> id="units" label="Units done" sort={t.sort} toggle={t.toggle} align="right" />
                     <TableCell>Status</TableCell>
                     <Head<SortKey> id="last" label="Last active" sort={t.sort} toggle={t.toggle} align="right" />
+                    <Head<SortKey> id="solvedWin" label={`Solved (${days}d)`} sort={t.sort} toggle={t.toggle} align="right" />
+                    <Head<SortKey> id="subsWin" label={`Submissions (${days}d)`} sort={t.sort} toggle={t.toggle} align="right" />
+                    <Head<SortKey> id="time" label={`Active time (${days}d)`} sort={t.sort} toggle={t.toggle} align="right" />
+                    <TableCell align="center">Flag</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -156,6 +169,10 @@ export function CourseStudentsTable({
                         />
                       </TableCell>
                       <TableCell align="right">{fmtDate(r.lastActiveMs)}</TableCell>
+                      <TableCell align="right">{r.solvedInWindow}</TableCell>
+                      <TableCell align="right">{r.subsInWindow}</TableCell>
+                      <TableCell align="right">{r.timeInWindowSeconds ? fmtDuration(r.timeInWindowSeconds) : "—"}</TableCell>
+                      <TableCell align="center" sx={{ color: "warning.main", fontWeight: 700 }}>{r.suspicious ? "!" : ""}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>

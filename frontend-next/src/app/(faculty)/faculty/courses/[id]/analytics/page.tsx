@@ -30,7 +30,8 @@ import {
 } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
-import { ChartCard, ChartRow, FilterBar, KpiRow, KpiTile, Leaderboard, StackedBars, TrendLines, periodDays } from "@/components/analytics";
+import { ChartCard, ChartRow, FilterBar, KpiRow, KpiTile, Leaderboard, StackedBars, TrendLines, WhatToLookAt, periodDays } from "@/components/analytics";
+import { fmtDuration } from "@/lib/duration";
 import type { GroupOption, Period } from "@/components/analytics";
 import { DistributionChart } from "@/components/faculty/analytics/Panels";
 import { CourseStudentsTable, type StatusFilter } from "@/components/faculty/CourseStudentsTable";
@@ -165,7 +166,7 @@ export default function CourseAnalyticsPage() {
   const trendSubs = React.useMemo(() => {
     if (!d) return [];
     const rows = weekly
-      ? bucketWeekly(d.daily, (s) => ({ subs: s.reduce((n, x) => n + x.subs, 0), solved: s.reduce((n, x) => n + x.solved, 0), activeUsers: Math.max(...s.map((x) => x.activeUsers)) }))
+      ? bucketWeekly(d.daily, (s) => ({ subs: s.reduce((n, x) => n + x.subs, 0), solved: s.reduce((n, x) => n + x.solved, 0), activeUsers: Math.max(...s.map((x) => x.activeUsers)), minutes: s.reduce((n, x) => n + x.minutes, 0) }))
       : d.daily;
     return rows;
   }, [d, weekly]);
@@ -212,6 +213,8 @@ export default function CourseAnalyticsPage() {
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
             The period changes only the activity figures and charts (active students, submissions, trends). Completion and progress count everything ever solved.
           </Typography>
+
+          <WhatToLookAt insights={d.insights} />
 
           <KpiRow min={170}>
             <KpiTile
@@ -262,6 +265,14 @@ export default function CourseAnalyticsPage() {
               value={`${d.summary.avgPercent}%`}
               accent="tertiary"
               help={`Median ${d.summary.medianPercent}%. Share of the course's ${d.summary.totalProblems} problems solved, over every student in this view.`}
+            />
+            <KpiTile
+              icon={<TimerOutlinedIcon />}
+              label="Average active time"
+              value={d.time.hasData ? fmtDuration(d.kpis.avgActiveSeconds.value) : "—"}
+              series={d.time.hasData ? d.kpis.avgActiveSeconds.series : undefined}
+              accent="tertiary"
+              help={d.time.hasData ? `Active time in this course per student who spent any, in the selected period. Counts only time with the problem open and the tab visible.` : "No time has been recorded for this course yet. Time is recorded from the day the timer was switched on."}
             />
             <KpiTile
               icon={<PolicyOutlinedIcon />}
@@ -331,10 +342,28 @@ export default function CourseAnalyticsPage() {
             </ChartCard>
           </ChartRow>
 
+          {d.time.hasData && (
+            <ChartRow cols={2}>
+              <ChartCard title="Learning time per day" subtitle={weekly ? "Weekly totals, in minutes" : "Minutes of active time in this course, all students together"} height={240}>
+                <TrendLines
+                  height={240}
+                  colorOffset={2}
+                  series={[{ id: "Minutes", data: (weekly ? bucketWeekly(d.daily, (s) => ({ minutes: s.reduce((n, x) => n + x.minutes, 0), subs: 0, solved: 0, activeUsers: 0 })) : d.daily).map((r) => ({ x: label(r.date), y: r.minutes })) }]}
+                />
+              </ChartCard>
+              <ChartCard title="Learning time by weekday" subtitle="Minutes in the selected period, all students together" height={240}>
+                <DistributionChart
+                  histogram={["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day, i) => ({ bucket: day, from: i, count: d.time.weekdayMinutes[i] }))}
+                  label="Minutes of active time"
+                />
+              </ChartCard>
+            </ChartRow>
+          )}
+
           <ChartRow cols={2}>
             <Leaderboard
               title="Most active students"
-              subtitle="Days with at least one submission. Time on platform isn't tracked yet."
+              subtitle="Days with at least one submission"
               unit=" days"
               rows={d.mostActiveUsers.map((u) => ({ id: u.id, label: u.name, hint: u.rollNo ?? undefined, value: u.activeDays }))}
               onRowClick={(r) => router.push(`/faculty/students/${r.id}`)}
@@ -362,6 +391,7 @@ export default function CourseAnalyticsPage() {
               rows={d.students} status={status} onStatus={(v) => { setBucket(null); setStatus(v); }}
               bucket={bucket} onBucket={setBucket} courseTitle={d.course.title}
               bucketLabel={bucket == null ? null : (d.completion.buckets[bucket]?.bucket ?? null)}
+              days={days}
             />
           </Box>
 

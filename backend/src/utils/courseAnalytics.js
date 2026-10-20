@@ -3,9 +3,13 @@
 
 const { tally, studentProgress, summarise } = require('./courseProgress');
 const { classLabel, classOrder } = require('./students');
+const { buildCourseInsights } = require('./courseInsights');
 
 const DAY_MS = 86400000;
 const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
+// The college's calendar day (IST). Time records are keyed by it, so the window is cut on the same days.
+const istDay = (ms) => new Date(ms + 330 * 60 * 1000).toISOString().slice(0, 10);
+const weekdayOf = (dayKeyIst) => new Date(`${dayKeyIst}T00:00:00Z`).getUTCDay(); // 0 = Sunday
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
 
 /** Flagged at this many non-benign proctor events (the proctor report's "medium" risk). */
@@ -80,7 +84,7 @@ function solvedByStudent(courseProblems, students, submissions) {
  * @param {number} a.days   look-back window for activity KPIs, leaderboards and trends
  * @param {number} a.now
  */
-function buildCourseAnalytics({ modules, students, groups, submissions, proctorEvents, plagiarismPairs, days, now }) {
+function buildCourseAnalytics({ modules, students, groups, submissions, proctorEvents, plagiarismPairs, courseTimes = [], days, now }) {
   const studentById = new Map(students.map((s) => [s.id, s]));
   const courseProblems = new Set(modules.flatMap((m) => m.problemIds || []));
   const windowStart = now - days * DAY_MS;
@@ -126,13 +130,14 @@ function buildCourseAnalytics({ modules, students, groups, submissions, proctorE
 
   // Window activity.
   const inWindow = subs.filter((s) => toMillis(s.submittedAt) >= windowStart);
-  const perUser = new Map(); // id -> { subs, days:Set }
+  const perUser = new Map(); // id -> { subs, days:Set, solved:Set }
   const perDay = new Map(); // date -> { subs, solved, users:Set }
   for (const s of inWindow) {
     const ms = toMillis(s.submittedAt);
-    const u = perUser.get(s.userId) || { subs: 0, days: new Set() };
+    const u = perUser.get(s.userId) || { subs: 0, days: new Set(), solved: new Set() };
     u.subs += 1;
     u.days.add(dayKey(ms));
+    if (s.verdict === 'Accepted') u.solved.add(s.problemId);
     perUser.set(s.userId, u);
     const d = perDay.get(dayKey(ms)) || { subs: 0, solved: 0, users: new Set() };
     d.subs += 1;
@@ -141,12 +146,35 @@ function buildCourseAnalytics({ modules, students, groups, submissions, proctorE
     perDay.set(dayKey(ms), d);
   }
 
+  // Time spent in the course: the per-student roll-up the timer writes (total plus a per-day map keyed by IST day).
+  // Only students in scope count. Time exists from the day tracking was switched on, so older work shows none.
+  const windowStartKey = istDay(windowStart);
+  const timeByStudent = new Map(); // id -> { total, inWindow }
+  const minutesByDay = new Map();  // IST day -> seconds across students
+  const weekdaySeconds = [0, 0, 0, 0, 0, 0, 0];
+  for (const t of courseTimes) {
+    if (!studentById.has(t.userId)) continue;
+    let inWindow = 0;
+    for (const [day, secs] of Object.entries(t.byDay || {})) {
+      if (day < windowStartKey) continue;
+      inWindow += secs;
+      minutesByDay.set(day, (minutesByDay.get(day) || 0) + secs);
+      weekdaySeconds[weekdayOf(day)] += secs;
+    }
+    timeByStudent.set(t.userId, { total: t.seconds || 0, inWindow });
+  }
+  const timers = [...timeByStudent.values()].filter((t) => t.inWindow > 0);
+  const avgActiveSeconds = timers.length ? Math.round(timers.reduce((n, t) => n + t.inWindow, 0) / timers.length) : 0;
+
   // Continuous daily series (zero-filled) so a quiet day reads as 0, not a gap.
   const daily = [];
   for (let i = days - 1; i >= 0; i -= 1) {
     const key = dayKey(now - i * DAY_MS);
     const d = perDay.get(key);
-    daily.push({ date: key, subs: d?.subs ?? 0, solved: d?.solved ?? 0, activeUsers: d?.users.size ?? 0 });
+    daily.push({
+      date: key, subs: d?.subs ?? 0, solved: d?.solved ?? 0, activeUsers: d?.users.size ?? 0,
+      minutes: Math.round((minutesByDay.get(istDay(now - i * DAY_MS)) || 0) / 60),
+    });
   }
 
   const mostActiveUsers = [...perUser.entries()]
@@ -208,6 +236,11 @@ function buildCourseAnalytics({ modules, students, groups, submissions, proctorE
     unitsDone: r.unitsDone, unitsTotal: r.unitsTotal,
     lastActiveMs: lastActiveMs.get(r.st.id) || null,
     activeInWindow: perUser.has(r.st.id),
+    subsInWindow: perUser.get(r.st.id)?.subs ?? 0,
+    solvedInWindow: perUser.get(r.st.id)?.solved.size ?? 0,
+    timeSeconds: timeByStudent.get(r.st.id)?.total ?? 0,
+    timeInWindowSeconds: timeByStudent.get(r.st.id)?.inWindow ?? 0,
+    suspicious: flags.has(r.st.id),
   })).sort((a, b) => a.percent - b.percent || String(a.name).localeCompare(String(b.name)));
 
   // Completion per class (year + section): the HOD's view across classes.
@@ -223,6 +256,7 @@ function buildCourseAnalytics({ modules, students, groups, submissions, proctorE
     .map((g) => ({ label: g.label, ...summarise(g.rows, totalProblems) }));
 
   const summary = summarise(progressRows, totalProblems);
+  const insights = buildCourseInsights({ summary, units, students: table, flagged, daily, days, now });
   return {
     totalStudents: students.length,
     kpis: {
@@ -232,6 +266,13 @@ function buildCourseAnalytics({ modules, students, groups, submissions, proctorE
       inProgressUsers: { value: summary.inProgress, total: students.length },
       notStartedUsers: { value: notStartedUsers, total: students.length },
       suspicious: { value: flagged.length, total: students.length },
+      avgActiveSeconds: { value: avgActiveSeconds, series: daily.map((d) => d.minutes) },
+    },
+    insights,
+    time: {
+      hasData: timeByStudent.size > 0,
+      // Minutes of learning per weekday over the window, Sunday first.
+      weekdayMinutes: weekdaySeconds.map((sec) => Math.round(sec / 60)),
     },
     summary,
     units, daily, mostActiveUsers, mostActiveGroups, flagged,

@@ -97,7 +97,9 @@ export function TimerWidget({
     const pid = pidRef.current;
     const send = Math.max(1, Math.min(delta, MAX_PER_CALL));
     try {
-      const res = await api.post<{ success: boolean; data: ProblemTime }>(`/api/student/problems/${pid}/time`, { seconds: send, solved: solvedRef.current });
+      // The course the student came from (the problem page link carries it) feeds the faculty activity report.
+      const courseId = new URLSearchParams(window.location.search).get("course");
+      const res = await api.post<{ success: boolean; data: ProblemTime }>(`/api/student/problems/${pid}/time`, { seconds: send, solved: solvedRef.current, ...(courseId ? { course_id: courseId } : {}) });
       if (pidRef.current === pid) {
         syncedRef.current += delta < 1 ? 0 : send;
         setSolvedAt(res.data.data.solvedAtSeconds);

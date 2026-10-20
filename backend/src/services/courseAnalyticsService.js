@@ -10,6 +10,7 @@ const classroomRepo = require('../repositories/classroomRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const proctorEventRepo = require('../repositories/proctorEventRepository');
 const plagiarismRepo = require('../repositories/plagiarismResultRepository');
+const problemTimeRepo = require('../repositories/problemTimeRepository');
 const analytics = require('./analyticsService');
 const { buildCourseAnalytics } = require('../utils/courseAnalytics');
 const { resolveCourse, tally, studentProgress, summarise } = require('../utils/courseProgress');
@@ -17,7 +18,7 @@ const { activeStudents } = require('../utils/students');
 
 const TTL_SECONDS = 120;
 // Bump when the response shape or aggregation changes (the cache outlives deploys).
-const VERSION = 3;
+const VERSION = 4;
 const ALLOWED_DAYS = new Set([7, 30, 182]);
 
 /** Same population rule as the analytics snapshot: own classes' students, department, or everyone. */
@@ -25,6 +26,17 @@ function scopedStudents(scope, studentsMap) {
   const inScope = (s) => (scope.memberIds ? scope.memberIds.has(s.id) : scope.dept === null || (s.department || null) === scope.dept);
   // Alumni leave every active view: they would sit at 0% and drag the class average down.
   return new Map(activeStudents([...studentsMap.values()]).filter(inScope).map((s) => [s.id, s]));
+}
+
+/**
+ * Groups = classrooms, with members trimmed to the people this viewer may see. A classroom with nobody in scope is
+ * dropped (e.g. another department's class for an HOD). Shared with the per-question statistics.
+ */
+async function loadGroups(scope, scoped, allClassrooms) {
+  return (await Promise.all(allClassrooms.map(async (c) => {
+    const members = (await classroomRepo.listMembers(c.id)).map((m) => m.userId).filter((id) => scoped.has(id));
+    return { id: c.id, name: c.name || 'Untitled class', memberIds: new Set(members) };
+  }))).filter((g) => g.memberIds.size > 0);
 }
 
 async function compute({ courseId, scope, days, classroomIds }) {
@@ -45,29 +57,25 @@ async function compute({ courseId, scope, days, classroomIds }) {
   // A faculty member sees their own classes' students, HOD their department, admin everyone.
   const scoped = scopedStudents(scope, studentsMap);
 
-  // Groups = classrooms, with members trimmed to the people this viewer may see.
-  // A classroom with nobody in scope is dropped (e.g. another department's class for an HOD).
-  const groups = (await Promise.all(allClassrooms.map(async (c) => {
-    const members = (await classroomRepo.listMembers(c.id)).map((m) => m.userId).filter((id) => scoped.has(id));
-    return { id: c.id, name: c.name || 'Untitled class', memberIds: new Set(members) };
-  }))).filter((g) => g.memberIds.size > 0);
+  const groups = await loadGroups(scope, scoped, allClassrooms);
 
   const chosen = classroomIds.length ? groups.filter((g) => classroomIds.includes(g.id)) : groups;
   const studentIds = classroomIds.length ? new Set(chosen.flatMap((g) => [...g.memberIds])) : new Set(scoped.keys());
   const students = [...studentIds].map((id) => scoped.get(id)).filter(Boolean)
     .map((s) => ({ id: s.id, name: s.name, rollNo: s.rollNo || null, section: s.section || null, year: s.year ?? null }));
 
-  const [submissions, proctorEvents, plagiarismPairs] = await Promise.all([
+  const [submissions, proctorEvents, plagiarismPairs, courseTimes] = await Promise.all([
     submissionRepo.listAllForAnalytics(),
     proctorEventRepo.listAllForAnalytics(),
     plagiarismRepo.listAllPairs(),
+    problemTimeRepo.listByCourse(courseId),
   ]);
 
   const result = buildCourseAnalytics({
     modules: modules.map((m) => ({ id: m.id, title: m.title, problemIds: m.problemIds || [] })),
     students,
     groups: chosen,
-    submissions, proctorEvents, plagiarismPairs,
+    submissions, proctorEvents, plagiarismPairs, courseTimes,
     days, now: Date.now(),
   });
 
@@ -124,3 +132,6 @@ exports.getCompletionSummary = async (req) => {
   const cv = await getVersion('courses');
   return cached(`analytics:course-summary:v2:c${cv}:${analytics.scopeKey(scope)}`, TTL_SECONDS, () => computeSummary(scope));
 };
+
+exports.scopedStudents = scopedStudents;
+exports.loadGroups = loadGroups;
