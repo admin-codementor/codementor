@@ -17,4 +17,12 @@ const classLabel = (year, section) => {
 // Sort key: by year, then section ("No section" last).
 const classOrder = (year, section) => `${section ? '0' : '1'}|${String(year ?? 99).padStart(2, '0')}|${section || ''}`;
 
-module.exports = { isActive, activeStudents, classLabel, classOrder };
+// The value a student is grouped under on a cohort dimension (department, year or section). Always a string, so a
+// year stored as a number matches the "2" the browser sends back, and a section is grouped WITH its year ("Year 2 · A").
+const cohortValue = (student, dim) => {
+  if (dim === 'section') return student?.section ? classLabel(student.year, student.section) : 'Unassigned';
+  const v = student?.[dim];
+  return v == null || v === '' ? 'Unassigned' : String(v);
+};
+
+module.exports = { isActive, activeStudents, classLabel, classOrder, cohortValue };

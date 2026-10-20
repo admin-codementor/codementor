@@ -22,6 +22,7 @@ const { toB64, fromB64 } = require('../utils/judge0Encoding');
 const { submitCheckerBatch, pollCheckerBatch } = require('../utils/checkerRunner');
 const problemRepo = require('../repositories/problemRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
+const examScoring = require('../utils/examScoring');
 const contestRepo = require('../repositories/contestRepository');
 const examRepo = require('../repositories/examRepository');
 const submissionRepo = require('../repositories/submissionRepository');
@@ -292,7 +293,7 @@ async function updateTopicMastery(userId, problemId, isAccepted, hintUsed) {
     const problem = await problemRepo.getById(problemId);
     const tags = problem?.tags || [];
     for (const tag of tags) {
-      await topicMasteryRepo.recordAttempt(userId, tag, { solved: isAccepted, hintUsed });
+      await topicMasteryRepo.recordAttempt(userId, tag, { solved: isAccepted, hintUsed, problemId });
     }
   } catch (err) {
     console.error('Topic mastery update failed:', err.message);
@@ -402,13 +403,16 @@ async function finalize(jobId, job, acc, testCasesLength) {
         ? (maxScore > 0 ? Math.round((acc.earnedScore / maxScore) * maxMarks * 100) / 100 : 0)
         : (accepted ? maxMarks : 0);
 
-      await examRepo.recordCodingAnswer(exam_id, user_id, problem_id, {
+      // The exam mark for a problem is the BEST submission so far, so a worse (or broken) re-submit cannot cancel an
+      // accepted answer.
+      const previous = (await examRepo.getAttempt(exam_id, user_id))?.codingState?.[problem_id];
+      await examRepo.recordCodingAnswer(exam_id, user_id, problem_id, examScoring.betterCodingAnswer(previous, {
         status: 'answered',
         sectionId: section?.id || section_id || null,
         submissionId: submission.id,
         verdict: acc.finalVerdict.description,
         score: awardedScore,
-      });
+      }));
     } catch (e) {
       console.error('Exam coding reconciliation failed:', e.message);
     }

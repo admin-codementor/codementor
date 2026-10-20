@@ -1,13 +1,16 @@
 // Pure aggregation for the per-course faculty dashboard. No I/O: callers hand in
 // plain arrays, so every number here can be checked against a hand-built fixture.
 
+const { tally, studentProgress, summarise } = require('./courseProgress');
+const { classLabel, classOrder } = require('./students');
+
 const DAY_MS = 86400000;
 const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
 
 /** Flagged at this many non-benign proctor events (the proctor report's "medium" risk). */
 const PROCTOR_FLAG_THRESHOLD = 3;
-const BENIGN_PROCTOR_EVENTS = new Set(['fullscreen_enter', 'exam_start', 'copy']);
+const { BENIGN_PROCTOR_EVENTS } = require('./proctorEvents');
 
 /**
  * How far along each student is, as a share of the course's problems solved.
@@ -86,37 +89,40 @@ function buildCourseAnalytics({ modules, students, groups, submissions, proctorE
   const subs = submissions.filter((s) => courseProblems.has(s.problemId) && studentById.has(s.userId));
 
   // Per student: ever-attempted / ever-solved (unit state is lifetime, not windowed).
-  const attempted = new Map(students.map((s) => [s.id, new Set()]));
-  const solved = new Map(students.map((s) => [s.id, new Set()]));
-  for (const s of subs) {
-    attempted.get(s.userId).add(s.problemId);
-    if (s.verdict === 'Accepted') solved.get(s.userId).add(s.problemId);
-  }
+  const { solved, attempted, lastActiveMs } = tally(courseProblems, students, subs);
 
   // Unit-wise completion: solved = every problem in the unit solved,
-  // partial = something attempted, notStarted = nothing attempted.
+  // partial = something attempted, notStarted = nothing attempted. A unit with no required
+  // problems is "empty": nothing to do, so it must not read as unstarted work.
   const units = modules.map((m) => {
     const pids = m.problemIds || [];
     let done = 0;
     let partial = 0;
     let notStarted = 0;
+    let fractionSum = 0;
     for (const st of students) {
       const sv = pids.filter((p) => solved.get(st.id).has(p)).length;
       const at = pids.filter((p) => attempted.get(st.id).has(p)).length;
-      if (pids.length > 0 && sv === pids.length) done += 1;
+      fractionSum += pids.length ? sv / pids.length : 0;
+      if (pids.length === 0) continue;
+      if (sv === pids.length) done += 1;
       else if (at > 0) partial += 1;
       else notStarted += 1;
     }
-    return { id: m.id, title: m.title, problemCount: pids.length, solved: done, partial, notStarted };
+    return {
+      id: m.id, title: m.title, problemCount: pids.length, empty: pids.length === 0,
+      solved: done, partial, notStarted,
+      // Share of the unit's problems the average student has solved.
+      avgPercent: pids.length && students.length ? Math.round((fractionSum / students.length) * 100) : 0,
+    };
   });
 
   const totalProblems = courseProblems.size;
-  let completedUsers = 0;
-  let notStartedUsers = 0;
-  for (const st of students) {
-    if (totalProblems > 0 && solved.get(st.id).size === totalProblems) completedUsers += 1;
-    if (attempted.get(st.id).size === 0) notStartedUsers += 1;
-  }
+  const progressRows = students.map((st) => ({
+    st, ...studentProgress(totalProblems, solved.get(st.id), attempted.get(st.id), modules),
+  }));
+  const completedUsers = progressRows.filter((r) => r.status === 'completed').length;
+  const notStartedUsers = progressRows.filter((r) => r.status === 'not_started').length;
 
   // Window activity.
   const inWindow = subs.filter((s) => toMillis(s.submittedAt) >= windowStart);
@@ -193,18 +199,52 @@ function buildCourseAnalytics({ modules, students, groups, submissions, proctorE
     .sort((a, b) => b.reasons.length - a.reasons.length || a.name.localeCompare(b.name));
 
   const series = (key) => daily.map((d) => d[key]);
+
+  // One row per student, for the course's student table and the clickable buckets.
+  const table = progressRows.map((r) => ({
+    id: r.st.id, name: r.st.name || 'Unknown', rollNo: r.st.rollNo || null,
+    section: r.st.section || null, year: r.st.year ?? null, classLabel: classLabel(r.st.year, r.st.section),
+    solved: r.solved, total: r.total, percent: r.percent, status: r.status,
+    unitsDone: r.unitsDone, unitsTotal: r.unitsTotal,
+    lastActiveMs: lastActiveMs.get(r.st.id) || null,
+    activeInWindow: perUser.has(r.st.id),
+  })).sort((a, b) => a.percent - b.percent || String(a.name).localeCompare(String(b.name)));
+
+  // Completion per class (year + section): the HOD's view across classes.
+  const byClassMap = new Map();
+  for (const r of progressRows) {
+    const key = classLabel(r.st.year, r.st.section);
+    const list = byClassMap.get(key) || { label: key, order: classOrder(r.st.year, r.st.section), rows: [] };
+    list.rows.push(r);
+    byClassMap.set(key, list);
+  }
+  const byClass = [...byClassMap.values()]
+    .sort((a, b) => a.order.localeCompare(b.order))
+    .map((g) => ({ label: g.label, ...summarise(g.rows, totalProblems) }));
+
+  const summary = summarise(progressRows, totalProblems);
   return {
     totalStudents: students.length,
     kpis: {
       activeUsers: { value: perUser.size, total: students.length, series: series('activeUsers') },
       submissions: { value: inWindow.length, series: series('subs') },
       completedUsers: { value: completedUsers, total: students.length },
+      inProgressUsers: { value: summary.inProgress, total: students.length },
       notStartedUsers: { value: notStartedUsers, total: students.length },
       suspicious: { value: flagged.length, total: students.length },
     },
+    summary,
     units, daily, mostActiveUsers, mostActiveGroups, flagged,
-    completion: completionStats(totalProblems, students, solved),
+    students: table,
+    byClass,
+    // Same shape as before (the bars still feed the shared histogram), now counting from the shared definition.
+    completion: {
+      totalProblems, completed: completedUsers, avgPercent: summary.avgPercent,
+      buckets: COMPLETION_BUCKETS.map((b, i) => ({
+        ...b, count: progressRows.filter((r) => completionBucketIndex(r.solved, totalProblems) === i).length,
+      })),
+    },
   };
 }
 
-module.exports = { buildCourseAnalytics, completionStats, solvedByStudent, COMPLETION_BUCKETS, PROCTOR_FLAG_THRESHOLD };
+module.exports = { buildCourseAnalytics, completionStats, solvedByStudent, completionBucketIndex, COMPLETION_BUCKETS, PROCTOR_FLAG_THRESHOLD };

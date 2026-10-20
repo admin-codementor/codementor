@@ -25,6 +25,7 @@ import { interactiveSurfaceSx } from "@/components/ui/interactive";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { radius, typeScale } from "@/theme/tokens";
 import { useCourseCompletionQuery, type CourseCompletion } from "@/lib/queries/courseAnalytics";
+import { getRole } from "@/lib/auth";
 import LinearProgress from "@mui/material/LinearProgress";
 
 interface CourseRow {
@@ -108,7 +109,7 @@ function CourseCard({ course, completion, onClick }: { course: CourseRow; comple
           <Box sx={{ flex: 1 }} />
           {completion && completion.totalProblems > 0 && (
             completion.students === 0 ? (
-              <Typography variant="caption" color="text.secondary">No students in your classes yet</Typography>
+              <Typography variant="caption" color="text.secondary">{getRole() === "faculty" ? "No students in your classes yet" : "No active students in this view yet"}</Typography>
             ) : (
               <Box>
                 <LinearProgress
@@ -116,8 +117,11 @@ function CourseCard({ course, completion, onClick }: { course: CourseRow; comple
                   aria-label={`Average ${completion.avgPercent}% of the course solved`}
                   sx={{ height: 6, borderRadius: radius.xs, mb: 0.5 }}
                 />
-                <Typography variant="caption" color="text.secondary">
-                  {completion.avgPercent}% on average · {completion.completed} of {completion.students} finished
+                <Typography variant="caption" color="text.secondary" component="p">
+                  {completion.avgPercent}% on average
+                </Typography>
+                <Typography variant="caption" color="text.secondary" component="p">
+                  {completion.completed} completed · {completion.inProgress} in progress · {completion.notStarted} not started
                 </Typography>
               </Box>
             )

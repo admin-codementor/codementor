@@ -1,6 +1,7 @@
 const courseRepo = require('../repositories/courseRepository');
 const problemRepo = require('../repositories/problemRepository');
 const submissionRepo = require('../repositories/submissionRepository');
+const { resolveCourse, percentOf } = require('../utils/courseProgress');
 
 const toISO = (value) => {
   if (!value) return null;
@@ -16,7 +17,7 @@ const toISO = (value) => {
 function moduleProgress(problemIds, solvedSet, dueAt, now = Date.now()) {
   const total = problemIds.length;
   const solved = problemIds.filter((pid) => solvedSet.has(pid)).length;
-  const percent = total > 0 ? Math.round((solved / total) * 100) : 0;
+  const percent = percentOf(solved, total); // 100 only when finished, never rounds up to it
   const due = toISO(dueAt);
   const overdue = !!due && new Date(due).getTime() < now && solved < total;
 
@@ -46,9 +47,13 @@ exports.getCourses = async (req, res) => {
     const everyProblemId = new Set();
     const everySolvedId = new Set();
 
-    const data = await Promise.all(courses.map(async (c) => {
-      const modules = await courseRepo.getModules(c.id);
-      const problemIds = [...new Set(modules.flatMap(m => m.problemIds || []))];
+    // Same definition faculty see: only existing, published problems count, each once per course.
+    const modulesByCourse = await Promise.all(courses.map((c) => courseRepo.getModules(c.id)));
+    const problemsById = await problemRepo.getMapByIds([...new Set(modulesByCourse.flatMap((ms) => ms.flatMap((m) => m.problemIds || [])))]);
+
+    const data = courses.map((c, i) => {
+      const { units, problems } = resolveCourse(modulesByCourse[i], problemsById);
+      const problemIds = [...problems];
       const solvedCount = problemIds.filter(pid => mySolvedIds.has(pid)).length;
       for (const pid of problemIds) {
         everyProblemId.add(pid);
@@ -57,10 +62,10 @@ exports.getCourses = async (req, res) => {
 
       // Enough per-module detail for the list to show where the student is,
       // without shipping every problem of every course.
-      const moduleSummaries = modules.map((m) => ({
+      const moduleSummaries = units.map((m) => ({
         id: m.id,
         title: m.title,
-        ...moduleProgress(m.problemIds || [], mySolvedIds, m.dueAt, now),
+        ...moduleProgress(m.problemIds, mySolvedIds, m.dueAt, now),
       }));
 
       // What to do next, and what is most pressing.
@@ -73,7 +78,7 @@ exports.getCourses = async (req, res) => {
         id: c.id,
         title: c.title,
         description: c.description,
-        moduleCount: modules.length,
+        moduleCount: units.length,
         problemCount: problemIds.length,
         solvedCount,
         modules: moduleSummaries,
@@ -81,7 +86,7 @@ exports.getCourses = async (req, res) => {
         nextDue: dueModules[0] ? { id: dueModules[0].id, title: dueModules[0].title, dueAt: dueModules[0].dueAt } : null,
         overdueCount: moduleSummaries.filter((m) => m.status === 'overdue').length,
       };
-    }));
+    });
 
     // `totals` sits beside `data` rather than inside it: every existing caller
     // reads the array and is unaffected.
@@ -108,9 +113,12 @@ exports.getCourseById = async (req, res) => {
       return res.status(404).json({ success: false, error: 'Course not found' });
     }
 
-    const modules = await courseRepo.getModules(id);
-    const allProblemIds = [...new Set(modules.flatMap(m => m.problemIds || []))];
-    const problemsMap = await problemRepo.getMapByIds(allProblemIds);
+    const rawModules = await courseRepo.getModules(id);
+    const problemsMap = await problemRepo.getMapByIds([...new Set(rawModules.flatMap(m => m.problemIds || []))]);
+    // Existing, published problems only: a draft cannot be opened and a deleted one is gone. The module rows and the
+    // course header both read from this one list, so they cannot disagree.
+    const { units: modules, problems: required } = resolveCourse(rawModules, problemsMap);
+    const allProblemIds = [...required];
 
     const idSet = new Set(allProblemIds);
     const mySubs = await submissionRepo.listByUser(userId);
@@ -118,9 +126,8 @@ exports.getCourseById = async (req, res) => {
 
     const now = Date.now();
     const moduleRows = modules.map((m) => {
-      const problems = (m.problemIds || [])
+      const problems = m.problemIds
         .map(pid => problemsMap.get(pid))
-        .filter(Boolean)
         .map(p => ({
           id: p.id, title: p.title, difficulty: p.difficulty, tags: p.tags || [],
           is_solved: solvedSet.has(p.id),
@@ -150,7 +157,7 @@ exports.getCourseById = async (req, res) => {
         description: course.description,
         problemCount: allProblemIds.length,
         solvedCount: solvedTotal,
-        percent: allProblemIds.length > 0 ? Math.round((solvedTotal / allProblemIds.length) * 100) : 0,
+        percent: percentOf(solvedTotal, allProblemIds.length),
         nextUp: nextModule
           ? { moduleId: nextModule.id, moduleTitle: nextModule.title, problemId: nextModule.nextProblemId }
           : null,

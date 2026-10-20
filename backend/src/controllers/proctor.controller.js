@@ -1,4 +1,5 @@
 const { canManageOwnedBy } = require('../middleware/role.middleware');
+const { isFlagEvent } = require('../utils/proctorEvents');
 const userRepo = require('../repositories/userRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
 const proctorEventRepo = require('../repositories/proctorEventRepository');
@@ -54,7 +55,7 @@ exports.getAssignmentReport = async (req, res) => {
       const u = byUser[e.userId];
       u.counts[e.eventType] = (u.counts[e.eventType] || 0) + 1;
       // Flaggable events (exclude benign enters/starts) contribute to the total.
-      if (!['fullscreen_enter', 'exam_start', 'copy'].includes(e.eventType)) u.total += 1;
+      if (isFlagEvent(e.eventType)) u.total += 1;
       const createdAtMs = e.createdAt?.toMillis?.() ?? new Date(e.createdAt).getTime();
       if (!u.lastAt || createdAtMs > u.lastAt) u.lastAt = createdAtMs;
     }

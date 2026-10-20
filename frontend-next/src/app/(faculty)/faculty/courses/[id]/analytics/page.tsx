@@ -4,6 +4,7 @@ import * as React from "react";
 import NextLink from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
 import Breadcrumbs from "@mui/material/Breadcrumbs";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
@@ -17,15 +18,24 @@ import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableContainer from "@mui/material/TableContainer";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import {
-  CheckCircleOutlineIcon, ChevronRightIcon, GroupsOutlinedIcon, PolicyOutlinedIcon, SchoolOutlinedIcon, TimerOutlinedIcon,
+  CheckCircleOutlineIcon, ChevronRightIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, PolicyOutlinedIcon, SchoolOutlinedIcon, TimerOutlinedIcon, TrackChangesOutlinedIcon,
 } from "@/components/ui/icons";
 import { PageHeader } from "@/components/ui/PageHeader";
 import { EmptyState } from "@/components/ui/States";
 import { ChartCard, ChartRow, FilterBar, KpiRow, KpiTile, Leaderboard, StackedBars, TrendLines, periodDays } from "@/components/analytics";
 import type { GroupOption, Period } from "@/components/analytics";
 import { DistributionChart } from "@/components/faculty/analytics/Panels";
+import { CourseStudentsTable, type StatusFilter } from "@/components/faculty/CourseStudentsTable";
+import { headRow } from "@/components/faculty/DepartmentTables";
+import { getRole } from "@/lib/auth";
 import { useCourseAnalyticsQuery, type CourseAnalytics } from "@/lib/queries/courseAnalytics";
 import { apiErrorMessage } from "@/lib/apiError";
 import { radius } from "@/theme/tokens";
@@ -72,12 +82,78 @@ function FlaggedDialog({ open, onClose, rows, onStudent }: {
   );
 }
 
+/** Per-unit figures with real numbers: how many students finished, started, or have not touched each unit. */
+function UnitsTable({ units }: { units: CourseAnalytics["units"] }) {
+  return (
+    <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
+      <TableContainer sx={{ overflowX: "auto" }}>
+        <Table size="small" aria-label="Progress by unit" sx={{ minWidth: 600 }}>
+          <TableHead>
+            <TableRow sx={headRow}>
+              <TableCell>Unit</TableCell><TableCell align="right">Problems</TableCell><TableCell align="right">Finished it</TableCell>
+              <TableCell align="right">Started, not finished</TableCell><TableCell align="right">Not started</TableCell><TableCell align="right">Average solved</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {units.map((u) => (
+              <TableRow key={u.id} sx={{ "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } }}>
+                <TableCell>{u.title}</TableCell>
+                <TableCell align="right">{u.problemCount}</TableCell>
+                {u.empty ? (
+                  <TableCell colSpan={4} align="right"><Typography variant="caption" color="text.disabled">No problems in this unit</Typography></TableCell>
+                ) : (
+                  <>
+                    <TableCell align="right">{u.solved}</TableCell><TableCell align="right">{u.partial}</TableCell>
+                    <TableCell align="right">{u.notStarted}</TableCell><TableCell align="right">{u.avgPercent}%</TableCell>
+                  </>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Card>
+  );
+}
+
+/** How each class (year and section) is doing, side by side. */
+function ByClassTable({ rows }: { rows: CourseAnalytics["byClass"] }) {
+  return (
+    <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
+      <TableContainer sx={{ overflowX: "auto" }}>
+        <Table size="small" aria-label="Completion by class" sx={{ minWidth: 600 }}>
+          <TableHead>
+            <TableRow sx={headRow}>
+              <TableCell>Class</TableCell><TableCell align="right">Students</TableCell><TableCell align="right">Completed</TableCell>
+              <TableCell align="right">In progress</TableCell><TableCell align="right">Not started</TableCell>
+              <TableCell align="right">Average</TableCell><TableCell align="right">Median</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {rows.map((c) => (
+              <TableRow key={c.label} sx={{ "& td": { borderColor: "outlineVariant" }, "&:last-child td": { border: 0 } }}>
+                <TableCell>{c.label}</TableCell><TableCell align="right">{c.students}</TableCell><TableCell align="right">{c.completed}</TableCell>
+                <TableCell align="right">{c.inProgress}</TableCell><TableCell align="right">{c.notStarted}</TableCell>
+                <TableCell align="right">{c.avgPercent}%</TableCell><TableCell align="right">{c.medianPercent}%</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Card>
+  );
+}
+
 export default function CourseAnalyticsPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const [period, setPeriod] = React.useState<Period>("7d");
   const [groups, setGroups] = React.useState<GroupOption[]>([]);
   const [flaggedOpen, setFlaggedOpen] = React.useState(false);
+  const [status, setStatus] = React.useState<StatusFilter>("all");
+  const [bucket, setBucket] = React.useState<number | null>(null);
+  const studentsRef = React.useRef<HTMLDivElement | null>(null);
+  const isHod = getRole() === "hod" || getRole() === "admin";
 
   const days = periodDays[period];
   const query = useCourseAnalyticsQuery(id, days, groups.map((g) => String(g.id)));
@@ -120,8 +196,8 @@ export default function CourseAnalyticsPage() {
           <EmptyState
             icon={<GroupsOutlinedIcon />}
             title="No students to show yet"
-            description="Analytics covers the students in your classes. Create a class, share its join code, and their progress on this course shows up here."
-            action={<Button component={NextLink} href="/faculty/classes" variant="outlined">Go to Classes</Button>}
+            description={isHod ? "No active students are in this view yet. Students appear here once their accounts exist in your department." : "Analytics covers the students in your classes. Create a class, share its join code, and their progress on this course shows up here."}
+            action={isHod ? undefined : <Button component={NextLink} href="/faculty/classes" variant="outlined">Go to Classes</Button>}
           />
         </Card>
       ) : (
@@ -133,6 +209,9 @@ export default function CourseAnalyticsPage() {
             selectedGroups={groupOptions.filter((o) => groups.some((g) => g.id === o.id))}
             onGroupsChange={setGroups}
           />
+          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 2 }}>
+            The period changes only the activity figures and charts (active students, submissions, trends). Completion and progress count everything ever solved.
+          </Typography>
 
           <KpiRow min={170}>
             <KpiTile
@@ -157,7 +236,16 @@ export default function CourseAnalyticsPage() {
               value={d.kpis.completedUsers.value}
               total={d.kpis.completedUsers.total}
               accent="success"
-              help="Students who have solved every problem in the course"
+              help="Solved every problem in the course (accepted at any time). Click to list them."
+              onClick={() => { setBucket(null); setStatus("completed"); studentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+            />
+            <KpiTile
+              icon={<TrackChangesOutlinedIcon />}
+              label="In progress"
+              value={d.kpis.inProgressUsers.value}
+              total={d.kpis.inProgressUsers.total}
+              help="Tried at least one problem and not finished. Includes students who tried but have solved nothing yet. Click to list them."
+              onClick={() => { setBucket(null); setStatus("in_progress"); studentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
             />
             <KpiTile
               icon={<SchoolOutlinedIcon />}
@@ -165,7 +253,15 @@ export default function CourseAnalyticsPage() {
               value={d.kpis.notStartedUsers.value}
               total={d.kpis.notStartedUsers.total}
               accent="warning"
-              help="Students with no attempt on any problem in the course"
+              help="Never submitted anything for this course. Click to list them."
+              onClick={() => { setBucket(null); setStatus("not_started"); studentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }); }}
+            />
+            <KpiTile
+              icon={<InsightsOutlinedIcon />}
+              label="Average progress"
+              value={`${d.summary.avgPercent}%`}
+              accent="tertiary"
+              help={`Median ${d.summary.medianPercent}%. Share of the course's ${d.summary.totalProblems} problems solved, over every student in this view.`}
             />
             <KpiTile
               icon={<PolicyOutlinedIcon />}
@@ -181,28 +277,38 @@ export default function CourseAnalyticsPage() {
           <ChartRow cols={1}>
             <ChartCard
               title="Unit-wise completion"
-              subtitle="Each unit is a course module. Solved = every problem in it solved; Partial = started."
+              subtitle="Each unit is a course module. Solved = every problem in it solved; Partial = started but not finished; empty units are left out."
               height={320}
               empty={d.units.length === 0}
               emptyDescription="Add modules with problems to this course to see where students get stuck."
             >
               <StackedBars
                 height={320}
-                rows={d.units.map((u) => ({ label: u.title, Solved: u.solved, Partial: u.partial, "Not started": u.notStarted }))}
+                rows={d.units.filter((u) => !u.empty).map((u) => ({ label: u.title, Solved: u.solved, Partial: u.partial, "Not started": u.notStarted }))}
               />
             </ChartCard>
           </ChartRow>
+          {d.units.length > 0 && <Box sx={{ mb: 3 }}><UnitsTable units={d.units} /></Box>}
 
           <ChartRow cols={1}>
             <ChartCard
               title="How far along each student is"
-              subtitle={`Share of this course's ${d.completion.totalProblems} problems each student has solved. Average ${d.completion.avgPercent}%; ${d.completion.completed} of ${d.totalStudents} finished it.`}
+              subtitle={`Share of this course's ${d.completion.totalProblems} problems each student has solved. Average ${d.summary.avgPercent}%, median ${d.summary.medianPercent}%; ${d.summary.completed} of ${d.totalStudents} finished it. The 0% bar includes students who tried but solved nothing.`}
               height={240}
               empty={d.completion.totalProblems === 0}
               emptyTitle="This course has no problems yet"
               emptyDescription="Add problems to its modules to see how far along each student is."
             >
-              <DistributionChart histogram={d.completion.buckets} label="Course completed" />
+              <DistributionChart
+                histogram={d.completion.buckets}
+                label="Share of the course solved (click a bar to list those students)"
+                onBarClick={(b) => {
+                  const i = d.completion.buckets.findIndex((x) => x.bucket === b.bucket);
+                  setStatus("all");
+                  setBucket(i >= 0 ? i : null);
+                  studentsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+                }}
+              />
             </ChartCard>
           </ChartRow>
 
@@ -242,6 +348,32 @@ export default function CourseAnalyticsPage() {
               emptyDescription="Classes appear once students have joined."
             />
           </ChartRow>
+
+          {d.byClass.length > 1 && (
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>Completion by class</Typography>
+              <ByClassTable rows={d.byClass} />
+            </Box>
+          )}
+
+          <Box ref={studentsRef} sx={{ mb: 3, scrollMarginTop: 80 }}>
+            <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 1 }}>Students</Typography>
+            <CourseStudentsTable
+              rows={d.students} status={status} onStatus={(v) => { setBucket(null); setStatus(v); }}
+              bucket={bucket} onBucket={setBucket} courseTitle={d.course.title}
+              bucketLabel={bucket == null ? null : (d.completion.buckets[bucket]?.bucket ?? null)}
+            />
+          </Box>
+
+          <Typography variant="caption" color="text.secondary" component="p" sx={{ maxWidth: 760 }}>
+            How these figures are counted: a problem is <strong>solved</strong> once a submission to it was accepted, at any time. A course
+            counts only problems that still exist and are published, each once even if it appears in two units
+            {d.course.skippedProblems.deleted + d.course.skippedProblems.draft > 0
+              ? ` (${d.course.skippedProblems.deleted} deleted and ${d.course.skippedProblems.draft} draft problem${d.course.skippedProblems.deleted + d.course.skippedProblems.draft === 1 ? "" : "s"} are left out here)`
+              : ""}.
+            A student is <strong>completed</strong> with every problem solved, <strong>not started</strong> with no submission at all, and
+            otherwise <strong>in progress</strong>. Graduated students are not counted.
+          </Typography>
 
           <FlaggedDialog
             open={flaggedOpen}

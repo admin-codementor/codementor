@@ -4,6 +4,8 @@ const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
 const classroomRepo = require('../repositories/classroomRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
+const { rankRows, sameClass } = require('../utils/ranking');
+const { isActive } = require('../utils/students');
 const submissionRepo = require('../repositories/submissionRepository');
 const mistakeNoteRepo = require('../repositories/mistakeNoteRepository');
 const publicHandleRepo = require('../repositories/publicHandleRepository');
@@ -117,21 +119,17 @@ exports.getDashboardData = async (req, res) => {
       solvedCountByUser[s.userId].add(s.problemId);
     }
 
+    // Same ranking rule as the leaderboard (utils/ranking.js): ties share a rank and a student with nothing solved yet is
+    // unranked (rank 0). Graduated students are not part of the ranking.
     const rankWithin = (ids) => {
-      const ordered = ids
-        .map((id) => ({ id, solved: solvedCountByUser[id]?.size || 0 }))
-        .sort((a, b) => b.solved - a.solved);
-      const position = ordered.findIndex((r) => r.id === userId) + 1;
-      return { rank: position, outOf: ordered.length };
+      const ordered = rankRows(ids.map((id) => ({ id, name: studentsMap.get(id)?.name || '', solved: solvedCountByUser[id]?.size || 0 })), (r) => r.solved);
+      return { rank: ordered.find((r) => r.id === userId)?.rank ?? 0, outOf: ordered.length };
     };
 
-    const allIds = [...studentsMap.keys()];
+    const allIds = [...studentsMap.keys()].filter((id) => isActive(studentsMap.get(id)));
     const myProfileForRank = studentsMap.get(userId) || {};
     const classIds = myProfileForRank.department && myProfileForRank.section
-      ? allIds.filter((id) => {
-        const p = studentsMap.get(id) || {};
-        return p.department === myProfileForRank.department && p.section === myProfileForRank.section;
-      })
+      ? allIds.filter((id) => sameClass(myProfileForRank, studentsMap.get(id) || {}))
       : [];
 
     const overall = rankWithin(allIds);
@@ -363,11 +361,12 @@ exports.getLeaderboard = async (req, res) => {
     const me = studentsMap.get(req.user.id) || {};
 
     const inScope = (profile) => {
+      if (!isActive(profile)) return false; // alumni are not ranked
       if (scope === 'college') return true;
       if (!me.department || profile.department !== me.department) return false;
       if (scope === 'department') return true;
-      // class: same department AND same section.
-      return !!me.section && profile.section === me.section;
+      // class: same department, same year AND same section (section A exists in every year).
+      return sameClass(me, profile);
     };
 
     const scopedIds = [...studentsMap.keys()].filter((id) => inScope(studentsMap.get(id) || {}));
@@ -391,7 +390,7 @@ exports.getLeaderboard = async (req, res) => {
     // a student who has not published simply has no link.
     const handleByUser = await publicHandleRepo.mapByUser();
 
-    const ranked = scopedIds
+    const boardRows = scopedIds
       .map((id) => {
         const profile = studentsMap.get(id) || {};
         const stat = statsByUser.get(id);
@@ -406,9 +405,8 @@ exports.getLeaderboard = async (req, res) => {
           solvedCount: stat.solved.size,
           totalSubmissions: stat.total,
         };
-      })
-      .sort((a, b) => b.solvedCount - a.solvedCount || a.name.localeCompare(b.name))
-      .map((r, index) => ({ ...r, rank: index + 1, score: r.solvedCount * 10 }));
+      });
+    const ranked = rankRows(boardRows, (r) => r.solvedCount).map((r) => ({ ...r, score: r.solvedCount * 10 }));
 
     const myRow = ranked.find((r) => r.id === req.user.id) || null;
 

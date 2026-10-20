@@ -71,6 +71,8 @@ function avatarInitials(name: string) {
 function RankCell({ rank }: { rank: number }) {
   const mode = useTheme().palette.mode;
   const medal = medalColors[mode];
+  // Rank 0 = nothing solved yet: unranked, not last.
+  if (rank === 0) return <Typography component="span" variant="body2" color="text.disabled" aria-label="Unranked">&mdash;</Typography>;
   if (rank === 1) return <EmojiEventsOutlinedIcon sx={{ color: GOLD }} />;
   if (rank === 2) return <MilitaryTechOutlinedIcon sx={{ color: medal.silver }} />;
   if (rank === 3) return <MilitaryTechOutlinedIcon sx={{ color: medal.bronze }} />;
@@ -87,6 +89,7 @@ function RankCell({ rank }: { rank: number }) {
 }
 
 function tierLabel(rank: number): { label: string; color: string } | null {
+  if (rank <= 0) return null; // unranked: nothing solved yet
   if (rank === 1) return { label: "Grandmaster", color: "var(--mui-palette-warning-main)" };
   if (rank <= 3) return { label: "Master", color: "var(--mui-palette-ai)" };
   if (rank <= 10) return { label: "Diamond", color: "var(--mui-palette-primary-main)" };
@@ -284,7 +287,7 @@ export default function LeaderboardPage() {
                 </Box>
                 <Box sx={{ textAlign: "right" }}>
                   <Typography variant="h4" fontWeight={700} color="onPrimaryContainer" sx={{ lineHeight: 1, fontFamily: "ui-monospace, monospace" }}>
-                    #{me.rank}
+                    {me.rank > 0 ? `#${me.rank}` : "Unranked"}
                   </Typography>
                   <Typography variant="caption" color="onPrimaryContainer" sx={{ fontFamily: "ui-monospace, monospace", opacity: 0.85 }}>
                     {me.score.toLocaleString()} pts

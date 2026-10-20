@@ -1,6 +1,7 @@
 // Per-student topic mastery (solved/failed/hint counts) — Firestore only.
 // Doc ID is `${userId}_${topic}` (mirrors the old (user_id, topic) PK).
 const { db } = require('../config/firestore');
+const { applyAttempt } = require('../utils/topicMastery');
 
 const col = () => db.collection('topicMastery');
 const docId = (userId, topic) => `${userId}_${topic}`;
@@ -10,15 +11,11 @@ async function listByUser(userId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
-async function recordAttempt(userId, topic, { solved, hintUsed }) {
+async function recordAttempt(userId, topic, { solved, hintUsed, problemId }) {
   const ref = col().doc(docId(userId, topic));
   await db.runTransaction(async (tx) => {
     const doc = await tx.get(ref);
-    const cur = doc.exists ? doc.data() : { userId, topic, solvedCount: 0, failedCount: 0, hintUsageCount: 0 };
-    if (solved) cur.solvedCount = (cur.solvedCount || 0) + 1;
-    else cur.failedCount = (cur.failedCount || 0) + 1;
-    if (hintUsed) cur.hintUsageCount = (cur.hintUsageCount || 0) + 1;
-    tx.set(ref, cur, { merge: true });
+    tx.set(ref, applyAttempt(doc.exists ? doc.data() : null, { userId, topic, solved, hintUsed, problemId }), { merge: true });
   });
 }
 

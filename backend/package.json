@@ -13,7 +13,8 @@
     "test:emulator": "node tests/withEmulator.js",
     "preflight": "node src/scripts/preflight.js",
     "check:ai": "node src/scripts/checkAiKey.js",
-    "test:smoke": "node tests/run.js"
+    "test:smoke": "node tests/run.js",
+    "test:pure": "node tests/runPure.js"
   },
   "keywords": [],
   "author": "",

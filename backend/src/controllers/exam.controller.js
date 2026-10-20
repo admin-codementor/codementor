@@ -7,6 +7,7 @@ const groupRepo = require('../repositories/studentGroupRepository');
 const proctorEventRepo = require('../repositories/proctorEventRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
 const examReport = require('../utils/examReport');
+const examScoring = require('../utils/examScoring');
 const problemRepo = require('../repositories/problemRepository');
 const examRepo = require('../repositories/examRepository');
 
@@ -556,7 +557,9 @@ exports.attachProblems = async (req, res) => {
 exports.getResults = async (req, res) => {
   try {
     const { id } = req.params;
-    if (!(await readableExam(req, id))) return res.status(404).json({ success: false, error: 'Exam not found' });
+    const exam = await readableExam(req, id);
+    if (!exam) return res.status(404).json({ success: false, error: 'Exam not found' });
+    await finalizeExpiredAttempts(id, exam);
 
     const attempts = (await examRepo.listSubmittedAttempts(id))
       .sort((a, b) => (b.score ?? -1) - (a.score ?? -1) || (a.submittedAt?.toMillis?.() ?? 0) - (b.submittedAt?.toMillis?.() ?? 0));
@@ -654,7 +657,7 @@ exports.getResults = async (req, res) => {
         score: a.score, total: a.total, submittedAt: toISO(a.submittedAt),
         percent: a.total ? Math.round(((a.score ?? 0) / a.total) * 100) : null,
         minutesTaken: examReport.minutesTaken(a),
-        sectionScores: examReport.sectionScoresFor(a, sections, questionsBySection),
+        sectionScores: examReport.sectionScoresFor(a, sections, questionsBySection, exam),
         proctor,
       };
     });
@@ -880,8 +883,15 @@ exports.getAttemptState = async (req, res) => {
     // classroom-visibility on every resume would lock a student out of viewing
     // their own in-progress or already-submitted attempt the moment faculty
     // unpublishes the exam, which is a real thing faculty do once a window closes.
-    const attempt = await examRepo.getAttempt(id, req.user.id);
+    let attempt = await examRepo.getAttempt(id, req.user.id);
     if (!attempt) return res.status(404).json({ success: false, error: 'Start the exam first.' });
+    // Time ran out and nothing was submitted: score it now, as submitted when the window closed, so the student sees
+    // their result instead of a locked attempt with no score.
+    if (examScoring.isExpiredUnsubmitted(attempt)) {
+      const r = await scoreExamAttempt(id, attempt, exam);
+      await examRepo.finishAttempt(id, req.user.id, { score: r.score, total: r.total, submittedAt: attempt.windowExpiresAt, autoSubmitted: true });
+      attempt = await examRepo.getAttempt(id, req.user.id);
+    }
     res.json({ success: true, data: await buildAttemptView(id, exam, attempt) });
   } catch (e) {
     console.error('Exam getAttemptState error:', e.message);
@@ -955,47 +965,46 @@ exports.markVisited = async (req, res) => {
   }
 };
 
+// Score one attempt from its stored state. The same function scores a submitted attempt, the faculty report and an
+// attempt that ran out of time (utils/examScoring.js), so they cannot disagree.
+async function scoreExamAttempt(examId, attempt, exam, preloaded) {
+  const sections = preloaded?.sections ?? await examRepo.getSections(examId);
+  let questionsBySection = preloaded?.questionsBySection;
+  if (!questionsBySection) {
+    questionsBySection = new Map();
+    for (const s of sections) {
+      if (s.type === 'mcq') questionsBySection.set(s.id, await examRepo.getSectionQuestions(examId, s.id));
+    }
+  }
+  return examScoring.scoreAttempt({ sections, questionsBySection, attempt, exam });
+}
+
+// An attempt whose window closed without being submitted (tab closed, connection lost) used to have no score and
+// vanished from results, so class averages were biased upward. Score it as submitted at the moment time ran out.
+// Idempotent: a finished attempt is never touched.
+async function finalizeExpiredAttempts(examId, exam) {
+  const expired = (await examRepo.listAttempts(examId)).filter((a) => examScoring.isExpiredUnsubmitted(a));
+  if (expired.length === 0) return 0;
+  const sections = await examRepo.getSections(examId);
+  const questionsBySection = new Map();
+  for (const s of sections) {
+    if (s.type === 'mcq') questionsBySection.set(s.id, await examRepo.getSectionQuestions(examId, s.id));
+  }
+  for (const a of expired) {
+    const r = await scoreExamAttempt(examId, a, exam, { sections, questionsBySection });
+    await examRepo.finishAttempt(examId, a.userId, { score: r.score, total: r.total, submittedAt: a.windowExpiresAt, autoSubmitted: true });
+  }
+  return expired.length;
+}
+
 exports.submitExam = async (req, res) => {
   try {
     const { id } = req.params;
     const attempt = await requireLiveAttempt(req, res, id);
     if (!attempt) return;
 
-    const sections = await examRepo.getSections(id);
-    let score = 0, total = 0;
-    const sectionResults = [];
-
-    for (const s of sections) {
-      if (s.type === 'mcq') {
-        const questions = await examRepo.getSectionQuestions(id, s.id);
-        let sectionScore = 0, sectionTotal = 0;
-        for (const q of questions) {
-          sectionTotal += q.marks;
-          const entry = attempt.questionState?.[q.id];
-          const selected = entry && Number.isInteger(entry.selectedIndex) ? entry.selectedIndex : null;
-          if (selected === q.correctIndex) {
-            sectionScore += q.marks;
-          } else if (selected != null) {
-            const negative = q.negativeMarks ?? s.negativeMarking ?? 0;
-            sectionScore -= negative;
-          }
-        }
-        score += sectionScore;
-        total += sectionTotal;
-        sectionResults.push({ id: s.id, title: s.title, type: 'mcq', score: sectionScore, total: sectionTotal });
-      } else {
-        const problemIds = s.problemIds || [];
-        let sectionScore = 0;
-        const sectionTotal = problemIds.length * (s.marksPerQuestion || 1);
-        for (const pid of problemIds) {
-          sectionScore += attempt.codingState?.[pid]?.score || 0;
-        }
-        score += sectionScore;
-        total += sectionTotal;
-        sectionResults.push({ id: s.id, title: s.title, type: 'coding', score: sectionScore, total: sectionTotal });
-      }
-    }
-
+    const exam = await examRepo.getById(id);
+    const { score, total, sections: sectionResults } = await scoreExamAttempt(id, attempt, exam);
     await examRepo.finishAttempt(id, req.user.id, { score, total });
     logAction(req, 'exam.submit', `exam ${id} score ${score}/${total}`);
     res.json({ success: true, data: { score, total, sections: sectionResults } });
