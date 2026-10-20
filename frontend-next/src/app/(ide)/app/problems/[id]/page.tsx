@@ -566,9 +566,10 @@ function TestIOBlock({
           color: isError ? "onErrorContainer" : highlight ? "onWarningContainer" : "text.primary",
           fontFamily: "monospace",
           fontSize: "0.8rem",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-all",
-          maxHeight: 120,
+          // Program output keeps its exact layout (banners, centred lines) and scrolls sideways; only error text wraps.
+          whiteSpace: isError ? "pre-wrap" : "pre",
+          wordBreak: isError ? "break-all" : "normal",
+          maxHeight: 220,
           overflow: "auto",
         }}
       >
@@ -858,13 +859,17 @@ function ExampleIO({ label, value, copyable = false }: { label: string; value: s
                 gap: 0.5,
                 px: 0.75,
                 borderRadius: 0.75,
+                minWidth: "max-content",
+                width: "100%",
                 "&:hover, &:focus-within": { bgcolor: "surfaceContainerHigh" },
                 "&:hover .line-copy, &:focus-within .line-copy": { opacity: 1 },
               }}
             >
               <Box
                 component="span"
-                sx={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, monospace", typography: "caption", lineHeight: 1.7, whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+                // Monospace and never wrapped: a banner or a centred line is made of exact spaces, and a proportional or
+                // wrapped line misaligns it. The box scrolls sideways instead. (typography first: it would reset the font.)
+                sx={{ flex: 1, typography: "caption", fontFamily: "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace", lineHeight: 1.7, whiteSpace: "pre" }}
               >
                 {line === "" ? " " : line}
               </Box>
@@ -1597,7 +1602,9 @@ export default function ProblemSolvingPage() {
                             </Stack>
                           </Box>
                           <Stack spacing={1.5} sx={{ p: 1.75 }}>
-                            <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5 }}>
+                            {/* Side by side when both are short; stacked when a line is wide (a banner, a table), so it
+                                has the whole width and does not need to scroll. */}
+                            <Box sx={{ display: "grid", gridTemplateColumns: [ex.input, ex.output].some((t) => t.split("\n").some((l) => l.length > 24)) ? "1fr" : { xs: "1fr", sm: "1fr 1fr" }, gap: 1.5 }}>
                               <ExampleIO label="Input" value={ex.input} copyable />
                               <ExampleIO label="Output" value={ex.output} copyable />
                             </Box>
