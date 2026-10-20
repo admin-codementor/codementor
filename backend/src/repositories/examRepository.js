@@ -166,10 +166,19 @@ async function recordCodingAnswer(examId, userId, problemId, patch) {
   });
 }
 
-async function finishAttempt(examId, userId, { score, total }) {
+// `submittedAt` defaults to now. An attempt that ran out of time is finished at the moment its window closed
+// (so "minutes taken" is not inflated) and marked `autoSubmitted`.
+async function finishAttempt(examId, userId, { score, total, submittedAt, autoSubmitted }) {
   await attemptsCol(examId).doc(userId).set({
-    submittedAt: FieldValue.serverTimestamp(), score, total,
+    submittedAt: submittedAt ?? FieldValue.serverTimestamp(), score, total,
+    ...(autoSubmitted ? { autoSubmitted: true } : {}),
   }, { merge: true });
+}
+
+/** Every attempt, submitted or not (used to score the ones that ran out of time). */
+async function listAttempts(examId) {
+  const snap = await attemptsCol(examId).get();
+  return snap.docs.map((d) => ({ userId: d.id, ...d.data() }));
 }
 
 async function listSubmittedAttempts(examId) {
@@ -184,6 +193,7 @@ async function getAttemptCount(examId) {
 }
 
 module.exports = {
+  listAttempts,
   create, getById, update, remove, listAll, listByFaculty, listPublished,
   createSection, getSections, getSection, updateSection, deleteSection, reorderSections, getSectionCount,
   replaceSectionQuestions, getSectionQuestions, getSectionQuestionCount,

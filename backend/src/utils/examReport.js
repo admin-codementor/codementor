@@ -2,6 +2,7 @@
 // against a hand-built fixture.
 
 /** Proctor events that are routine bookkeeping, not signals of anything. */
+const { scoreAttempt } = require('./examScoring');
 const BENIGN_PROCTOR_EVENTS = new Set(['fullscreen_enter', 'exam_start']);
 
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
@@ -31,33 +32,11 @@ function scoreBands(attempts) {
  * Per-section score for one attempt, recomputed from the stored state.
  * Section scores are not persisted on the attempt (only the exam total is), so
  * this is the only way to answer "which section did the class lose marks on".
+ *
+ * Scoring lives in utils/examScoring.js so this report, submitting an exam and scoring a timed-out attempt cannot disagree.
  */
-function sectionScoresFor(attempt, sections, questionsBySection) {
-  return sections.map((s) => {
-    if (s.type === 'mcq') {
-      const questions = questionsBySection.get(s.id) || [];
-      let score = 0;
-      let total = 0;
-      for (const q of questions) {
-        const marks = q.marks ?? s.marksPerQuestion ?? 1;
-        const negative = q.negative_marks ?? s.negativeMarking ?? 0;
-        total += marks;
-        const entry = (attempt.questionState || {})[q.id];
-        if (!entry || entry.selectedIndex == null) continue;
-        if (entry.selectedIndex === q.correct_index) score += marks;
-        else score -= negative;
-      }
-      return { id: s.id, title: s.title, type: 'mcq', score: Math.round(score * 100) / 100, total };
-    }
-    const problemIds = s.problemIds || [];
-    const marks = s.marksPerQuestion ?? 1;
-    let score = 0;
-    for (const pid of problemIds) {
-      const entry = (attempt.codingState || {})[pid];
-      if (entry) score += entry.score || 0;
-    }
-    return { id: s.id, title: s.title, type: 'coding', score: Math.round(score * 100) / 100, total: problemIds.length * marks };
-  });
+function sectionScoresFor(attempt, sections, questionsBySection, exam) {
+  return scoreAttempt({ sections, questionsBySection, attempt, exam }).sections;
 }
 
 /** Per-student proctor summary, same thresholds the assignment proctor report uses. */

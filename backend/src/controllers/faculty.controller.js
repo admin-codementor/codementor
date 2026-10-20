@@ -1319,8 +1319,10 @@ exports.getCohortDetail = async (req, res) => {
         const topic = r.topic || 'general';
         if (!masteryByTopic.has(topic)) masteryByTopic.set(topic, { attempts: 0, solved: 0, students: new Set() });
         const t = masteryByTopic.get(topic);
-        t.attempts += r.attempts ?? 0;
-        t.solved += r.solved ?? 0;
+        // The mastery document stores solvedCount (distinct problems solved) and failedCount; it has no
+        // "attempts" or "solved" fields, which is why this card used to read 0 for every topic.
+        t.attempts += (r.solvedCount ?? 0) + (r.failedCount ?? 0);
+        t.solved += r.solvedCount ?? 0;
         t.students.add(m.id);
       }
     }));
