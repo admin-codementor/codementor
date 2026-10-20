@@ -25,7 +25,8 @@ const departmentActivityService = require('../services/departmentActivityService
 const labsService = require('../services/labsService');
 const { resolveCourse, percentOf } = require('../utils/courseProgress');
 const { attemptsUntilFirstAccept } = require('../utils/attempts');
-const { activeStudents } = require('../utils/students');
+const { activeStudents, cohortValue } = require('../utils/students');
+const { buildAssignmentMarks } = require('../utils/assignmentMarks');
 const departmentInsightsService = require('../services/departmentInsightsService');
 const portfolioService = require('../services/portfolioService');
 const portfolioRepo = require('../repositories/portfolioRepository');
@@ -272,20 +273,38 @@ async function assertAssignmentAccess(req, res, assignmentId) {
   return null;
 }
 
+// The students an assignment was set for: the members of its classes, or the caller's department when it names no class
+// (an assignment with no class goes to everyone, but a faculty member or HOD only ever sees their own students). Only
+// current students; alumni are not part of it.
+async function assignmentStudents(req, assignment) {
+  const active = activeStudents([...(await userRepo.getMapByRole('student')).values()]);
+  const classIds = assignment.classroomIds || [];
+  if (classIds.length) {
+    const memberIds = new Set((await Promise.all(classIds.map((cid) => classroomRepo.listMembers(cid)))).flat().map((m) => m.userId));
+    return active.filter((s) => memberIds.has(s.id));
+  }
+  const dept = scopeDept(req);
+  return active.filter((s) => dept === null || (s.department || null) === dept);
+}
+
 exports.getAssignmentSubmissions = async (req, res) => {
   try {
     const { id } = req.params;
     const assignment = await assertAssignmentAccess(req, res, id);
     if (!assignment) return;
 
+    const targeted = new Set((await assignmentStudents(req, assignment)).map((s) => s.id));
+    const deadlineMs = assignment.deadline ? (assignment.deadline.toMillis?.() ?? new Date(assignment.deadline).getTime()) : null;
     const subs = (await Promise.all((assignment.problemIds || []).map(pid => submissionRepo.listByProblem(pid))))
       .flat()
+      .filter((s) => targeted.has(s.userId))
       .sort((a, b) => (b.submittedAt?.toMillis?.() ?? 0) - (a.submittedAt?.toMillis?.() ?? 0));
 
     const usersMap = await userRepo.getAllUsersMap();
     const problemsMap = await problemRepo.getMapByIds(subs.map(s => s.problemId));
     const data = subs.map(s => {
       const profile = usersMap.get(s.userId) || {};
+      const ms = s.submittedAt?.toMillis?.() ?? 0;
       return {
         student_name: profile.name || 'Unknown',
         email: profile.email || null,
@@ -293,6 +312,7 @@ exports.getAssignmentSubmissions = async (req, res) => {
         verdict: s.verdict,
         runtime: s.runtime,
         submitted_at: s.submittedAt?.toDate?.() ?? s.submittedAt,
+        on_time: !deadlineMs || !ms || ms <= deadlineMs,
       };
     });
 
@@ -303,47 +323,41 @@ exports.getAssignmentSubmissions = async (req, res) => {
   }
 };
 
+const STATUS_LABEL = { on_time: 'On time', late: 'Late', not_solved: 'Not solved', not_attempted: 'Not attempted' };
+
 exports.exportMarksCSV = async (req, res) => {
   try {
     const { id } = req.params;
     const assignment = await assertAssignmentAccess(req, res, id);
     if (!assignment) return;
 
+    const students = (await assignmentStudents(req, assignment)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const subs = (await Promise.all((assignment.problemIds || []).map(pid => submissionRepo.listByProblem(pid)))).flat();
     const plagiarismPairs = await plagiarismResultRepo.listByAssignment(id);
     const flaggedUserIds = new Set(plagiarismPairs.flatMap(p => [p.studentA, p.studentB]));
 
-    // Group by (user, problem): max score (Accepted -> 100), earliest Accepted time.
-    const grouped = new Map(); // `${userId}|${problemId}` -> { score, solvedAt }
-    for (const s of subs) {
-      const key = `${s.userId}|${s.problemId}`;
-      if (!grouped.has(key)) grouped.set(key, { userId: s.userId, problemId: s.problemId, score: 0, solvedAt: null });
-      const g = grouped.get(key);
-      if (s.verdict === 'Accepted') {
-        g.score = 100;
-        const t = s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
-        if (!g.solvedAt || t < g.solvedAt) g.solvedAt = t;
-      }
-    }
-
-    const usersMap = await userRepo.getAllUsersMap();
-    const problemsMap = await problemRepo.getMapByIds([...grouped.values()].map(g => g.problemId));
-    const rows = [...grouped.values()].map(g => {
-      const profile = usersMap.get(g.userId) || {};
+    // Best mark made on or before the deadline; a later solve is listed as Late and earns no marks. Every student the
+    // assignment was set for gets a row for every problem, including those who never submitted (utils/assignmentMarks.js).
+    const marks = buildAssignmentMarks({ assignment, students, submissions: subs });
+    const problemsMap = await problemRepo.getMapByIds(assignment.problemIds || []);
+    const byId = new Map(students.map((st) => [st.id, st]));
+    const rows = marks.flatMap((m) => m.problems.map((p) => {
+      const profile = byId.get(m.id) || {};
       return {
         'Roll No': profile.rollNo || null,
         'Student Name': profile.name || 'Unknown',
         'Email': profile.email || null,
         'Department': profile.department || null,
         'Section': profile.section || null,
-        'Problem': problemsMap.get(g.problemId)?.title || 'Unknown',
-        'Score': g.score,
-        'Solved At': g.solvedAt ? g.solvedAt.toISOString().replace('T', ' ').slice(0, 16) : '',
-        'Plagiarism Flag': flaggedUserIds.has(g.userId) ? 'FLAGGED' : '',
+        'Problem': problemsMap.get(p.problemId)?.title || 'Unknown',
+        'Score': p.mark,
+        'Status': STATUS_LABEL[p.status],
+        'Solved At': p.solvedAt ? new Date(p.solvedAt).toISOString().replace('T', ' ').slice(0, 16) : '',
+        'Plagiarism Flag': flaggedUserIds.has(m.id) ? 'FLAGGED' : '',
       };
-    });
+    }));
 
-    const fields = ['Roll No', 'Student Name', 'Email', 'Department', 'Section', 'Problem', 'Score', 'Solved At', 'Plagiarism Flag'];
+    const fields = ['Roll No', 'Student Name', 'Email', 'Department', 'Section', 'Problem', 'Score', 'Status', 'Solved At', 'Plagiarism Flag'];
     const parser = new Parser({ fields });
     const csv = parser.parse(rows);
 
@@ -961,36 +975,35 @@ exports.getAssignmentProgress = async (req, res) => {
     const assignment = await assertAssignmentAccess(req, res, id);
     if (!assignment) return;
 
-    // Get all problems in this assignment
+    // The problems, in the order the assignment lists them.
     const assignmentProblemsMap = await problemRepo.getMapByIds(assignment.problemIds || []);
-    const problemsResult = { rows: [...assignmentProblemsMap.values()].map(p => ({ id: p.id, title: p.title, difficulty: p.difficulty })) };
+    const problems = [...new Set(assignment.problemIds || [])]
+      .map((pid) => assignmentProblemsMap.get(pid))
+      .filter(Boolean)
+      .map((p) => ({ id: p.id, title: p.title, difficulty: p.difficulty }));
 
-    // Get all students
-    const students = (await userRepo.listByRole('student'))
-      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-
-    // Get all accepted submissions for this assignment's problems
+    // Only the students this assignment was set for (not every student in the college).
+    const students = (await assignmentStudents(req, assignment)).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
     const subs = (await Promise.all((assignment.problemIds || []).map(pid => submissionRepo.listByProblem(pid)))).flat();
-    const solvedSet = new Set(subs.filter(s => s.verdict === 'Accepted').map(s => `${s.userId}:${s.problemId}`));
+    const marks = new Map(buildAssignmentMarks({ assignment, students, submissions: subs }).map((m) => [m.id, m]));
 
-    const progress = students.map(student => ({
-      student: { id: student.id, name: student.name, email: student.email },
-      solved: problemsResult.rows.filter(p => solvedSet.has(`${student.id}:${p.id}`)).length,
-      total: problemsResult.rows.length,
-      problems: problemsResult.rows.map(p => ({
-        id: p.id,
-        title: p.title,
-        solved: solvedSet.has(`${student.id}:${p.id}`)
-      }))
-    }));
-
-    res.json({
-      success: true,
-      data: {
-        problems: problemsResult.rows,
-        progress
-      }
+    const progress = students.map((student) => {
+      const m = marks.get(student.id);
+      const byProblem = new Map(m.problems.map((p) => [p.problemId, p]));
+      return {
+        student: { id: student.id, name: student.name, email: student.email, rollNo: student.rollNo || null },
+        solved: problems.filter((p) => ['on_time', 'late'].includes(byProblem.get(p.id)?.status)).length,
+        solved_on_time: problems.filter((p) => byProblem.get(p.id)?.status === 'on_time').length,
+        solved_late: problems.filter((p) => byProblem.get(p.id)?.status === 'late').length,
+        total: problems.length,
+        problems: problems.map((p) => {
+          const status = byProblem.get(p.id)?.status || 'not_attempted';
+          return { id: p.id, title: p.title, solved: status === 'on_time' || status === 'late', status };
+        }),
+      };
     });
+
+    res.json({ success: true, data: { problems, progress } });
   } catch (error) {
     console.error('Assignment Progress Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch assignment progress' });
@@ -1069,7 +1082,7 @@ exports.getClassAnalytics = async (req, res) => {
     const groupByDim = (dim) => {
       const groups = new Map();
       for (const id of studentIds) {
-        const label = studentsMap.get(id)?.[dim] || 'Unassigned';
+        const label = cohortValue(studentsMap.get(id) || {}, dim);
         if (!groups.has(label)) groups.set(label, { label, students: 0, accepted: 0, total_subs: 0, solved: 0 });
         const g = groups.get(label);
         const stat = perStudent.get(id);
@@ -1278,7 +1291,7 @@ exports.getAnalyticsOverview = async (req, res) => {
           .filter((s) => s.subs > 0)
           .map((s) => ({
             id: s.id, name: s.name, x: s.subs, y: s.acRate, solved: s.solved,
-            cohort: s[analytics.COHORT_DIMS[dimension]] || 'Unassigned',
+            cohort: cohortValue(s, analytics.COHORT_DIMS[dimension]),
           })),
         hardestProblems: snap.problemStats
           .filter((p) => p.attempters >= 2)
@@ -1312,7 +1325,7 @@ exports.getCohortDetail = async (req, res) => {
     }
 
     const snap = await analytics.getSnapshot(scope);
-    const members = snap.studentStats.filter((s) => (s[dim] || 'Unassigned') === value);
+    const members = snap.studentStats.filter((s) => cohortValue(s, dim) === String(value));
     if (members.length === 0) {
       return res.json({ success: true, data: { cohort: value, students: [], empty: true } });
     }
@@ -1581,7 +1594,7 @@ exports.getCohorts = async (req, res) => {
       // dimension — Postgres no longer knows about this column.
       const cohorts = new Map();
       for (const id of ids) {
-        const cohort = studentsMap.get(id)?.[dim] || 'Unassigned';
+        const cohort = cohortValue(studentsMap.get(id) || {}, dim);
         if (!cohorts.has(cohort)) cohorts.set(cohort, { cohort, students: 0, solvedSum: 0, subsSum: 0, acSum: 0 });
         const c = cohorts.get(cohort);
         const stat = perStudent.get(id);
@@ -1623,7 +1636,7 @@ exports.getCohortStudents = async (req, res) => {
     }
 
     const studentsMap = await userRepo.getMapByRole('student');
-    let students = [...studentsMap.values()].filter(s => (s[dim] || 'Unassigned') === value);
+    let students = [...studentsMap.values()].filter(s => cohortValue(s, dim) === String(value));
     if (dept !== null) students = students.filter(s => (s.department || null) === dept);
 
     const total = students.length;
@@ -1974,7 +1987,7 @@ exports.getCohortTopics = async (req, res) => {
     const cohortTotals = {};
     const cell = {}; // `${cohort}|${topic}` -> { accepted, attempts }
     for (const r of subs) {
-      const cohort = studentsMap.get(r.userId)?.[dim] || 'Unassigned';
+      const cohort = cohortValue(studentsMap.get(r.userId) || {}, dim);
       const tags = cohortTopicsProblemsMap.get(r.problemId)?.tags || [];
       const accepted = r.verdict === 'Accepted' ? 1 : 0;
       for (const topic of tags) {

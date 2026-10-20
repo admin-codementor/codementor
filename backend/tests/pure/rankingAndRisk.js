@@ -1,7 +1,7 @@
 // Ranking, "same class", and the one at-risk rule.
 const { rankRows, sameClass } = require('../../src/utils/ranking');
 const { riskReasonsForStudent } = require('../../src/utils/risk');
-const { classLabel } = require('../../src/utils/students');
+const { classLabel, cohortValue } = require('../../src/utils/students');
 const { flagFor } = require('../../src/utils/studentState');
 
 module.exports = function (s) {
@@ -28,6 +28,11 @@ module.exports = function (s) {
   s.check('class: a profile with no year falls back to department + section', sameClass({ department: 'CSE', section: 'A' }, { department: 'CSE', year: 3, section: 'A' }));
   s.check('class: no section means no class', !sameClass({ department: 'CSE' }, { department: 'CSE', section: 'A' }));
   s.check('class label: year and section, with fallbacks', classLabel(2, 'A') === 'Year 2 · A' && classLabel(null, 'B') === 'Section B' && classLabel(3, null) === 'No section');
+
+  // ── cohort grouping ─────────────────────────────────────────────────────────
+  s.check('cohort: a numeric year groups as the string the browser sends back', cohortValue({ year: 2 }, 'year') === '2' && cohortValue({ year: '2' }, 'year') === '2');
+  s.check('cohort: a section is grouped with its year, so section A of two years are two cohorts', cohortValue({ section: 'A', year: 2 }, 'section') === 'Year 2 · A' && cohortValue({ section: 'A', year: 4 }, 'section') === 'Year 4 · A');
+  s.check('cohort: a missing value is Unassigned, and department is passed through', cohortValue({}, 'year') === 'Unassigned' && cohortValue({ section: '' }, 'section') === 'Unassigned' && cohortValue({ department: 'CSE(AIML)' }, 'department') === 'CSE(AIML)');
 
   // ── at-risk: the HOD rule, everywhere ───────────────────────────────────────
   const now = Date.UTC(2026, 9, 20, 12);

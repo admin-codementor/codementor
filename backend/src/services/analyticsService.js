@@ -11,7 +11,7 @@
 // be produced from incrementally-maintained daily rollups without any caller
 // noticing — that is why callers get a snapshot object rather than raw rows.
 const { cached } = require('../utils/cache');
-const { activeStudents } = require('../utils/students');
+const { activeStudents, cohortValue } = require('../utils/students');
 const { attemptsUntilFirstAccept } = require('../utils/attempts');
 const submissionRepo = require('../repositories/submissionRepository');
 const userRepo = require('../repositories/userRepository');
@@ -276,7 +276,7 @@ function cohortsFrom(snapshot, dimension) {
   const dim = COHORT_DIMS[dimension] || 'department';
   const groups = new Map();
   for (const s of snapshot.studentStats) {
-    const key = s[dim] || 'Unassigned';
+    const key = cohortValue(s, dim);
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(s);
   }
