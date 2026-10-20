@@ -59,6 +59,7 @@ router.patch('/placement/drives/:id', authorize('hod', 'admin'), placementContro
 router.delete('/placement/drives/:id', authorize('hod', 'admin'), placementController.deleteDrive);
 router.put('/placement/drives/:id/applications', authorize('hod', 'admin'), placementController.saveApplications);
 router.get('/placement/analytics', authorize('hod', 'admin'), placementController.getAnalytics);
+router.get('/placement/readiness', authorize('hod', 'admin'), require('../controllers/career.controller').getReadiness);
 // Alumni: HOD/admin only; an HOD is confined to their own department.
 router.get('/alumni', authorize('hod', 'admin'), alumniController.getAlumni);
 router.put('/alumni/graduation', authorize('hod', 'admin'), alumniController.setGraduation);
