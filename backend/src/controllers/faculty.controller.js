@@ -3,7 +3,7 @@ const aiGateway = require('../services/aiGateway');
 const { generateVerifiedTestCases } = require('../services/testCaseGenerator');
 const { logAction } = require('../middleware/audit');
 const { scopeDept, canSeeDepartment, canManageResource, canManageOwnedBy } = require('../middleware/role.middleware');
-const { cached } = require('../utils/cache');
+const { cached, bumpVersion } = require('../utils/cache');
 const { computeStrengthsWeaknesses } = require('../utils/topicScores');
 const { flagFor, weeklyActivity, funnelFromStats } = require('../utils/studentState');
 const examRepo = require('../repositories/examRepository');
@@ -23,6 +23,7 @@ const departmentAnalyticsService = require('../services/departmentAnalyticsServi
 const departmentLeaderboardService = require('../services/departmentLeaderboardService');
 const departmentActivityService = require('../services/departmentActivityService');
 const labsService = require('../services/labsService');
+const { resolveCourse, percentOf } = require('../utils/courseProgress');
 const departmentInsightsService = require('../services/departmentInsightsService');
 const portfolioService = require('../services/portfolioService');
 const portfolioRepo = require('../repositories/portfolioRepository');
@@ -460,6 +461,7 @@ exports.deleteProblem = async (req, res) => {
     await problemRepo.remove(id);
 
     logAction(req, 'problem.delete', `problem ${id}`);
+    await bumpVersion('courses'); // a deleted problem changes every course's required set
     res.json({ success: true, message: 'Problem deleted' });
   } catch (error) {
     console.error(error);
@@ -894,6 +896,7 @@ exports.setProblemStatus = async (req, res) => {
     }
 
     logAction(req, 'problem.status', `problem ${id} → ${target}`);
+    await bumpVersion('courses'); // a draft problem is not required, a published one is
     res.json({ success: true, data: { id, status: target, warnings } });
   } catch (error) {
     console.error('Set problem status error:', error);
@@ -1838,36 +1841,36 @@ async function buildStudentProfile(id, student) {
       : null,
   };
 
-  // ── Course progress: solved vs total problems per module ─────────────────
+  // ── Course progress: same definition as the course analytics and the student's own page ──
+  // Required problems = distinct, existing, published problems (utils/courseProgress.js), so a problem that sits in
+  // two modules counts once and a deleted one cannot hold the student below 100%.
   const courses = [];
-  for (const c of allCourses) {
-    if (!c.isPublished) continue;
-    const modules = await courseRepo.getModules(c.id);
-    const units = modules.map((m) => {
-      const pids = m.problemIds || [];
-      return {
-        id: m.id,
-        title: m.title,
-        total: pids.length,
-        solved: pids.filter((pid) => solvedProblemIds.has(pid)).length,
-        attempted: pids.filter((pid) => attemptedProblemIds.has(pid)).length,
-      };
-    });
-    const totalProblems = units.reduce((n, u) => n + u.total, 0);
-    if (totalProblems === 0) continue;
-    const solvedCount = units.reduce((n, u) => n + u.solved, 0);
+  const publishedCourses = allCourses.filter((c) => c.isPublished);
+  const modulesByCourse = await Promise.all(publishedCourses.map((c) => courseRepo.getModules(c.id)));
+  const courseProblems = await problemRepo.getMapByIds([...new Set(modulesByCourse.flatMap((ms) => ms.flatMap((m) => m.problemIds || [])))]);
+  publishedCourses.forEach((c, i) => {
+    const { units: resolvedUnits, problems: required } = resolveCourse(modulesByCourse[i], courseProblems);
+    if (required.size === 0) return;
+    const units = resolvedUnits.map((m) => ({
+      id: m.id,
+      title: m.title,
+      total: m.problemIds.length,
+      solved: m.problemIds.filter((pid) => solvedProblemIds.has(pid)).length,
+      attempted: m.problemIds.filter((pid) => attemptedProblemIds.has(pid)).length,
+    }));
+    const solvedCount = [...required].filter((pid) => solvedProblemIds.has(pid)).length;
     courses.push({
       id: c.id,
       title: c.title,
-      total: totalProblems,
+      total: required.size,
       solved: solvedCount,
-      percent: Math.round((solvedCount / totalProblems) * 100),
+      percent: percentOf(solvedCount, required.size),
       // "Pending" is what the faculty member actually acts on: units started
-      // but not finished, plus units never touched.
-      pending_units: units.filter((u) => u.solved < u.total).length,
+      // but not finished, plus units never touched. An empty unit has nothing to do.
+      pending_units: units.filter((u) => u.total > 0 && u.solved < u.total).length,
       units,
     });
-  }
+  });
   courses.sort((a, b) => b.percent - a.percent || a.title.localeCompare(b.title));
 
   return {
@@ -2206,6 +2209,7 @@ exports.createCourse = async (req, res) => {
       isPublished: false,
       createdBy: req.user.id,
     });
+    await bumpVersion('courses');
     res.status(201).json({ success: true, data: course });
   } catch (error) {
     console.error('Create Course Error:', error);
@@ -2249,6 +2253,7 @@ exports.updateCourse = async (req, res) => {
     }
 
     const updated = await courseRepo.update(id, patch);
+    await bumpVersion('courses');
     res.json({ success: true, data: updated });
   } catch (error) {
     console.error('Update Course Error:', error);
@@ -2288,6 +2293,7 @@ exports.createModule = async (req, res) => {
       problemIds,
       sortOrder: existing.length,
     });
+    await bumpVersion('courses');
     res.status(201).json({ success: true, data: created });
   } catch (error) {
     console.error('Create Module Error:', error);
@@ -2325,6 +2331,7 @@ exports.updateModule = async (req, res) => {
 
     const updated = await courseRepo.updateModule(id, moduleId, patch);
     if (!updated) return res.status(404).json({ success: false, error: 'Module not found' });
+    await bumpVersion('courses');
     res.json({ success: true, data: updated });
   } catch (error) {
     console.error('Update Module Error:', error);
@@ -2338,6 +2345,7 @@ exports.deleteModule = async (req, res) => {
     const { id, moduleId } = req.params;
     if (!(await assertCourseEditable(req, res, id))) return;
     await courseRepo.deleteModule(id, moduleId);
+    await bumpVersion('courses');
     res.json({ success: true });
   } catch (error) {
     console.error('Delete Module Error:', error);

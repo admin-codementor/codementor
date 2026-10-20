@@ -45,6 +45,12 @@ jobs:
         working-directory: backend
         run: npm run lint
 
+      # Offline checks of the calculation modules (course progress, scores, rankings) against
+      # hand-computed fixtures. No database, no credentials, no network.
+      - name: Pure calculation tests
+        working-directory: backend
+        run: npm run test:pure
+
       # Runs the suite against a throwaway in-memory Firestore, never the real
       # project — no credentials exist in CI, and tests/withEmulator.js refuses to
       # start unless FIRESTORE_EMULATOR_HOST is set. Checks needing Judge0 or the
