@@ -15,12 +15,15 @@ import ListItemText from "@mui/material/ListItemText";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import Stack from "@mui/material/Stack";
+import Badge from "@mui/material/Badge";
 import useMediaQuery from "@mui/material/useMediaQuery";
 import { useTheme } from "@mui/material/styles";
 import { MenuIcon, CodeIcon } from "@/components/ui/icons";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { AccountMenu } from "./AccountMenu";
 import { NavigationProgress } from "@/components/ui/motion";
+import { useQueryClient } from "@tanstack/react-query";
+import { useUnreadMessages } from "@/lib/queries/messages";
 import { hoverTransition, layout, radius } from "@/theme/tokens";
 
 
@@ -74,6 +77,8 @@ export interface NavItem {
   icon: React.ReactNode;
   /** Optional group heading; consecutive items sharing a section render under one subheader. */
   section?: string;
+  /** Shows a count on the icon. "messages" is the number of conversations with something new. */
+  badge?: "messages";
 }
 
 const DRAWER_WIDTH = 268;
@@ -95,6 +100,11 @@ export function AppShell({
   const isDesktop = useMediaQuery(theme.breakpoints.up("lg"));
   const [mobileOpen, setMobileOpen] = React.useState(false);
   const navProgressActive = useNavigationProgress(pathname);
+
+  // Unread count for the Messages item. Re-checked on every navigation, so opening a conversation clears it on the way out.
+  const qc = useQueryClient();
+  const unread = useUnreadMessages(navItems.some((n) => n.badge === "messages"));
+  React.useEffect(() => { qc.invalidateQueries({ queryKey: ["messages", "unread"] }); }, [pathname, qc]);
 
   // Close the mobile drawer whenever the route changes.
   React.useEffect(() => setMobileOpen(false), [pathname]);
@@ -186,7 +196,11 @@ export function AppShell({
                     },
                   }}
                 >
-                  <ListItemIcon sx={{ minWidth: 40, color: "inherit" }}>{item.icon}</ListItemIcon>
+                  <ListItemIcon sx={{ minWidth: 40, color: "inherit" }}>
+                    {item.badge === "messages" && (unread.data ?? 0) > 0 ? (
+                      <Badge badgeContent={unread.data} max={99} color="error" aria-label={`${unread.data} unread conversations`}>{item.icon}</Badge>
+                    ) : item.icon}
+                  </ListItemIcon>
                   <ListItemText
                     primary={item.label}
                     slotProps={{ primary: { fontWeight: active ? 600 : 500, variant: "body2" } }}

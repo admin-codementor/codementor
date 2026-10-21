@@ -26,6 +26,7 @@ import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
 import { AddIcon, CheckCircleOutlineIcon, GroupsOutlinedIcon, InboxIcon, InsightsOutlinedIcon, TrackChangesOutlinedIcon } from "@/components/ui/icons";
 import { radius, typeScale } from "@/theme/tokens";
 import { Head, Pager, bodyRow, headRow, useTable } from "./DepartmentTables";
+import { PlacementReadiness } from "./PlacementReadiness";
 import { DriveFormDialog, DriveResultsDialog, type Drive } from "./PlacementDialogs";
 
 interface Analytics {
@@ -42,8 +43,8 @@ interface Analytics {
 interface Group { key: string; label: string; students: number; placed: number; applied_students: number; rate: number }
 interface DriveRow extends Drive { eligible: number; applied: number; shortlisted: number; selected: number; rejected: number }
 
-type View = "analytics" | "drives";
-const VIEWS = [{ value: "analytics" as const, label: "Analytics" }, { value: "drives" as const, label: "Drives" }];
+type View = "analytics" | "readiness" | "drives";
+const VIEWS = [{ value: "analytics" as const, label: "Analytics" }, { value: "readiness" as const, label: "Readiness" }, { value: "drives" as const, label: "Drives" }];
 type State = "all" | "placed" | "in_process" | "not_placed";
 const STATES = [{ value: "all" as const, label: "Everyone" }, { value: "placed" as const, label: "Placed" }, { value: "in_process" as const, label: "In process" }, { value: "not_placed" as const, label: "Not placed" }];
 const STATE_STYLE = {
@@ -344,9 +345,9 @@ export function PlacementTab({ section, year }: { section: string; year: string 
     <Box>
       <SegmentedButtons<View> value={view} onChange={setView} segments={VIEWS} ariaLabel="Placement view" />
       <Box sx={{ mt: 3 }}>
-        {view === "analytics"
-          ? <AnalyticsView section={section} year={year} openDrive={setResultsFor} />
-          : <DrivesView openDrive={setResultsFor} newDrive={() => setForm({ drive: null })} editDrive={(d) => setForm({ drive: d })} />}
+        {view === "analytics" && <AnalyticsView section={section} year={year} openDrive={setResultsFor} />}
+        {view === "readiness" && <PlacementReadiness section={section} year={year} />}
+        {view === "drives" && <DrivesView openDrive={setResultsFor} newDrive={() => setForm({ drive: null })} editDrive={(d) => setForm({ drive: d })} />}
       </Box>
       <DriveResultsDialog driveId={resultsFor} onClose={() => setResultsFor(null)} />
       <DriveFormDialog open={!!form} onClose={() => setForm(null)} drive={form?.drive ?? null} />

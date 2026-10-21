@@ -2,6 +2,7 @@ const express = require('express');
 const { createLimiter } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth.middleware');
 const c = require('../controllers/profiles.controller');
+const platformScore = require('../controllers/platformScore.controller');
 
 const router = express.Router();
 router.use(protect);
@@ -19,6 +20,7 @@ router.get('/me', c.getMine);
 router.put('/me', c.setHandle);
 router.post('/me/sync', syncLimiter, c.syncMine);
 router.get('/leaderboard', c.getLeaderboard);
+router.get('/score', platformScore.getMine);
 
 // Ownership proof. Reading the external profile back is another outbound call,
 // and a wrong code invites retrying, so it shares the sync budget.

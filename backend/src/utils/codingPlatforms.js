@@ -1,10 +1,11 @@
 // Fetchers for external competitive-programming profiles.
 // Codeforces  → official public REST API (reliable).
 // LeetCode    → public GraphQL endpoint (unofficial but stable).
+// GitHub      → public REST API (repositories and stars; unauthenticated, so be gentle with it).
 // Others      → stored as a profile link only (no reliable public API).
 
 // Platforms we live-sync vs. store-only.
-const LIVE_PLATFORMS = ['codeforces', 'leetcode'];
+const LIVE_PLATFORMS = ['codeforces', 'leetcode', 'github'];
 const LINK_PLATFORMS = ['hackerrank', 'codechef', 'gfg'];
 const ALL_PLATFORMS = [...LIVE_PLATFORMS, ...LINK_PLATFORMS];
 
@@ -106,10 +107,24 @@ const VERIFY_FIELD = {
   leetcode: 'your LeetCode profile — the "Summary" field under Edit Profile',
 };
 
+// GitHub: public repository count and the stars across the most recently updated 100. Contributions need a token, so they
+// are not used. `solved` is 0: GitHub has no solved problems.
+async function fetchGitHub(handle) {
+  const headers = { Accept: 'application/vnd.github+json', 'User-Agent': 'codementor' };
+  const user = await fetchJSON(`https://api.github.com/users/${encodeURIComponent(handle)}`, { headers });
+  let stars = 0;
+  try {
+    const repos = await fetchJSON(`https://api.github.com/users/${encodeURIComponent(handle)}/repos?per_page=100&sort=updated`, { headers });
+    stars = (Array.isArray(repos) ? repos : []).reduce((n, r) => n + (Number.isInteger(r.stargazers_count) ? r.stargazers_count : 0), 0);
+  } catch { /* keep the repository count even if the list fails */ }
+  return { solved: 0, rating: null, max_rating: null, extra: { repos: Number.isInteger(user.public_repos) ? user.public_repos : 0, stars, followers: Number.isInteger(user.followers) ? user.followers : 0 } };
+}
+
 // Dispatch. Returns stats or throws (caller records sync_status='error').
 async function fetchPlatform(platform, handle) {
   if (platform === 'codeforces') return fetchCodeforces(handle);
   if (platform === 'leetcode') return fetchLeetCode(handle);
+  if (platform === 'github') return fetchGitHub(handle);
   throw new Error('Platform is link-only (no live sync)');
 }
 

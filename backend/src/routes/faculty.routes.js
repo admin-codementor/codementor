@@ -4,6 +4,8 @@ const { protect } = require('../middleware/auth.middleware');
 const { authorize, facultyStaff } = require('../middleware/role.middleware');
 const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../middleware/permissions');
 const facultyController = require('../controllers/faculty.controller');
+const reportsController = require('../controllers/reports.controller');
+const platformScoreController = require('../controllers/platformScore.controller');
 const plagiarismController = require('../controllers/plagiarism.controller');
 const groupController = require('../controllers/studentGroup.controller');
 const mentorController = require('../controllers/mentor.controller');
@@ -57,6 +59,7 @@ router.patch('/placement/drives/:id', authorize('hod', 'admin'), placementContro
 router.delete('/placement/drives/:id', authorize('hod', 'admin'), placementController.deleteDrive);
 router.put('/placement/drives/:id/applications', authorize('hod', 'admin'), placementController.saveApplications);
 router.get('/placement/analytics', authorize('hod', 'admin'), placementController.getAnalytics);
+router.get('/placement/readiness', authorize('hod', 'admin'), require('../controllers/career.controller').getReadiness);
 // Alumni: HOD/admin only; an HOD is confined to their own department.
 router.get('/alumni', authorize('hod', 'admin'), alumniController.getAlumni);
 router.put('/alumni/graduation', authorize('hod', 'admin'), alumniController.setGraduation);
@@ -150,6 +153,20 @@ router.get('/courses/completion', facultyController.getCourseCompletionSummary);
 router.get('/courses/:id', facultyController.getFacultyCourseDetail);
 router.get('/courses/:id/analytics', facultyController.getCourseAnalytics);
 router.get('/problems/:id/statistics', facultyController.getProblemStatistics);
+
+// Report catalogue and reopen requests (controllers/reports.controller.js).
+router.get('/reports/summary', reportsController.getSummary);
+
+// Coding score (utils/platformScore.js). Reading is for all staff; changing thresholds and refreshing are HOD / admin.
+router.post('/nudges', require('../controllers/nudge.controller').send);
+router.get('/platform-scores', platformScoreController.getScores);
+router.put('/platform-thresholds', authorize('hod', 'admin'), platformScoreController.putThresholds);
+router.post('/platform-scores/refresh', authorize('hod', 'admin'), platformScoreController.refresh);
+router.get('/reports/daily', reportsController.getDaily);
+router.get('/reports/late/assignments', reportsController.listLateCandidates);
+router.get('/reports/late', reportsController.getLate);
+router.get('/reopen-requests', reportsController.listReopenRequests);
+router.patch('/reopen-requests/:id', reportsController.decideReopenRequest);
 router.post('/courses',
   requirePermission('manage_problems'),
   facultyController.createCourse

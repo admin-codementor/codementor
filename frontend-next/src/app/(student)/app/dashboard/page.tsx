@@ -28,6 +28,7 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { ActivityHeatmap } from "@/components/ui/ActivityHeatmap";
 import { useAvailableExamsQuery, useDashboardQuery, useMistakesQuery } from "@/lib/queries/student";
 import { ProblemOfTheDay } from "@/components/student/ProblemOfTheDay";
+import { RemindersCard } from "@/components/student/RemindersCard";
 import { ExamPerformance } from "@/components/student/ExamPerformance";
 
 /** One deadline on the dashboard, whether it came from an assignment or an exam. */
@@ -309,6 +310,8 @@ export default function DashboardPage() {
             : `${stats.problemsSolved} problem${stats.problemsSolved !== 1 ? "s" : ""} solved · ${stats.streak}-day streak`
         }
       />
+
+      <RemindersCard />
 
       {/* ── Stats row ── */}
       <Reveal>

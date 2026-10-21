@@ -8,6 +8,8 @@
 //   - An OI-style partial score is kept; an Accepted submission with no stored score is worth 100.
 //   - A student who never submitted still gets a row, with 0.
 //   - An assignment with no valid deadline has no cut-off: every submission is on time.
+//   - A student whose reopen request was approved has a later cut-off of their own (`extensions`, userId -> ms); everyone
+//     else keeps the real deadline.
 
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
 
@@ -23,9 +25,10 @@ function markFor(sub) {
  * @param {{problemIds?: string[], deadline?: unknown}} a.assignment
  * @param {{id: string}[]} a.students     the students it was set for
  * @param {{userId, problemId, verdict, score?, submittedAt?}[]} a.submissions
+ * @param {Map<string, number>} [a.extensions]  per-student later cut-offs from approved reopen requests
  * @returns {{id: string, problems: {problemId: string, mark: number, status: 'on_time'|'late'|'not_solved'|'not_attempted', solvedAt: number|null}[], solved: number, solvedOnTime: number, solvedLate: number, marks: number}[]}
  */
-function buildAssignmentMarks({ assignment, students, submissions }) {
+function buildAssignmentMarks({ assignment, students, submissions, extensions = new Map() }) {
   const problemIds = [...new Set(assignment.problemIds || [])];
   const dl = assignment.deadline ? toMillis(assignment.deadline) : 0;
   const cutoff = Number.isFinite(dl) && dl > 0 ? dl : Infinity;
@@ -37,7 +40,9 @@ function buildAssignmentMarks({ assignment, students, submissions }) {
     if (!mine || !wanted.has(sub.problemId)) continue;
     const cur = mine.get(sub.problemId) || { attempted: true, onTimeMark: 0, solvedOnTimeAt: null, solvedLateAt: null };
     const ms = toMillis(sub.submittedAt);
-    const onTime = !ms || ms <= cutoff;
+    // Their own cut-off when a reopen request was approved, never earlier than the real deadline.
+    const myCutoff = cutoff === Infinity ? Infinity : Math.max(cutoff, extensions.get(sub.userId) || 0);
+    const onTime = !ms || ms <= myCutoff;
     if (onTime) cur.onTimeMark = Math.max(cur.onTimeMark, markFor(sub));
     if (sub.verdict === 'Accepted') {
       if (onTime) cur.solvedOnTimeAt = cur.solvedOnTimeAt == null ? ms : Math.min(cur.solvedOnTimeAt, ms || cur.solvedOnTimeAt);

@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import Box from "@mui/material/Box";
 import Card from "@mui/material/Card";
+import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import Drawer from "@mui/material/Drawer";
 import IconButton from "@mui/material/IconButton";
@@ -23,10 +24,11 @@ import { ExportButton, KpiTile, toCsv } from "@/components/analytics";
 import { EmptyState, ErrorState } from "@/components/ui/States";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
-import { CloseIcon, GroupsOutlinedIcon, CheckCircleOutlineIcon, TimerOutlinedIcon, WarningAmberIcon, TrackChangesOutlinedIcon } from "@/components/ui/icons";
+import { SendIcon, CloseIcon, GroupsOutlinedIcon, CheckCircleOutlineIcon, TimerOutlinedIcon, WarningAmberIcon, TrackChangesOutlinedIcon } from "@/components/ui/icons";
 import { useProblemStatisticsQuery, type ProblemPerformer, type ProblemStudentRow, type ProblemStudentStatus } from "@/lib/queries/problemStatistics";
 import { fmtDuration } from "@/lib/duration";
 import { radius, typeScale } from "@/theme/tokens";
+import { RemindDialog } from "./RemindDialog";
 import { Head, Pager, bodyRow, headRow, useTable } from "./DepartmentTables";
 
 type StatusFilter = "all" | ProblemStudentStatus | "flagged";
@@ -94,6 +96,7 @@ export function ProblemStatsDrawer({ problemId, title, onClose }: { problemId: s
   const router = useRouter();
   const [groups, setGroups] = React.useState<string[]>([]);
   const [status, setStatus] = React.useState<StatusFilter>("all");
+  const [remindOpen, setRemindOpen] = React.useState(false);
   const { data, isLoading, isError, refetch, isFetching } = useProblemStatisticsQuery(problemId, groups);
 
   const rows = React.useMemo(
@@ -101,6 +104,9 @@ export function ProblemStatsDrawer({ problemId, title, onClose }: { problemId: s
     [data, status],
   );
   const t = useTable<ProblemStudentRow, SortKey>(rows, searchText, SORT, { by: "status", dir: "asc" });
+
+  // Everyone shown who has not finished the question: the people a reminder is for.
+  const toRemind = t.all.filter((r) => r.status !== "completed").map((r) => r.id);
 
   const csv = () => toCsv(t.all.map((r) => ({
     name: r.name, roll_no: r.rollNo ?? "", status: STATUS_LABEL[r.status], submissions: r.submissions,
@@ -213,6 +219,7 @@ export function ProblemStatsDrawer({ problemId, title, onClose }: { problemId: s
                     <SegmentedButtons<StatusFilter> value={status} onChange={setStatus} ariaLabel="Filter students" segments={FILTERS} />
                     <Box sx={{ flex: 1 }} />
                     <SearchField value={t.q} onChange={t.setQ} placeholder="Name or roll no" label="Search students" sx={{ maxWidth: 240 }} />
+                    <Button size="small" variant="outlined" startIcon={<SendIcon />} disabled={toRemind.length === 0} onClick={() => setRemindOpen(true)}>Remind {toRemind.length}</Button>
                     <ExportButton filename={`${(data.problem.title || "question").replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-statistics.csv`} csv={csv} disabled={t.all.length === 0} />
                   </Stack>
                   <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
@@ -272,6 +279,7 @@ export function ProblemStatsDrawer({ problemId, title, onClose }: { problemId: s
           </Stack>
         )}
       </Box>
+      <RemindDialog open={remindOpen} onClose={() => setRemindOpen(false)} studentIds={toRemind} defaultMessage={`Please attempt "${data?.problem.title ?? title ?? "the question"}".`} what="Everyone shown here who has not completed this question gets a reminder." />
     </Drawer>
   );
 }

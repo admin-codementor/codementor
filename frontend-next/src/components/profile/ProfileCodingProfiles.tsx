@@ -24,6 +24,7 @@ import { getUser } from "@/lib/auth";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { EmptyState } from "@/components/ui/States";
 import { CODING_PLATFORM_META as META, CODING_PLATFORM_ORDER as ORDER } from "@/lib/codingPlatforms";
+import { CodingScoreCard } from "./CodingScoreCard";
 
 interface Profile {
   platform: string;
@@ -144,6 +145,8 @@ export function ProfileCodingProfiles() {
 
   return (
     <Box>
+      <CodingScoreCard />
+
       {/* Handles */}
       <Card variant="outlined" sx={{ borderColor: "outlineVariant", mb: 3 }}>
         <CardContent>
@@ -153,7 +156,7 @@ export function ProfileCodingProfiles() {
                 Your accounts
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Codeforces &amp; LeetCode sync live; others are stored as links.
+                Codeforces, LeetCode and GitHub sync live and count towards your score; others are stored as links.
               </Typography>
             </Box>
             <Button size="small" variant="contained" startIcon={<RefreshOutlinedIcon />} onClick={sync} disabled={syncing}>

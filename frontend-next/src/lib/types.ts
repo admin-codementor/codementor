@@ -141,6 +141,8 @@ export interface Assignment {
   isExam: boolean;
   total: number;
   solved: number;
+  /** The student's newest request for more time on this assignment, if any. */
+  reopen?: { status: "pending" | "approved" | "declined"; until: string | null; note: string } | null;
   problems: AssignmentProblem[];
 }
 
@@ -340,6 +342,11 @@ export interface CourseModuleProblem {
 
 export interface CourseModule extends ModuleProgress {
   description: string | null;
+  /** When the unit opens to students; locked until then. */
+  opensAt?: string | null;
+  locked?: boolean;
+  /** The student's newest request for more time on this unit, if any. */
+  reopen?: { status: "pending" | "approved" | "declined"; until: string | null; note: string } | null;
   problems: CourseModuleProblem[];
   nextProblemId: string | null;
 }

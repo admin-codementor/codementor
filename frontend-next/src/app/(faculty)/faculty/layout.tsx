@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { BusinessOutlinedIcon, GroupsOutlinedIcon, SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, AssignmentOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, ReceiptLongOutlinedIcon, LayersOutlinedIcon, MenuBookOutlinedIcon, MailOutlineIcon } from "@/components/ui/icons";
+import { BusinessOutlinedIcon, GroupsOutlinedIcon, SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, AssignmentOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, ReceiptLongOutlinedIcon, LayersOutlinedIcon, MenuBookOutlinedIcon, MailOutlineIcon, CalendarMonthOutlinedIcon, ListAltOutlinedIcon } from "@/components/ui/icons";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { getRole } from "@/lib/auth";
@@ -12,7 +12,9 @@ import { getRole } from "@/lib/auth";
 const BASE_NAV: NavItem[] = [
   { label: "Dashboard", href: "/faculty/dashboard", icon: <SpaceDashboardOutlinedIcon />, section: "Overview" },
   { label: "Analytics", href: "/faculty/analytics", icon: <InsightsOutlinedIcon />, section: "Overview" },
-  { label: "Messages", href: "/faculty/messages", icon: <MailOutlineIcon />, section: "Overview" },
+  { label: "Messages", href: "/faculty/messages", icon: <MailOutlineIcon />, section: "Overview", badge: "messages" },
+  { label: "Reports", href: "/faculty/reports", icon: <ListAltOutlinedIcon />, section: "Overview" },
+  { label: "Calendar", href: "/faculty/calendar", icon: <CalendarMonthOutlinedIcon />, section: "Overview" },
   { label: "Courses", href: "/faculty/courses", icon: <MenuBookOutlinedIcon />, section: "Content" },
   { label: "Problems", href: "/faculty/problems", icon: <CodeOutlinedIcon />, section: "Content" },
   { label: "Question Bank", href: "/faculty/bank", icon: <LayersOutlinedIcon />, section: "Content" },

@@ -122,11 +122,16 @@ function applyAction({ thread, userId, action, reason, now }) {
 
 const preview = (body) => (body.length > 80 ? `${body.slice(0, 79)}…` : body).replace(/\n/g, ' ');
 
+/** Has someone else written in this conversation since the viewer last opened it? */
+function isUnread(thread, viewerId) {
+  const lastRead = thread.reads?.[viewerId] ?? 0;
+  return !!thread.lastMessageBy && thread.lastMessageBy !== viewerId && thread.lastMessageAtMs > lastRead;
+}
+
 /** Counterpart-aware list row for one participant. */
 function threadRow(thread, viewerId, people) {
   const otherId = thread.participants.find((p) => p !== viewerId) || null;
   const other = people.get(otherId) || null;
-  const lastRead = thread.reads?.[viewerId] ?? 0;
   const iBlocked = (thread.blockedBy || []).includes(viewerId);
   return {
     id: thread.id,
@@ -138,11 +143,11 @@ function threadRow(thread, viewerId, people) {
     reported: !!thread.isReported && !thread.reported?.resolvedAtMs,
     last_message_at: thread.lastMessageAtMs ? new Date(thread.lastMessageAtMs).toISOString() : null,
     last_preview: thread.lastPreview || '',
-    unread: !!thread.lastMessageBy && thread.lastMessageBy !== viewerId && thread.lastMessageAtMs > lastRead,
+    unread: isUnread(thread, viewerId),
   };
 }
 
 module.exports = {
   MAX_BODY, MAX_REASON, ACTIONS, STAFF_ROLES, OPENING_MESSAGES,
-  isStaff, validateBody, canStart, newThread, canSend, applyAction, preview, threadRow,
+  isStaff, validateBody, canStart, newThread, canSend, applyAction, preview, threadRow, isUnread,
 };

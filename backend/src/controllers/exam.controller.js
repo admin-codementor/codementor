@@ -113,6 +113,8 @@ async function validateProblemIds(problem_ids) {
 // Students only ever see an exam whose classroomIds is empty (targets everyone)
 // or includes a class they're a member of — same shape as
 // student.controller.js's visibleAssignmentsFor.
+exports.visibleExamsFor = (userId) => visibleExamsFor(userId);
+
 async function visibleExamsFor(userId) {
   const all = await examRepo.listPublished();
   const needsClasses = all.some((e) => (e.classroomIds || []).length > 0);
