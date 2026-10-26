@@ -226,62 +226,50 @@ router.get('/assignments/:id/plagiarism/:pairId/diff',
 router.get('/faculty-list',
   authorize('admin'),
   async (req, res) => {
-    try {
-      const faculty = (await userRepo.listByRole('faculty'))
-        .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
-      const data = faculty.map(u => ({
-        id: u.id, name: u.name, email: u.email, role: u.role,
-        created_at: u.createdAt,
-        permissions: resolvePermissions(u),
-      }));
-      res.json({ success: true, data, allPermissions: ALL_PERMISSIONS });
-    } catch (e) {
-      res.status(500).json({ success: false, error: e.message });
-    }
+    const faculty = (await userRepo.listByRole('faculty'))
+      .sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+    const data = faculty.map(u => ({
+      id: u.id, name: u.name, email: u.email, role: u.role,
+      created_at: u.createdAt,
+      permissions: resolvePermissions(u),
+    }));
+    res.json({ success: true, data, allPermissions: ALL_PERMISSIONS });
   }
 );
 
 router.get('/permissions/:userId',
   authorize('admin'),
   async (req, res) => {
-    try {
-      const user = await userRepo.getById(req.params.userId, 'faculty');
-      if (!user) return res.status(404).json({ success: false, error: 'Faculty user not found' });
-      res.json({ success: true, data: { ...user, permissions: resolvePermissions(user) } });
-    } catch (e) {
-      res.status(500).json({ success: false, error: e.message });
-    }
+    const user = await userRepo.getById(req.params.userId, 'faculty');
+    if (!user) return res.status(404).json({ success: false, error: 'Faculty user not found' });
+    res.json({ success: true, data: { ...user, permissions: resolvePermissions(user) } });
   }
 );
 
 router.patch('/permissions/:userId',
   authorize('admin'),
   async (req, res) => {
-    try {
-      const incoming = req.body.permissions;
-      if (!incoming || typeof incoming !== 'object') {
-        return res.status(400).json({ success: false, error: 'permissions object is required' });
-      }
-
-      // Only allow known permission keys
-      const sanitized = Object.fromEntries(
-        ALL_PERMISSIONS
-          .filter(p => p in incoming)
-          .map(p => [p, Boolean(incoming[p])])
-      );
-
-      const existing = await userRepo.getById(req.params.userId, 'faculty');
-      if (!existing) return res.status(404).json({ success: false, error: 'Faculty user not found' });
-
-      await userRepo.update(req.params.userId, 'faculty', { permissions: sanitized });
-      // The old session still carries the old permissions: end it so the change takes effect within minutes.
-      await userRepo.bumpTokenVersion(req.params.userId, 'faculty');
-
-      logAction(req, 'permissions.update', `faculty ${req.params.userId}: ${Object.keys(sanitized).filter(k => sanitized[k]).join(',') || 'none'}`);
-      res.json({ success: true, data: { id: existing.id, name: existing.name, email: existing.email, permissions: sanitized } });
-    } catch (e) {
-      res.status(500).json({ success: false, error: e.message });
+    const incoming = req.body.permissions;
+    if (!incoming || typeof incoming !== 'object') {
+      return res.status(400).json({ success: false, error: 'permissions object is required' });
     }
+
+    // Only allow known permission keys
+    const sanitized = Object.fromEntries(
+      ALL_PERMISSIONS
+        .filter(p => p in incoming)
+        .map(p => [p, Boolean(incoming[p])])
+    );
+
+    const existing = await userRepo.getById(req.params.userId, 'faculty');
+    if (!existing) return res.status(404).json({ success: false, error: 'Faculty user not found' });
+
+    await userRepo.update(req.params.userId, 'faculty', { permissions: sanitized });
+    // The old session still carries the old permissions: end it so the change takes effect within minutes.
+    await userRepo.bumpTokenVersion(req.params.userId, 'faculty');
+
+    logAction(req, 'permissions.update', `faculty ${req.params.userId}: ${Object.keys(sanitized).filter(k => sanitized[k]).join(',') || 'none'}`);
+    res.json({ success: true, data: { id: existing.id, name: existing.name, email: existing.email, permissions: sanitized } });
   }
 );
 
@@ -289,21 +277,17 @@ router.patch('/permissions/:userId',
 router.get('/audit-logs',
   authorize('admin'),
   async (req, res) => {
-    try {
-      const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
-      const rows = await auditLogRepo.listRecent(limit);
-      const usersMap = await userRepo.getAllUsersMap();
-      const data = rows.map(r => {
-        const u = usersMap.get(r.userId);
-        return {
-          id: r.id, action: r.action, detail: r.detail, ip: r.ip, created_at: r.createdAt?.toDate?.() ?? r.createdAt,
-          user_name: u?.name || null, user_email: u?.email || null,
-        };
-      });
-      res.json({ success: true, data });
-    } catch (e) {
-      res.status(500).json({ success: false, error: e.message });
-    }
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 100, 1), 500);
+    const rows = await auditLogRepo.listRecent(limit);
+    const usersMap = await userRepo.getAllUsersMap();
+    const data = rows.map(r => {
+      const u = usersMap.get(r.userId);
+      return {
+        id: r.id, action: r.action, detail: r.detail, ip: r.ip, created_at: r.createdAt?.toDate?.() ?? r.createdAt,
+        user_name: u?.name || null, user_email: u?.email || null,
+      };
+    });
+    res.json({ success: true, data });
   }
 );
 
