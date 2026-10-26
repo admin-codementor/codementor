@@ -15,7 +15,7 @@ From: CodeMentor team, Department of CSE
 | **What** | A coding and exam platform for the whole college, replacing the paid licence for coding practice and exams. |
 | **Size we are designing for** | **1000 students writing and running code at the same moment** (a synchronised exam), **3000 students logged in at once**, exams up to 3 hours. |
 | **What we ask the college for** | (1) one server of **16 to 24 CPU cores, 32 GB RAM, 100 GB SSD, no GPU**; (2) a reliable **internet link of at least 100 Mbps** during exams and wired or well-provisioned lab networks; (3) **power and uptime** on exam days; (4) a named **contact** for exam days. |
-| **What we do not ask for** | A public IP, inbound firewall changes, GPU time, or administrator effort beyond the initial setup. All traffic from the server is **outbound HTTPS only**. |
+| **What we do not ask for** | A public IP, inbound firewall changes, GPU time, or administrator effort beyond the initial setup. All traffic from the server is **outbound only** (port 7844 to Cloudflare, plus HTTPS). |
 | **What happens with less** | The system does not crash; coding verdicts take longer at the peak (a queue with a visible position), and below the minimum we recommend fewer simultaneous coding exams. Section 8 lists each case. |
 | **Trial** | One month, removable on request. We will run a rehearsal with a small group before any graded exam. |
 
@@ -64,7 +64,7 @@ The assumption "about 1.33 CPU-seconds per run" is **the weakest number** and wi
 | Requirement | Ask | Basis |
 |---|---|---|
 | Internet link during exams | **at least 100 Mbps**, not shared with a heavy download that day | **budget** below |
-| Server connectivity | outbound HTTPS (443) only; no inbound ports | design |
+| Server connectivity | outbound only, no inbound ports: **port 7844 (TCP and UDP) to Cloudflare** for the tunnel, plus HTTPS (443) | design |
 | Allowed domains | to be listed by us (hosting, database, email, monitoring) so the firewall can allow them | ask |
 | Exam labs | only if graded tests are held in labs: **wired** machines preferred; if Wi-Fi, the network team confirms the access points can carry that many students. **Students may also work from any other network** (home, mobile data), so the platform is built to be light and to survive drops. | ask |
 | DNS and time | a working campus DNS and correct server clock | ask |

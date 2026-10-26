@@ -80,7 +80,9 @@ This is what makes the system use little when quiet and everything it has when b
 |---|---|---|---|
 | Internet link | **300 Mbps or more**, symmetric, dedicated on exam days | All student and staff traffic to our server, and the server to Google (Firebase). The platform is reachable from any network, so the college's link carries every user's traffic | College's connection |
 | Inbound access | **None.** No public IP, no port forwarding, no firewall changes | Cloudflare Tunnel is outbound-only | |
-| Outbound access | **HTTPS (443)** to a list of domains we provide | The tunnel, Google, updates, email, monitoring | |
+| Outbound access | **Port 7844 (TCP and UDP) to Cloudflare** (`region1.v2.argotunnel.com`, `region2.v2.argotunnel.com`) and **HTTPS (443)** to a list of domains we provide | The tunnel (it needs port 7844), and Google, updates, email, monitoring (443). If the college cannot allow port 7844, the alternative is a public IP with inbound 443 to a reverse proxy, which needs a firewall change | |
+| Server address | A **fixed internal (private) IP address** for each server, not one that changes | The campus web name and the firewall rules point at it | |
+| Lab IP ranges | The IP ranges of the labs, **only if** a test is locked to the lab network | The optional lab-only exam restriction | |
 | Campus web name | An address like `codementor.sreyas.ac.in` pointing at the server (campus DNS) | Students on campus reach it directly over the campus network | |
 | Server room to labs | **Fast wired link** between the server room and the labs | Lab tests | |
 | Lab network | **Wired computers on a separate lab network**, only if graded tests are held in labs | Stable connections for many students in one room | |
