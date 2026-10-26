@@ -28,6 +28,17 @@ Order of personas (locked): Student, Faculty, HOD, **T&P, Admin**. Super Admin i
 | D-15 | An exam attempt that was cut off (network, browser, device) can be **resumed for one student** by an authorised person. |
 | D-16 | Targets: **500 to 1000 students writing and running code at once**, **3000 users logged in at once** with only a few crashes tolerated. |
 | D-17 | Cheating through the browser console or tampering must not work, and must be **reported with the reason** to the student and the Admin. |
+| D-18 | **Timeline:** the next large exam is within 2 weeks; the owner wants everything built in the plan's order, fast. (See section 15 for what I can honestly finish in 2 weeks.) |
+| D-19 | **Hosting:** not decided. The owner will give the **college a written requirement** (what is needed to run without crashing); build everything now and scale in parallel. I produce that requirement document (S2.0). |
+| D-20 | **Integrity email:** automatic **only for hard evidence** (tampered or replayed requests). Soft signals (tab switch, fullscreen) go to the exam owner first. |
+| D-21 | **Who may resume an attempt:** Admin, the exam's owner faculty, and the department HOD; each resume needs a written reason and is audited. A T&P coordinator only if named later. |
+| D-22 | **Violations:** warn, flag, **lock after N** (N set per exam). Nothing auto-submits before the server deadline. |
+| D-23 | **Second device:** the new device **takes over**; the first is told; logged as a possible flag. |
+| D-24 | **Email:** a free transactional service sending from a college address. |
+| D-25 | **No human security reviewer is available.** Exams recur, so the exam engine is built as **one reusable, hardened module**, and its security is checked by an **automated attack-test suite that runs on every change** (section 4, item 12). I will state clearly that no human review was done. |
+| D-26 | **Faculty dashboard:** class switcher plus show, hide and reorder widgets, saved per user. |
+| D-27 | **Faculty access after a class assignment ends:** none, unless granted by HOD or Admin. |
+| D-28 | **Pilot** of the class and mentor model: **CSE (AIML)**. |
 
 ---
 
@@ -93,7 +104,7 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 9. **Backups:** scheduled Firestore export plus a **restore drill** (a backup nobody has restored is not a backup). Backup runs before any bulk import or rollover.
 10. **Dependency policy:** no new package without checking it exists, its age and weekly downloads (guards against fabricated package names); lockfile always committed; pin versions.
 11. **Threat model** per risky feature (exam attempt, resume, CSV upload, role change, export) in one page each: assets, attackers, abuse cases, controls, tests.
-12. **Independent review:** before the first large exam, one human review of auth, exam and judge paths by someone other than me (college IT cell, a senior, or a paid pentest). See question 7.
+12. **Automated attack tests instead of a human reviewer (D-25).** The exam engine is one reusable module with a single entry point for every exam type, so it is hardened once and reused. A suite of **adversarial tests** runs in CI on every change and in the exam-day pre-flight, and tries exactly what a student could try in the browser console: change the timer, replay or edit a save, submit twice, submit after the deadline, read another student's attempt, call a faculty route, read the answer key, skip the second-device rule, send an oversized or malformed payload, forge the attempt token, and race two submits. Each must be **rejected, logged and (for hard evidence) reported**. Together with CodeQL, Semgrep and the dependency and secret scans this is the substitute for a person; it is **not equal to one**, and every report will say so. This is not "testing again and again by hand": it is written once and re-runs by itself, so a later change cannot quietly reopen a hole.
 
 ---
 
@@ -137,6 +148,8 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 ---
 
 ## 6. S2: Scale and load (D-16)
+
+**S2.0 College requirement document (D-19).** A written, numbers-first request for the college IT team: CPU, RAM, disk, network (bandwidth per student, firewall and port rules, no inbound access needs), uptime and backup expectations, power and a fallback, and what we will and will not run. Built from `docs/scale-readiness/20-server-request.md` and `docs/INFRA_REQUIREMENTS_GUIDE.md`, updated with the exam-day load and the security controls in this plan. **Deliverable within the first days**, so the college can start approvals while the build proceeds.
 
 **Targets (proposed, to be confirmed):** 1000 students running code at the same moment with a verdict in ≤ 20 seconds at the peak; MCQ exams with 1000 concurrent and no judge load; 3000 logged in with graceful slowdown; API p95 under 500 ms; the exam page loads in under 3 seconds on 5 Mbps.
 
@@ -245,19 +258,29 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 
 ---
 
-## 14. Open questions (owner to answer; defaults in brackets)
+## 14. Questions: answered and still open
 
-1. **Dates.** When is the next large exam, and when does the next semester start? (decides the order)
-2. **Hosting for exams.** Do we have the 16-core college server now, will we pay for cloud for exam days, or stay on Render and the public Judge0 for now? (default: plan for the college server, test on paid cloud)
-3. **Email sender.** College Google Workspace, a free transactional service, or undecided? (default: a free transactional service from a college address)
-4. **Integrity emails.** Automatic only for hard evidence, automatic for everything, or always reviewed first? (default: automatic for hard evidence only)
-5. **Who can resume an attempt.** Admin only; Admin and the exam owner; or also HOD and a named T&P coordinator? (default: Admin, the exam's owner faculty and the department HOD; T&P coordinator only if named)
-6. **Violation policy.** What should happen on leaving fullscreen or switching tabs: warning only, flag, lock until the owner decides, or auto-submit after N times? (default: warn, flag, lock after N, never auto-submit before the deadline)
-7. **Independent review.** Can someone outside the build (college IT cell, a senior, a paid tester) review the exam, auth and judge paths? (default: yes, before the first big exam)
-8. **Second device in an exam.** Take over (first device is told) or refuse? (default: take over, logged)
-9. **Dashboard customization.** Class switcher plus show, hide and reorder widgets, or full drag-and-drop? (default: the first)
-10. **Existing classes.** Keep self-join codes for ad hoc groups after HOD allocation exists? (default: yes, but they carry no faculty data scope)
-11. **Faculty access after reallocation.** Does a faculty member keep read-only access to a class's old-term data after the assignment ends? (default: no, unless granted)
-12. **Pilot.** Which department and term do we pilot the new class model in?
-13. **Exam screen reference.** Please share the CodeTantra exam screenshots (start page, question page, submit page).
-14. **Test accounts.** One test login per role (student, faculty, HOD, T&P, Admin) for staging, so I can verify in a browser.
+**Answered** (recorded in section 0): timeline (D-18), hosting approach (D-19), integrity email (D-20), who resumes (D-21), violation policy (D-22), second device (D-23), email service (D-24), review (D-25), dashboard (D-26), old-term access (D-27), pilot department (D-28).
+
+**Still open (defaults apply unless you say otherwise):**
+1. Keep self-join codes for ad hoc groups after HOD allocation exists? (default: yes, but they carry no faculty data scope)
+2. The exam screen reference: please share the CodeTantra exam screenshots (start page, question page, submit page).
+3. Test accounts: one test login per role (student, faculty, HOD, T&P, Admin) for staging, so I can verify in a browser.
+4. Section 15: confirm the two-week slice.
+
+---
+
+## 15. What fits in two weeks (honest)
+
+Doing every stream in two weeks would put unverified code in front of an exam, which is the opposite of what you want. What I recommend for the **first two weeks** is the exam-critical slice; everything else follows in the plan's order straight after.
+
+| Days | Work |
+|---|---|
+| 1 to 3 | S0 core: verify and close F12, F2, F17, F13, F14; access-matrix test for existing roles; CI scanners (CodeQL, gitleaks, npm audit, Trivy); security headers; basic error envelope (S7). **S2.0 college requirement document** drafted. |
+| 3 to 8 | S1.1 to S1.3: server-authoritative attempts, autosave, idempotent submit, second-device takeover, violation policy (warn, flag, lock after N), **resume feature**, student-side resilience. Adversarial attack-test suite for the exam module. |
+| 8 to 11 | S1.4 and S1.5: new exam screen (needs the CodeTantra screenshots), integrity report, email for hard evidence. |
+| 11 to 14 | k6 load-test harness and a first run on staging, exam-day playbook, monitoring and alerts, a dry run with a small group. |
+
+**Directly after the exam** (in this order): S3 class and mentor model with the CSE (AIML) pilot, S4 faculty dashboards, S5 T&P, S6 Admin, S2 scale work as the college server arrives. S7 runs through all of them.
+
+Why S3 to S6 are not in the two weeks: the class model touches every faculty screen and every access rule, so it needs a pilot and a test per edge case; rushing it is where "errors and issues" come from.
