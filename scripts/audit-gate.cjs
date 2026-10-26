@@ -11,8 +11,6 @@ const fs = require('fs');
 const path = require('path');
 
 const root = path.resolve(__dirname, '..');
-const app = process.argv[2];
-if (!app) { console.error('usage: node scripts/audit-gate.cjs <backend|frontend-next>'); process.exit(2); }
 
 const RANK = { info: 0, low: 1, moderate: 2, high: 3, critical: 4 };
 const threshold = RANK.high;
@@ -37,6 +35,8 @@ function evaluate(vulnerabilities, accepted, today = new Date()) {
 }
 
 if (require.main === module) {
+  const app = process.argv[2];
+  if (!app) { console.error('usage: node scripts/audit-gate.cjs <backend|frontend-next>'); process.exit(2); }
   const cfg = JSON.parse(fs.readFileSync(path.join(root, 'security', 'accepted-audit-risks.json'), 'utf8'));
   let out;
   try {
