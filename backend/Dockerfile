@@ -1,6 +1,6 @@
 # CodeSphere backend — Node + Java (for JPlag plagiarism detection)
 # Must match package.json "engines.node" and the Node version used in CI.
-FROM node:22-bookworm-slim
+FROM node:26-bookworm-slim
 
 # Java 17 is required by JPlag; curl to fetch the JAR.
 RUN apt-get update \
