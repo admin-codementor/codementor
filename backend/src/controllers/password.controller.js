@@ -4,7 +4,7 @@ const userRepo = require('../repositories/userRepository');
 const { resolvePermissions } = require('../middleware/permissions');
 const { validateNewPassword } = require('../utils/passwordGate');
 const { logAction } = require('../middleware/audit');
-const { generateTokens } = require('./firebaseAuth.controller');
+const { generateTokens } = require('../utils/tokens');
 
 // Is `password` the account's CURRENT password? Asks Firebase to sign in with it. Needs the project's public web
 // API key (FIREBASE_WEB_API_KEY, the same value the frontend uses). Without it this returns false, which means
@@ -48,9 +48,11 @@ exports.setPassword = async (req, res) => {
 
     await firebaseAuth.updateUser(user.firebaseUid, { password: req.body.new_password });
     await userRepo.update(user.id, user.role, { mustChangePassword: false, passwordChangedAt: new Date() });
+    // Any session opened before the password changed (for example with the temporary one) stops working at its next refresh.
+    await userRepo.bumpTokenVersion(user.id, user.role);
     logAction(req, 'auth.first_password_set', `user ${user.id}`);
 
-    const fresh = { ...user, mustChangePassword: false };
+    const fresh = { ...user, mustChangePassword: false, tokenVersion: (Number.isInteger(user.tokenVersion) ? user.tokenVersion : 0) + 1 };
     res.json({
       success: true,
       user: { id: fresh.id, name: fresh.name, email: fresh.email, role: fresh.role, permissions: resolvePermissions(fresh), must_change_password: false },

@@ -274,6 +274,8 @@ router.patch('/permissions/:userId',
       if (!existing) return res.status(404).json({ success: false, error: 'Faculty user not found' });
 
       await userRepo.update(req.params.userId, 'faculty', { permissions: sanitized });
+      // The old session still carries the old permissions: end it so the change takes effect within minutes.
+      await userRepo.bumpTokenVersion(req.params.userId, 'faculty');
 
       logAction(req, 'permissions.update', `faculty ${req.params.userId}: ${Object.keys(sanitized).filter(k => sanitized[k]).join(',') || 'none'}`);
       res.json({ success: true, data: { id: existing.id, name: existing.name, email: existing.email, permissions: sanitized } });

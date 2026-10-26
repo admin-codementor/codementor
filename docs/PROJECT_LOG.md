@@ -5,6 +5,22 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-26 (Mon), S0 security baseline, batch 1
+**Area:** Stream S0 of `docs/TNP_ADMIN_EXAMS_SECURITY_PLAN.md` (branch `feat/s0-security-baseline`). First of the two-week exam-critical slice.
+**Checked first (the five findings from `docs/scale-readiness/05-auth-and-security.md`):** F12 rules file is deny-all in the repo, **deployed state not verifiable from here**; F2, F13, F14 and F17 were open.
+**Did:**
+- **F2 limiters no longer fail open.** If Redis is unreachable, each limiter (including the submission limits) falls back to an in-memory limit with the same budget, per API copy (`utils/memoryLimiter.js`, 7 checks). One warning per 30 seconds.
+- **F17 `TRUST_PROXY`** is now a setting (hops or an address list; default 1, so nothing changes today). `true` is refused because it lets clients forge their IP. Behind Cloudflare, its tunnel and the ingress the hop count must be set and confirmed in the logs (`utils/trustProxy.js`, 4 checks). A production warning if `CORS_ORIGIN` is unset or `*`.
+- **F13 `tokenVersion`.** Token creation is now in one place (`utils/tokens.js`, 11 checks). Access tokens last 30 minutes (were 1 hour; 2FA ones were 15). A permission change by Admin or a password set raises the user's `tokenVersion`, and the refresh endpoint refuses a refresh token whose version no longer matches, so the old session ends within 30 minutes. Existing tokens count as version 0, so nobody is signed out when this ships.
+- **F14 headers.** The website now sends `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy`, `Permissions-Policy` (camera and microphone stay available to the site for the exam check) and HSTS in production, plus a **report-only** Content-Security-Policy. Reports go to `POST /api/public/csp-report` (public, limited, query strings dropped; `utils/cspReport.js`, 5 checks). Enforcing the CSP is a later step once the reports are clean.
+- **CI:** `.github/workflows/security.yml` (CodeQL, gitleaks, npm audit, Trivy image scan) and `.github/dependabot.yml`. **Not required checks yet**, because `npm audit` already fails (below).
+**Found:** `npm audit` on production dependencies: **backend 20 findings (1 critical `proxy-addr`, 10 high)**; **website 9 (2 critical: `next`, `dompurify`; 6 high including `firebase`, `sharp`)**. Fixes exist (for example `next@16.4.3`). Not applied here: an upgrade needs its own branch, a clean `npm ci` and a full check. This is the next S0 task.
+**Verified:** 395 offline checks; backend lint and route audit; website `tsc`, eslint and production build; the headers were read on a running dev server and the login page rendered with no CSP violations in the console.
+**Not verified:** the in-memory fallback was only unit-tested (no real Redis outage); the refresh flow was tested as pure logic, not with a real sign-in and a real permission change; the CSP has not been exercised on signed-in pages (only the login page); the CI workflow has not run yet; Firestore rules as deployed.
+**Next:** dependency upgrades (critical first), access-matrix test for the existing roles, error envelope, then S1 (exam reliability and resume).
+
+---
+
 ## 2026-10-21 (Wed), Phases 3 to 6
 **Area:** Phases 3 to 6 of `docs/COMPETITOR_BUILD_PLAN.md` (branch `feat/phases-3-7`, one PR to `main`). Phase 7 and 8 were not built (scope stopped at Phase 6 by request).
 **Did:**

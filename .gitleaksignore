@@ -1,0 +1,6 @@
+# Secret-scan findings that were looked at and are not secrets. One fingerprint per line.
+# Test-only passwords in the smoke-test suite (accounts created and deleted by the test itself)
+a8faf5977cd0a45d51f67ed0b82076b2f3a80e8c:backend/tests/suites/accounts.js:generic-api-key:43
+a8faf5977cd0a45d51f67ed0b82076b2f3a80e8c:backend/tests/suites/accounts.js:generic-api-key:44
+# Documentation example: the token in the command is the literal placeholder YOUR_TOKEN
+d005b66e38ff8a16bd8e7234faa25afa7b4d6d64:docs/DEPLOYMENT_GUIDE.md:curl-auth-header:181

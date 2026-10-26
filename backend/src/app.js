@@ -44,12 +44,16 @@ const careerRoutes = require('./routes/career.routes');
 const { publicRoute } = require('./middleware/routeGuard');
 
 const { validateSubmission } = require('./middleware/security');
+const { parseTrustProxy } = require('./utils/trustProxy');
 
 const app = express();
 
-// Behind a reverse proxy (Caddy/Nginx) or Vercel's edge network — trust the
-// first proxy hop so req.ip and X-Forwarded-For resolve correctly for rate limiting.
-app.set('trust proxy', 1);
+// Hops in front of this app (see utils/trustProxy.js). Render or Vercel: 1. The college cluster behind Cloudflare, its tunnel and the
+// ingress: count the hops, set TRUST_PROXY, and confirm req.ip in the logs. A wrong value is a security setting, so "true" is refused.
+app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
+if (process.env.NODE_ENV === 'production' && (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN.trim() === '*')) {
+  console.warn('[SECURITY] CORS_ORIGIN is unset or "*" in production. Set it to the website origin(s).');
+}
 
 // ── CORS origins ──────────────────────────────────────────────────────────────
 // CORS_ORIGIN may be a single origin or a comma-separated list (dev + prod domains).

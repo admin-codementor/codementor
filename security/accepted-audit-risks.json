@@ -1,0 +1,31 @@
+{
+  "_about": "Findings from `npm audit` (production dependencies, high and above) that we have looked at and accepted for now. scripts/audit-gate.cjs fails the build for anything NOT listed here, and for any entry whose review_by date has passed, so an accepted risk cannot be forgotten. Remove an entry as soon as a fix exists.",
+  "frontend-next": [
+    {
+      "package": "dompurify",
+      "reason": "Pulled in by monaco-editor 0.57.0, the latest release, which pins it. The editor shows only the student's own code and is not given untrusted HTML.",
+      "review_by": "2026-12-01"
+    },
+    {
+      "package": "firebase",
+      "reason": "Flagged only through @firebase/firestore and @grpc/grpc-js. The website imports firebase/auth and firebase/app only; Firestore and gRPC are not bundled into the browser. Even the newest Firebase pins the old gRPC. npm's suggested fix would downgrade Firebase to 9.14.0, which is wrong.",
+      "review_by": "2026-12-01"
+    },
+    {
+      "package": "@firebase/firestore",
+      "reason": "Same as firebase: not bundled into the browser.",
+      "review_by": "2026-12-01"
+    },
+    {
+      "package": "@firebase/firestore-compat",
+      "reason": "Same as firebase: not bundled into the browser.",
+      "review_by": "2026-12-01"
+    },
+    {
+      "package": "@grpc/grpc-js",
+      "reason": "Server-side gRPC library pulled in by the Firestore package; not bundled into the browser.",
+      "review_by": "2026-12-01"
+    }
+  ],
+  "backend": []
+}
