@@ -1,6 +1,7 @@
 name: Security scans
 
-# Report-only for now: these scans run on every pull request and every Monday, and show their findings in the Actions tab and the
+# Accepted findings live in security/accepted-audit-risks.json (npm), .trivyignore.yaml (image) and .gitleaksignore (secrets), each with a
+# reason and, for the first two, a review date. Report-only for now: these scans run on every pull request and every Monday, and show their findings in the Actions tab and the
 # Security tab, but they are NOT required checks, so they cannot block a merge yet. Today `npm audit` already reports critical and
 # high findings in both apps (see docs/PROJECT_LOG.md), so a blocking gate would stop everything. Once those are fixed, make
 # the scans required in branch protection.
@@ -75,5 +76,6 @@ jobs:
       # The scanner is run as its own container (pinned version), like the secret scan above.
       - name: Scan the image for known vulnerabilities (critical and high, with a fix available)
         run: >
-          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.69.3
-          image --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 codementor-backend:scan
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/work" -w /work aquasec/trivy:0.69.3
+          image --skip-version-check --ignorefile .trivyignore.yaml
+          --severity CRITICAL,HIGH --ignore-unfixed --exit-code 1 codementor-backend:scan
