@@ -1,3 +1,8 @@
+# Dependency updates, kept small on purpose.
+#   - Security updates still arrive on their own (the "security" group).
+#   - Ordinary minor and patch updates are grouped into ONE pull request per app per week, instead of one each.
+#   - Major versions are NOT opened automatically for the packages below, each for a reason. A major upgrade is a deliberate task: it
+#     needs a branch, the checks, and a real look in a browser. Remove an entry here when you are ready to do that upgrade.
 version: 2
 updates:
   - package-ecosystem: npm
@@ -9,6 +14,10 @@ updates:
       security:
         applies-to: security-updates
         patterns: ['*']
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns: ['*']
   - package-ecosystem: npm
     directory: /frontend-next
     schedule:
@@ -18,6 +27,28 @@ updates:
       security:
         applies-to: security-updates
         patterns: ['*']
+      minor-and-patch:
+        applies-to: version-updates
+        update-types: [minor, patch]
+        patterns: ['*']
+    ignore:
+      # typescript-eslint does not support TypeScript 7 yet ("typescript-eslint does not support TS 7.0"), so the build fails.
+      - dependency-name: typescript
+        update-types: ['version-update:semver-major']
+      # @mui/system must be the same major as @mui/material (6). Moving to 9 is a whole MUI migration, not one package.
+      - dependency-name: '@mui/*'
+        update-types: ['version-update:semver-major']
+      # Sign-in depends on it and a real sign-in test is needed before a major change.
+      - dependency-name: firebase
+        update-types: ['version-update:semver-major']
+      # Page animations; a major change needs a visual check of every animated screen.
+      - dependency-name: framer-motion
+        update-types: ['version-update:semver-major']
+      # react and react-dom are pinned to the same exact version and must be bumped together by hand.
+      - dependency-name: react
+        update-types: ['version-update:semver-major']
+      - dependency-name: react-dom
+        update-types: ['version-update:semver-major']
   - package-ecosystem: github-actions
     directory: /
     schedule:
@@ -26,3 +57,7 @@ updates:
     directory: /backend
     schedule:
       interval: monthly
+    ignore:
+      # Node 22 is what package.json "engines" and CI use. Changing the runtime is a deliberate task (move all three together).
+      - dependency-name: node
+        update-types: ['version-update:semver-major']
