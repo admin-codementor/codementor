@@ -53,6 +53,11 @@ async function update(id, role, partial) {
   await db.collection(collectionFor(role)).doc(id).set(partial, { merge: true });
 }
 
+/** Ends every existing session of this user at its next refresh (see utils/tokens.js). */
+async function bumpTokenVersion(id, role) {
+  await db.collection(collectionFor(role)).doc(id).set({ tokenVersion: FieldValue.increment(1) }, { merge: true });
+}
+
 async function listByRole(role) {
   const snap = await db.collection(collectionFor(role)).get();
   return snap.docs.map(toUser);
@@ -78,5 +83,6 @@ module.exports = {
   update,
   listByRole,
   getMapByRole,
+  bumpTokenVersion,
   getAllUsersMap,
 };

@@ -1,6 +1,6 @@
 const jwt = require('jsonwebtoken');
 const userRepo = require('../repositories/userRepository');
-const { gateClaim } = require('../utils/passwordGate');
+const { refreshStatus, signAccess } = require('../utils/tokens');
 
 exports.refresh = async (req, res) => {
   try {
@@ -14,17 +14,17 @@ exports.refresh = async (req, res) => {
 
     const user = await userRepo.getById(decoded.id, decoded.role);
     if (!user) {
-      return res.status(401).json({ success: false, error: 'User no longer exists' });
+      return res.status(401).json({ success: false, code: 'SESSION_ENDED', error: 'User no longer exists' });
     }
 
-    // Re-resolve permissions so the refreshed token is consistent with login
-    const { resolvePermissions } = require('../middleware/permissions');
-    const permissions = resolvePermissions(user);
-    const newAccessToken = jwt.sign(
-      { id: user.id, role: user.role, permissions, department: user.department ?? null, ...gateClaim(user) },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
+    // A refresh token is only good while the account's tokenVersion still matches (utils/tokens.js): a permission change, a
+    // password change or a deactivation ends the old session here, not after 7 days.
+    const status = refreshStatus(decoded, user);
+    if (!status.ok) {
+      return res.status(401).json({ success: false, code: 'SESSION_ENDED', error: 'Your session has ended. Please sign in again.' });
+    }
+    // Permissions are re-resolved from the stored account so the new token matches what the account may do now.
+    const newAccessToken = signAccess(user);
 
     res.json({ success: true, accessToken: newAccessToken });
 

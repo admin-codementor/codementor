@@ -1,19 +1,11 @@
 const { v4: uuidv4 } = require('uuid');
-const jwt = require('jsonwebtoken');
 const { firebaseAuth } = require('../config/firebaseAdmin');
 const userRepo = require('../repositories/userRepository');
 
 const { resolvePermissions } = require('../middleware/permissions');
-const { gateClaim } = require('../utils/passwordGate');
 
-// Mirror auth.controller.generateTokens exactly: payload { id, role, permissions, department }.
-const generateTokens = (user) => {
-  const permissions = resolvePermissions(user);
-  const payload = { id: user.id, role: user.role, permissions, department: user.department ?? null, ...gateClaim(user) };
-  const accessToken  = jwt.sign(payload, process.env.JWT_SECRET,         { expiresIn: '1h' });
-  const refreshToken = jwt.sign(payload, process.env.JWT_REFRESH_SECRET, { expiresIn: '7d' });
-  return { accessToken, refreshToken };
-};
+// Token creation lives in utils/tokens.js (one place, one lifetime, tokenVersion).
+const { generateTokens } = require('../utils/tokens');
 
 // Faculty accounts are never self-service.
 //
