@@ -39,6 +39,7 @@ Order of personas (locked): Student, Faculty, HOD, **T&P, Admin**. Super Admin i
 | D-26 | **Faculty dashboard:** class switcher plus show, hide and reorder widgets, saved per user. |
 | D-27 | **Faculty access after a class assignment ends:** none, unless granted by HOD or Admin. |
 | D-28 | **Pilot** of the class and mentor model: **CSE (AIML)**. |
+| D-30 | **Students use any network** (home Wi-Fi, mobile data, hotspot). The app must be light and resilient (section S2.8); IP address is never used as evidence of cheating. |
 | D-29 | **No rented cloud.** Run on the **college's own hardware** with **Kubernetes (K3s)** for automatic scaling and load balancing. |
 
 ---
@@ -138,7 +139,7 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 - The design pass uses the existing `codementor-ui` rules and is shown to you as a layout for approval before it is built.
 
 ### 5.5 Integrity engine and reporting (D-17)
-- **Signals:** tampered or replayed requests (hard evidence), impossible timings (solved in 2 seconds), identical or near-identical code (JPlag exists), multiple IPs or devices, devtools / paste / tab / fullscreen events (soft evidence), submitting after the deadline.
+- **Signals:** tampered or replayed requests (hard evidence), impossible timings (solved in 2 seconds), identical or near-identical code (JPlag exists), devtools / paste / tab / fullscreen events (soft evidence), submitting after the deadline. **A changing IP address is NOT a signal** (D-30): students use any Wi-Fi, mobile data or hotspot, and mobile addresses change constantly. Two different devices at once is handled by the second-device takeover rule (D-23), not by IP.
 - Each flag stores **what, when and the evidence**. Hard evidence and soft signals are kept apart.
 - **Reporting by email** to the student and the Admin with the reason. My recommendation: send automatically only for **hard evidence**; soft signals go to the exam owner for review first, because an automatic accusation based on a flaky network is a false accusation. *(question 4)*
 - Students get an **appeal** path (a short form to the exam owner), and every decision is logged.
@@ -173,6 +174,14 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 - **Guard rails:** resource requests and limits on every pod, a maximum on every scaler, pod disruption budgets, and an alarm if capacity stays high after an exam ends.
 - **Efficiency first:** fewer database reads and caching come before scaling, because scaling a wasteful path only wastes more.
 - **Verified how:** the load test includes scale-up and scale-down runs and a killed-node test; the pre-warm is tested against a scheduled dummy exam before it is trusted.
+
+### S2.8 Works on any student network (D-30)
+
+- **Weight budget:** first load about 3 MB (then cached); about 100 KB per student per minute while working; compressed responses; every page usable on about a 1 Mbps hotspot. We measure bytes per page and fail CI if a page grows past its budget.
+- **Resilience:** answers saved on the device first (IndexedDB), then synced; automatic retry with backoff; idempotent submits; a clear "reconnecting / your work is safe" state; no work lost when the network drops or changes.
+- **No IP-based rules** for fairness: the exam IP restriction is optional and only for lab-based tests the college chooses to run on its own network.
+- **Public reach:** the platform is reachable from any network through Cloudflare (outbound-only tunnel from the college), with rate limits and attack protection on.
+- **Tested how:** the load test and the browser checks include a throttled-network run (about 1 Mbps with packet loss) and a network-switch run (Wi-Fi to mobile data in the middle of an exam).
 
 ---
 

@@ -66,7 +66,7 @@ The assumption "about 1.33 CPU-seconds per run" is **the weakest number** and wi
 | Internet link during exams | **at least 100 Mbps**, not shared with a heavy download that day | **budget** below |
 | Server connectivity | outbound HTTPS (443) only; no inbound ports | design |
 | Allowed domains | to be listed by us (hosting, database, email, monitoring) so the firewall can allow them | ask |
-| Exam labs | **wired** machines preferred; if Wi-Fi, the network team confirms the access points can carry the number of students in that lab | ask |
+| Exam labs | only if graded tests are held in labs: **wired** machines preferred; if Wi-Fi, the network team confirms the access points can carry that many students. **Students may also work from any other network** (home, mobile data), so the platform is built to be light and to survive drops. | ask |
 | DNS and time | a working campus DNS and correct server clock | ask |
 
 **Bandwidth budget (to be verified by the load test):** we will build the exam page to a budget of **3 MB for the first load** (then cached) and **about 100 KB per student per minute** afterwards.
