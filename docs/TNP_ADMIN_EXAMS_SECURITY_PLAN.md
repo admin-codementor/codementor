@@ -160,6 +160,16 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 5. **Observability:** Sentry (errors), Grafana Cloud or Prometheus (metrics), an uptime monitor, an **exam-day dashboard**, alerts to email and a chat app, a status page.
 6. **Exam-day playbook:** pre-flight checklist, deploy freeze, warm-up, named roles, rollback steps, a "degraded mode" (if the judge is down the MCQ section continues and coding submissions queue).
 
+### S2.7 Elastic capacity (use less when quiet, more when busy)
+
+- **What scales by itself:** the website (CDN and serverless). **What we make scale:** the API (stateless copies, minimum 2, automatic up and down) and the Judge0 workers (added or removed by queue length).
+- **Scheduled first, reactive second.** An exam starts suddenly (about 1000 logins in 2 minutes) and a new server takes minutes to boot, so reactive scaling alone is too late. The exam record already has a start time: 30 minutes before it, the system **pre-warms** the capacity that exam needs (from its student count and language mix) and **releases it after the end time**. Queue-length scaling sits on top for surprises.
+- **Baseline plus burst:** the college server is the always-on baseline; extra code-runner machines are rented only for exam days. A physical server saves little electricity when idle, so the saving is mostly in the rented part (our own study: about 42,000 a month always on at 16 cores against about 13,000 with a small baseline and exam-day resizing; ch. 9).
+- **Judge0 note:** extra workers must share its queue, so the layout (where the queue lives and how a rented worker reaches it without inbound access to the college) is a design item to settle with the college IT answer.
+- **Guard rails:** a hard maximum on every scaling rule, budget alerts, and an alarm if capacity stays high after an exam ends. Efficiency work (fewer database reads, caching) comes before scaling, because scaling a wasteful path only raises the bill.
+- **Avoid for now:** Kubernetes (too heavy for one maintainer). Use a managed container platform for the API and a small scale script for the workers; revisit later.
+- **Verified how:** the load test includes a scale-up and scale-down run, and the pre-warm is tested against a scheduled dummy exam before it is trusted.
+
 ---
 
 ## 7. S3: Academic structure (terms, classes, mentors, faculty scoping)
