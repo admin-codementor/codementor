@@ -71,7 +71,7 @@ function runJPlag(submissionsDir, jplagLang, resultsDir) {
 // Recursively collect every .csv produced anywhere under a directory.
 function findCsvFiles(dir) {
   const out = [];
-  let entries = [];
+  let entries;
   try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { return out; }
   for (const e of entries) {
     const full = path.join(dir, e.name);
