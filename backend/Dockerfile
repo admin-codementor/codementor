@@ -22,6 +22,10 @@ ENV JPLAG_JAR_PATH=/app/jplag/jplag.jar
 COPY package*.json ./
 RUN npm ci --omit=dev || npm install --omit=dev
 
+# The running container only needs `node`. The npm tool that ships with the base image carries its own copy of many libraries (the
+# image scan flags them), and nothing here runs npm after this point, so remove it: fewer findings and a smaller attack surface.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/bin/npm /usr/local/bin/npx
+
 COPY . .
 
 EXPOSE 3001
