@@ -5,6 +5,14 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), Dependency updates in one PR
+**Why:** Dependabot opened 15 separate PRs (#51 to #65). Each edits the same lockfile, so merging one made the next conflict. Replaced by **one PR** (with the access-matrix and error-format work from #66), and the Dependabot config now groups minor and patch updates into one PR per app per week and no longer opens the risky majors.
+**Applied:** `mammoth` 1.13, `@upstash/ratelimit` 2.2, `dotenv` 18, `helmet` 8.3, `eslint` 10 (with `@eslint/js` added explicitly and two leftover assignments fixed), `react` and `react-dom` 19.3.1 together (the bot bumped only `react`, which would have broken the site at run time), and the GitHub Actions versions (checkout 7, setup-node 7, setup-java 6, codeql-action 4).
+**Not applied, on purpose:** TypeScript 7 (typescript-eslint does not support it), `@mui/system` 9 (must match `@mui/material` 6), Firebase 13 and framer-motion 14 (need a real sign-in test and a visual check), Node 26 (CI and `engines` use 22).
+**Verified:** clean installs of both apps, backend lint and 466 offline checks, route audit, website `tsc`, eslint and production build, both audit gates, Word import with the new mammoth (a document built in memory), the sign-in page on React 19.3.1 in a browser. **Not verified:** Linux CI; sign-in itself; any signed-in page.
+
+---
+
 ## 2026-10-26 (Mon), S0 security baseline, batch 1
 **Area:** Stream S0 of `docs/TNP_ADMIN_EXAMS_SECURITY_PLAN.md` (branch `feat/s0-security-baseline`). First of the two-week exam-critical slice.
 **Checked first (the five findings from `docs/scale-readiness/05-auth-and-security.md`):** F12 rules file is deny-all in the repo, **deployed state not verifiable from here**; F2, F13, F14 and F17 were open.
