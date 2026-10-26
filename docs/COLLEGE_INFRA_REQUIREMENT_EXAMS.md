@@ -47,7 +47,9 @@ Student code is untrusted and must run in an isolated sandbox. Everything else (
 | RAM | **32 GB** | 16 sandboxes at 512 MB each, plus services (derived) |
 | Disk | **100 GB SSD** | grows with submission history (derived) |
 | GPU | **none** | the workload is CPU-only |
-| Software | Docker; `sudo` for the installer | the sandbox needs privileged containers |
+| Operating system | a recent Linux server edition (for example Ubuntu 22.04 or 24.04 LTS) with `sudo` | we need to confirm the kernel's cgroup mode, because the code sandbox is known to need the older cgroup v1 or specific kernel settings |
+| Software | Docker or containerd, and **K3s (Kubernetes)**, installed by us | automatic scaling and load balancing; the sandbox needs privileged containers |
+| Machines | **two machines preferred** | one machine is a single point of failure; with one, a hardware fault stops exams until it is repaired |
 | Isolation | containers; cannot touch other workloads on the machine | design |
 
 Sensitivity (derived, ch. 9): a light exam (30 runs per student) needs about 10 cores; the base case about 20; a heavy exam (80 runs per student) about 26.
@@ -116,7 +118,7 @@ We ask the college to name **one contact for exam days** (network or IT) who can
 | **24 cores** | Same, comfortable margin; heavy exams (80 runs per student) | none expected |
 | **8 cores** | About 500 students writing code, or 1000 on MCQ-heavy exams | longer waits at the peak; we advise staggered batches |
 | **Below 8 cores or under 50 Mbps** | Practice and small exams only | not suitable for a college-wide graded coding exam |
-| **No college server** | We can rent cloud servers for exam days only (a cost to be agreed) | adds cost and needs the college's approval for data location |
+| **No college server** | Practice and small tests on the current free setup only | not suitable for a graded coding exam; we do not plan to rent cloud servers |
 
 ---
 
@@ -125,7 +127,7 @@ We ask the college to name **one contact for exam days** (network or IT) who can
 | When | What |
 |---|---|
 | Now | The college reviews this document and names the contact. |
-| Week 1 to 2 | We run a load test on a rented server and report the real figures; the college prepares the server and network. |
+| Week 1 to 2 | The college prepares the server and network. We prove the code sandbox runs on it, then run a load test there and report the real figures. Until the server is ready we test locally at reduced scale. |
 | Week 2 | **Rehearsal:** about 100 students on the college server and network, a short test. |
 | Week 3 onward | A graded exam with 7 days' notice. |
 
@@ -138,3 +140,5 @@ We ask the college to name **one contact for exam days** (network or IT) who can
 3. Do we ask for the optional campus-hosted copy (section 3), or only the code-runner server?
 4. Who signs this for the college side, and who is the exam-day contact?
 5. Do we have any figure for the campus internet link today?
+6. What operating system and kernel does the college server run, and does the college allow Kubernetes (K3s) and privileged containers on it?
+7. Can the college provide a second machine?

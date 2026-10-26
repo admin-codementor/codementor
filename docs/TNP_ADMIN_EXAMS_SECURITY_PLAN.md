@@ -39,6 +39,7 @@ Order of personas (locked): Student, Faculty, HOD, **T&P, Admin**. Super Admin i
 | D-26 | **Faculty dashboard:** class switcher plus show, hide and reorder widgets, saved per user. |
 | D-27 | **Faculty access after a class assignment ends:** none, unless granted by HOD or Admin. |
 | D-28 | **Pilot** of the class and mentor model: **CSE (AIML)**. |
+| D-29 | **No rented cloud.** Run on the **college's own hardware** with **Kubernetes (K3s)** for automatic scaling and load balancing. |
 
 ---
 
@@ -60,7 +61,7 @@ Order of personas (locked): Student, Faculty, HOD, **T&P, Admin**. Super Admin i
 
 1. **Nothing is unhackable.** The achievable goal is: cheating and tampering are **hard, detected, attributed and reported**, and a compromised student browser can never change a score, a deadline or another student's data. The one rule that delivers this: **the server is the only authority.** The browser is a display and an input device; it is never trusted.
 2. **"Built with AI, so it gets hacked."** The real risk is *unreviewed* code, and that applies equally to human code. What reduces it: automated scanning on every PR, a written threat model for each risky feature, tests for every access rule, a human or independent review of the exam, auth and judge paths, and no unreviewed dependencies. S0 is built around that. I will not claim it is "secure"; I will claim what was tested and what was not.
-3. **1000 simultaneous code runs is not possible on the current setup.** The public Judge0 and a free Render instance cannot do it. It needs the college server (or paid cloud) as in the scale programme. The plan is gated on that decision (question 2).
+3. **1000 simultaneous code runs is not possible on the current setup.** The public Judge0 and a free Render instance cannot do it. It needs the college server as in the scale programme (D-29: no rented cloud). The plan is gated on that decision (question 2).
 4. **Browser console cheating.** A student can always open devtools. We cannot stop that; we make it **useless** (nothing valuable to change: scores, timers, answers and test cases are server-side) and **visible** (signed requests, anomaly rules, integrity log).
 
 ---
@@ -160,15 +161,18 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 5. **Observability:** Sentry (errors), Grafana Cloud or Prometheus (metrics), an uptime monitor, an **exam-day dashboard**, alerts to email and a chat app, a status page.
 6. **Exam-day playbook:** pre-flight checklist, deploy freeze, warm-up, named roles, rollback steps, a "degraded mode" (if the judge is down the MCQ section continues and coding submissions queue).
 
-### S2.7 Elastic capacity (use less when quiet, more when busy)
+### S2.7 Elastic capacity on Kubernetes (D-29)
 
-- **What scales by itself:** the website (CDN and serverless). **What we make scale:** the API (stateless copies, minimum 2, automatic up and down) and the Judge0 workers (added or removed by queue length).
-- **Scheduled first, reactive second.** An exam starts suddenly (about 1000 logins in 2 minutes) and a new server takes minutes to boot, so reactive scaling alone is too late. The exam record already has a start time: 30 minutes before it, the system **pre-warms** the capacity that exam needs (from its student count and language mix) and **releases it after the end time**. Queue-length scaling sits on top for surprises.
-- **Baseline plus burst:** the college server is the always-on baseline; extra code-runner machines are rented only for exam days. A physical server saves little electricity when idle, so the saving is mostly in the rented part (our own study: about 42,000 a month always on at 16 cores against about 13,000 with a small baseline and exam-day resizing; ch. 9).
-- **Judge0 note:** extra workers must share its queue, so the layout (where the queue lives and how a rented worker reaches it without inbound access to the college) is a design item to settle with the college IT answer.
-- **Guard rails:** a hard maximum on every scaling rule, budget alerts, and an alarm if capacity stays high after an exam ends. Efficiency work (fewer database reads, caching) comes before scaling, because scaling a wasteful path only raises the bill.
-- **Avoid for now:** Kubernetes (too heavy for one maintainer). Use a managed container platform for the API and a small scale script for the workers; revisit later.
-- **Verified how:** the load test includes a scale-up and scale-down run, and the pre-warm is tested against a scheduled dummy exam before it is trusted.
+- **Platform:** **K3s** (a lightweight, single-binary Kubernetes) on the college hardware. All manifests live in git (Helm charts) and CI applies them, so the cluster can be rebuilt from the repo.
+- **API:** a Deployment with a **Horizontal Pod Autoscaler** (CPU and request latency), minimum 2 copies, maximum set by the server's cores. **Judge0 workers:** a Deployment scaled by **KEDA** on the queue length. Because the machines are fixed, new copies start in **seconds**, so reactive scaling is fast enough; we still **pre-warm** from the exam schedule (raise the minimum 30 minutes before an exam from its student count and language mix, lower it after the end time).
+- **The ceiling is the hardware.** "Beast mode" can use every core the college gives and no more. When the cores are all busy the **queue** absorbs the peak (the 20-second verdict design); beyond that, verdicts slow down but nothing is dropped. More headroom only comes from more college machines joining the cluster.
+- **Quiet times:** pods scale down and the cores are free for other people's work. The electricity saving on a physical server is small; the benefit is shared use and no waste.
+- **One machine is one point of failure.** Kubernetes restarts crashed pods but cannot survive a dead machine. We ask the college for **two machines** (section 3 of the college document); with one, we accept restart-only recovery and say so.
+- **Judge0 on Kubernetes is the technical risk.** Its sandbox needs privileged containers and is known to need the older cgroup v1 on the host (or specific kernel settings). **First task of S2: a one-day spike** proving Judge0 runs correctly on K3s on the college's operating system before anything else depends on it. **Fallback:** Docker Compose on the same host with the same images.
+- **Operations burden (honest):** Kubernetes adds moving parts for one maintainer. Mitigation: K3s with a minimal set (ingress, metrics, KEDA, Prometheus and Grafana), everything declarative, a written runbook, and a **recovery rehearsal** (rebuild the cluster from git) before the first graded exam.
+- **Guard rails:** resource requests and limits on every pod, a maximum on every scaler, pod disruption budgets, and an alarm if capacity stays high after an exam ends.
+- **Efficiency first:** fewer database reads and caching come before scaling, because scaling a wasteful path only wastes more.
+- **Verified how:** the load test includes scale-up and scale-down runs and a killed-node test; the pre-warm is tested against a scheduled dummy exam before it is trusted.
 
 ---
 
@@ -251,7 +255,7 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 | CI and code security | GitHub Actions, CodeQL, Semgrep, Dependabot, npm audit, gitleaks, Trivy, OWASP ZAP |
 | Tests | existing offline suite, Playwright (end-to-end), k6 (load), a generated access-matrix test |
 | Edge and network | Cloudflare (TLS, WAF, DDoS, cache), Nginx or HAProxy load balancer |
-| Runtime | Docker Compose, systemd or PM2, Redis, Judge0 workers |
+| Runtime | K3s (Kubernetes), Helm, KEDA, Redis, Judge0 workers; Docker Compose as the fallback |
 | Observability | Sentry, Grafana Cloud or Prometheus, uptime monitor, structured logs with request ids |
 | Backups | scheduled Firestore export (or `pg_dump` after the Postgres move), restore drill |
 | Email | provider TBD (question 3) |
@@ -262,7 +266,7 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 ## 13. What I cannot guarantee
 
 - That no one can ever cheat or break in. I can guarantee a tested list of controls and an honest list of what was not tested.
-- That 1000 simultaneous coding runs work without the college server or paid cloud.
+- That 1000 simultaneous coding runs work without the college server.
 - That the new access model is error-free for every real timetable without a pilot on one department first. I propose a **pilot with one department and one term** before the whole college.
 - Anything I have not opened in a signed-in browser. I cannot create a test login on my own, so I will ask you for a test account per role (including `tnp`) before each check.
 
