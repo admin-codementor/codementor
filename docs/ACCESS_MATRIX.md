@@ -1,0 +1,101 @@
+# Access matrix: who may call which API route
+
+**Generated** from `backend/src/config/accessMatrix.js` by `npm run docs:access` in `backend/`. Do not edit by hand: change the matrix and regenerate.
+
+The test `backend/tests/pure/accessMatrix.js` reads the real role checks on every route and fails the build if a route is missing from this
+policy, differs from it, or breaks an invariant below. This covers the **route layer** (who passes sign-in and role checks). Checks inside a
+handler (own data only, own department, own class) are not shown here.
+
+Rules are read top to bottom and the first match wins. `*` is one path segment, `**` is the rest.
+
+## Routes that need a token
+
+| Path | Methods | Who may call it | Why |
+|---|---|---|---|
+| `/api/faculty/permissions/**` | all | admin | who holds which staff permission |
+| `/api/faculty/audit-logs` | all | admin | the audit trail |
+| `/api/faculty/faculty-list` | all | admin | all staff accounts |
+| `/api/faculty/analytics` | all | admin | college-wide class analytics |
+| `/api/messages/reported` | all | hod, admin | reviewing reported conversations |
+| `/api/messages/reported/**` | all | hod, admin | reviewing reported conversations |
+| `/api/faculty/alumni` | all | hod, admin |  |
+| `/api/faculty/alumni/**` | all | hod, admin |  |
+| `/api/faculty/department` | all | hod, admin | department dashboard |
+| `/api/faculty/department/**` | all | hod, admin |  |
+| `/api/faculty/department-leaderboard` | all | hod, admin |  |
+| `/api/faculty/labs` | all | hod, admin |  |
+| `/api/faculty/mentors` | all | hod, admin |  |
+| `/api/faculty/mentors/**` | all | hod, admin |  |
+| `/api/faculty/placement/**` | all | hod, admin | drives, applications, analytics, readiness (T&P joins in S5) |
+| `/api/faculty/platform-scores/refresh` | all | hod, admin | re-reads linked coding profiles |
+| `/api/faculty/platform-thresholds` | all | hod, admin | college red/green thresholds |
+| `/api/faculty/portfolio` | all | hod, admin |  |
+| `/api/career/**` | all | student | resume check, mock interview, own readiness |
+| `/api/student/portfolio` | all | student |  |
+| `/api/student/portfolio/**` | all | student |  |
+| `/api/student/**` | all | any signed-in role | student pages. Handlers act on the caller's own id. Staff reuse PUT /profile (their own name) and the problem pages (preview), so this is not restricted to students yet |
+| `/api/2fa/**` | all | any signed-in role | each person manages their own two-factor sign-in |
+| `/api/ai/**` | all | any signed-in role | AI tutor, error explainer, code review; exam-locked inside |
+| `/api/auth/set-password` | all | any signed-in role | first-login password change |
+| `/api/calendar` | all | any signed-in role | scoped to the viewer inside the handler |
+| `/api/courses` | all | any signed-in role | published courses; scoped inside |
+| `/api/courses/*` | all | any signed-in role |  |
+| `/api/profiles/**` | all | any signed-in role | own coding profiles and the leaderboard |
+| `/api/rating/leaderboard` | all | any signed-in role |  |
+| `/api/rating/user/*` | all | any signed-in role |  |
+| `/api/roadmaps` | all | any signed-in role |  |
+| `/api/roadmaps/*` | all | any signed-in role |  |
+| `/api/messages/**` | all | any signed-in role | direct messages; participation is checked inside |
+| `/api/proctor/event` | all | any signed-in role | a student client records an event for itself |
+| `/api/classrooms` | GET | any signed-in role | a student lists their classes; staff list theirs |
+| `/api/classrooms/join` | POST | any signed-in role | join with a code |
+| `/api/exams/available` | all | any signed-in role |  |
+| `/api/exams/*/instructions` | all | any signed-in role |  |
+| `/api/exams/*/start` | all | any signed-in role |  |
+| `/api/exams/*/submit` | all | any signed-in role |  |
+| `/api/exams/*/attempt` | all | any signed-in role |  |
+| `/api/exams/*/attempt/**` | all | any signed-in role |  |
+| `/api/mcq/available` | all | any signed-in role |  |
+| `/api/mcq/*/start` | all | any signed-in role |  |
+| `/api/mcq/*/submit` | all | any signed-in role |  |
+| `/api/contests` | POST | faculty, hod, admin | needs the manage_contests permission too |
+| `/api/contests/*/scoreboard-mode` | all | faculty, hod, admin | needs the manage_contests permission too |
+| `/api/contests` | all | any signed-in role |  |
+| `/api/contests/**` | all | any signed-in role |  |
+| `/api/faculty/**` | all | faculty, hod, admin | the staff console; further limited by department and class inside |
+| `/api/classrooms` | all | faculty, hod, admin |  |
+| `/api/classrooms/**` | all | faculty, hod, admin |  |
+| `/api/exams` | all | faculty, hod, admin | authoring and results |
+| `/api/exams/**` | all | faculty, hod, admin |  |
+| `/api/mcq/tests` | all | faculty, hod, admin |  |
+| `/api/mcq/tests/**` | all | faculty, hod, admin |  |
+| `/api/pdf/**` | all | faculty, hod, admin |  |
+| `/api/problem-import/**` | all | faculty, hod, admin | needs the manage_problems permission too |
+| `/api/judge-health` | all | faculty, hod, admin |  |
+| `/api/proctor/assignment/*` | all | faculty, hod, admin |  |
+| `/api/rating/contest/*/recompute` | all | faculty, hod, admin | needs the manage_contests permission too |
+
+## Routes open without a token (on purpose)
+
+| Path | Methods | Why |
+|---|---|---|
+| `/api/auth/refresh` | POST | exchange a refresh token |
+| `/api/auth/firebase` | POST | sign in |
+| `/api/2fa/verify` | POST | second step of sign in |
+| `/api/submit` | POST | run and submit code; optional sign-in, limited by address |
+| `/api/submit/status/*` | GET | poll a verdict |
+| `/api/submit/history/*` | GET | own history when signed in |
+| `/api/submissions` | GET | own submissions when signed in |
+| `/api/problems` | GET | the problem list |
+| `/api/problems/*` | GET | one problem (hidden tests are never returned) |
+| `/api/problems/*/adjacent` | GET | previous and next problem |
+| `/api/public/profile/*` | GET | a student's published profile |
+| `/api/public/csp-report` | POST | browser security reports |
+| `/health` | GET | liveness probe |
+
+## Invariants (true however the rules are edited)
+
+- **staff-console-never-open-to-students**: No route under /api/faculty may be callable by a student or by every role.
+- **admin-only-stays-admin-only**: Permissions, the audit log and the staff list are Admin only.
+- **authoring-never-open-to-students**: Importing problems, exporting PDFs and the judge health page are never callable by a student.
+- **changes-to-staff-data-need-staff**: Any route that changes data under /api/faculty must have a role check.

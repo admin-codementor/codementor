@@ -14,7 +14,8 @@
     "preflight": "node src/scripts/preflight.js",
     "check:ai": "node src/scripts/checkAiKey.js",
     "test:smoke": "node tests/run.js",
-    "test:pure": "node tests/runPure.js"
+    "test:pure": "node tests/runPure.js",
+    "docs:access": "node scripts/access-matrix-doc.js"
   },
   "keywords": [],
   "author": "",

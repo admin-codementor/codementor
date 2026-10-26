@@ -39,6 +39,15 @@ function publicRoute(reason) {
 // would have silently reported every route in the app as unguarded.
 const isProtect = (fn) => fn === protect;
 const isPublicMarker = (fn) => typeof fn === 'function' && fn._authz?.public === true;
+const rolesOf = (fn) => (typeof fn === 'function' && Array.isArray(fn._authz?.roles) ? fn._authz.roles : null);
+const permissionOf = (fn) => (typeof fn === 'function' && typeof fn._authz?.permission === 'string' ? fn._authz.permission : null);
+
+/** Roles that pass every role check on a route: the intersection of all `authorize(...)` lists. null means no role check at all. */
+function intersectRoles(a, b) {
+  if (a === null) return b;
+  if (b === null) return a;
+  return a.filter((r) => b.includes(r));
+}
 
 /**
  * Flattens an Express app's router tree into one row per route.
@@ -57,6 +66,8 @@ function auditRoutes(app, mounts = new WeakMap()) {
     // this is carried forward as the walk proceeds rather than computed upfront.
     let guardedHere = inherited.guarded;
     let publicHere = inherited.publicReason;
+    let rolesHere = inherited.roles ?? null;
+    let permsHere = inherited.permissions ?? [];
 
     for (const layer of stack) {
       const handle = layer.handle;
@@ -64,6 +75,8 @@ function auditRoutes(app, mounts = new WeakMap()) {
       if (!layer.route && typeof handle === 'function' && !handle.stack) {
         if (isProtect(handle)) guardedHere = true;
         if (isPublicMarker(handle)) publicHere = handle._authz.reason;
+        if (rolesOf(handle)) rolesHere = intersectRoles(rolesHere, rolesOf(handle));
+        if (permissionOf(handle)) permsHere = [...permsHere, permissionOf(handle)];
         continue;
       }
 
@@ -71,12 +84,19 @@ function auditRoutes(app, mounts = new WeakMap()) {
         const chain = layer.route.stack.map((s) => s.handle);
         const marker = chain.find(isPublicMarker);
         const methods = Object.keys(layer.route.methods).filter((m) => layer.route.methods[m]);
+        // Role checks written on the route itself add to the ones inherited from `router.use(...)`.
+        let routeRoles = rolesHere;
+        for (const fn of chain) if (rolesOf(fn)) routeRoles = intersectRoles(routeRoles, rolesOf(fn));
+        const routePerms = [...permsHere, ...chain.map(permissionOf).filter(Boolean)];
         for (const method of methods) {
           rows.push({
             method: method.toUpperCase(),
             path: joinPath(prefix, layer.route.path),
             guarded: guardedHere || chain.some(isProtect),
             publicReason: marker ? marker._authz.reason : publicHere,
+            // null = any signed-in role may pass the route layer; otherwise the roles that pass every role check on the path
+            roles: routeRoles,
+            permissions: routePerms,
           });
         }
         continue;
@@ -86,12 +106,14 @@ function auditRoutes(app, mounts = new WeakMap()) {
         walk(handle.stack, joinPath(prefix, mounts.get(handle) ?? ''), {
           guarded: guardedHere,
           publicReason: publicHere,
+          roles: rolesHere,
+          permissions: permsHere,
         });
       }
     }
   };
 
-  walk(app.router?.stack || app._router?.stack || [], '', { guarded: false, publicReason: null });
+  walk(app.router?.stack || app._router?.stack || [], '', { guarded: false, publicReason: null, roles: null, permissions: [] });
   return rows;
 }
 

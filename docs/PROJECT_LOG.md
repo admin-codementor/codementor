@@ -17,7 +17,14 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 **Found:** `npm audit` on production dependencies: **backend 20 findings (1 critical `proxy-addr`, 10 high)**; **website 9 (2 critical: `next`, `dompurify`; 6 high including `firebase`, `sharp`)**. Fixes exist (for example `next@16.4.3`). Not applied here: an upgrade needs its own branch, a clean `npm ci` and a full check. This is the next S0 task.
 **Verified:** 395 offline checks; backend lint and route audit; website `tsc`, eslint and production build; the headers were read on a running dev server and the login page rendered with no CSP violations in the console.
 **Not verified:** the in-memory fallback was only unit-tested (no real Redis outage); the refresh flow was tested as pure logic, not with a real sign-in and a real permission change; the CSP has not been exercised on signed-in pages (only the login page); the CI workflow has not run yet; Firestore rules as deployed.
-**Next:** dependency upgrades (critical first), access-matrix test for the existing roles, error envelope, then S1 (exam reliability and resume).
+**Batch 2 (same branch): access matrix.**
+- `backend/src/config/accessMatrix.js` is now the one written record of who may call which route (rules, the open routes, and four invariants that cannot be loosened by editing a rule). `docs/ACCESS_MATRIX.md` is generated from it (`npm run docs:access`).
+- The route audit now reads each route's real role list (`authorize(...)` and `requirePermission(...)` carry a readable tag; behavior unchanged).
+- `tests/pure/accessMatrix.js` (16 checks) fails the build if a route has no rule (so a new route forces a decision), differs from its rule, is open without being listed, or breaks an invariant. `tests/pure/accessLive.js` (3 checks) sends real requests to the real app on a local port: no token gives 401, a token with the wrong key gives 401, and every role the policy forbids gets 403 (178 role and route pairs). Checked by removing the staff gate from the faculty router: both tests fail; restored, both pass.
+- **Finding:** 28 `/api/student/*` routes (and others) accept any signed-in role. Handlers use the caller's own id, so there is no data exposure, but staff reuse `PUT /api/student/profile` (their own name) and the problem pages, so restricting them is a product decision. Recorded as "any role" in the matrix with the reason.
+- **Mistake and fix:** the first live test loaded `backend/.env`, so it sent its rate-limiter calls to the **real Upstash Redis** (about 800 requests per run, about six runs, counted against the free 10,000 commands a day). Fixed: `tests/hermeticEnv.js` forces an empty Redis URL, an unreachable Firestore address and throwaway secrets before the app loads. Also set the Redis client to one quick retry (it was 5, about 4 seconds in all, which would have delayed every request during an outage). The test runner now waits for async tests; request logging is silent under `NODE_ENV=test`.
+- 421 offline checks; lint and route audit clean; both new tests also pass with no `.env` (as in CI).
+**Next:** error envelope (S7), then S1 (exam reliability and resume).
 
 ---
 

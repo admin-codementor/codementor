@@ -1,7 +1,7 @@
 const userRepo = require('../repositories/userRepository');
 
 exports.authorize = (...roles) => {
-  return (req, res, next) => {
+  const middleware = (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
       return res.status(403).json({
         success: false,
@@ -10,6 +10,10 @@ exports.authorize = (...roles) => {
     }
     next();
   };
+  // Readable by the route audit (middleware/routeGuard.js), which compares each route's real role list against
+  // config/accessMatrix.js. Does not change how the middleware behaves.
+  middleware._authz = { roles: [...roles] };
+  return middleware;
 };
 
 /**

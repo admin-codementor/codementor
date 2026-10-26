@@ -71,7 +71,7 @@ app.use(cors({
   credentials: true
 }));
 app.use(express.json({ limit: '128kb' }));
-app.use(morgan('dev'));
+app.use(morgan('dev', { skip: () => process.env.NODE_ENV === 'test' })); // quiet while the test suite sends hundreds of requests
 app.use('/api', apiLimiter);
 
 // ── Routes ──────────────────────────────────────────────────────────────────
