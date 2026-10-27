@@ -485,6 +485,7 @@ export default function FacultyExamsPage() {
                     </span>
                   </Tooltip>
                   <Button size="small" variant="outlined" startIcon={<BarChartOutlinedIcon />} onClick={() => openResults(e)}>Results</Button>
+                  <Button size="small" variant="outlined" component={NextLink} href={`/faculty/exams/${e.id}/roster`}>Live roster</Button>
                   <Button size="small" variant="outlined" component={NextLink} href={`/faculty/exams/${e.id}/report`}>Full report</Button>
                   <Tooltip title={e.can_edit === false ? "You can't delete another department's exam" : "Delete exam"}>
                     <span>

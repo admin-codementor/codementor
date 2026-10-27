@@ -23,6 +23,7 @@ const { submitCheckerBatch, pollCheckerBatch } = require('../utils/checkerRunner
 const problemRepo = require('../repositories/problemRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const examScoring = require('../utils/examScoring');
+const examAttempt = require('../utils/examAttempt');
 const { outputsMatch } = require('../utils/outputCompare');
 const { buildSource } = require('../utils/sourceBuilder');
 const contestRepo = require('../repositories/contestRepository');
@@ -414,15 +415,30 @@ async function finalize(jobId, job, acc, testCasesLength) {
         : (accepted ? maxMarks : 0);
 
       // The exam mark for a problem is the BEST submission so far, so a worse (or broken) re-submit cannot cancel an
-      // accepted answer.
-      const previous = (await examRepo.getAttempt(exam_id, user_id))?.codingState?.[problem_id];
-      await examRepo.recordCodingAnswer(exam_id, user_id, problem_id, examScoring.betterCodingAnswer(previous, {
-        status: 'answered',
-        sectionId: section?.id || section_id || null,
-        submissionId: submission.id,
-        verdict: acc.finalVerdict.description,
-        score: awardedScore,
-      }));
+      // accepted answer. Written inside one transaction with the attempt's own state, so it cannot race a submit: a finished attempt's
+      // score is final and is never changed by a late verdict, and a submission received after the deadline is not recorded.
+      const receivedAt = job.exam_received_at || Date.now();
+      const outcome = await examRepo.mutateAttempt(exam_id, user_id, (attempt) => {
+        if (!attempt) return { outcome: 'no_attempt' };
+        if (attempt.submittedAt) return { outcome: 'already_submitted' };
+        const expires = examAttempt.toMs(attempt.windowExpiresAt);
+        if (expires != null && receivedAt > expires) return { outcome: 'after_deadline' };
+        const previous = attempt.codingState?.[problem_id];
+        return {
+          outcome: 'recorded',
+          update: {
+            [`codingState.${problem_id}`]: examScoring.betterCodingAnswer(previous, {
+              status: 'answered',
+              sectionId: section?.id || section_id || null,
+              submissionId: submission.id,
+              verdict: acc.finalVerdict.description,
+              score: awardedScore,
+            }),
+            lastSaveAt: new Date(),
+          },
+        };
+      });
+      if (outcome !== 'recorded') console.warn(`Exam coding result not recorded (${outcome}): exam ${exam_id} user ${user_id} problem ${problem_id}`);
     } catch (e) {
       console.error('Exam coding reconciliation failed:', e.message);
     }
@@ -548,6 +564,17 @@ async function startJudging(jobId, jobData) {
       err.code = 'EXAM_PROBLEM_OUT_OF_SCOPE';
       throw err;
     }
+    // A graded submission is only taken while the attempt is live: started, not submitted, not paused, inside its deadline, and from the
+    // window that holds the exam. Before this, a student could keep submitting code after time was up or after finishing, and it was
+    // recorded. (Run and custom runs are never graded, so they do not come through here.)
+    const attempt = user_id ? await examRepo.getAttempt(exam_id, user_id) : null;
+    const guard = examAttempt.guardLive(attempt, { sessionId: jobData.exam_session ?? null, now: Date.now() });
+    if (!guard.ok) {
+      const err = new Error(guard.error);
+      err.code = 'EXAM_ATTEMPT_CLOSED';
+      err.guard = guard;
+      throw err;
+    }
   }
 
   const testCasesRaw = await getGradingTestCases(problem_id, sample_only);
@@ -580,6 +607,9 @@ async function startJudging(jobId, jobData) {
     problem_id, source_code, language_id, user_id,
     contest_id: contest_id || null, assignment_id: assignment_id || null,
     exam_id: exam_id || null, section_id: section_id || null,
+    // When the submission was RECEIVED. A submission accepted before the deadline still counts if the judge finishes after it
+    // (a long queue must not cost a student an answer they gave in time).
+    exam_received_at: exam_id ? (jobData.exam_received_at || Date.now()) : null,
     meta: {
       scoringMode, isOI, maxScore, usesChecker, checkerCode, checkerLanguageId,
       useEvenSplit, perTcScore, testCasesLength, sampleOnly: !!sample_only,

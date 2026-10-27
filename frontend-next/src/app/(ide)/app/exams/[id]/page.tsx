@@ -2,39 +2,39 @@
 
 import * as React from "react";
 import { useParams, useRouter } from "next/navigation";
+import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
-import Stack from "@mui/material/Stack";
-import Typography from "@mui/material/Typography";
-import Button from "@mui/material/Button";
-import Chip from "@mui/material/Chip";
-import Skeleton from "@mui/material/Skeleton";
-import Alert from "@mui/material/Alert";
-import AppBar from "@mui/material/AppBar";
-import Toolbar from "@mui/material/Toolbar";
-import Tabs from "@mui/material/Tabs";
-import Tab from "@mui/material/Tab";
-import Dialog from "@mui/material/Dialog";
-import DialogTitle from "@mui/material/DialogTitle";
-import DialogContent from "@mui/material/DialogContent";
-import DialogActions from "@mui/material/DialogActions";
-import Table from "@mui/material/Table";
-import TableHead from "@mui/material/TableHead";
-import TableBody from "@mui/material/TableBody";
-import TableRow from "@mui/material/TableRow";
-import TableCell from "@mui/material/TableCell";
-import Divider from "@mui/material/Divider";
 import Checkbox from "@mui/material/Checkbox";
+import Chip from "@mui/material/Chip";
+import Divider from "@mui/material/Divider";
+import Drawer from "@mui/material/Drawer";
 import FormControlLabel from "@mui/material/FormControlLabel";
-import { AccessTimeIcon, ChevronLeftIcon, ChevronRightIcon, CheckCircleIcon, CancelIcon, ShieldOutlinedIcon, FullscreenIcon } from "@/components/ui/icons";
+import Skeleton from "@mui/material/Skeleton";
+import Stack from "@mui/material/Stack";
+import Table from "@mui/material/Table";
+import TableBody from "@mui/material/TableBody";
+import TableCell from "@mui/material/TableCell";
+import TableHead from "@mui/material/TableHead";
+import TableRow from "@mui/material/TableRow";
+import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
+import { useTheme } from "@mui/material/styles";
+import { CancelIcon, CheckCircleIcon, ChevronLeftIcon, ChevronRightIcon, DeleteOutlineIcon, FlagOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
+import { clearExamSession, examHeaders, examStopCode, setExamSession, type ExamStopCode } from "@/lib/examSession";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { useExamTimer } from "@/hooks/useExamTimer";
-import { useProctor } from "@/hooks/useProctor";
-import { FullscreenGraceModal } from "@/components/proctor/FullscreenGraceModal";
-import { QuestionNavigator, type NavigatorSection, type QuestionStatus } from "@/components/student/exam/QuestionNavigator";
+import { useExamProctor } from "@/hooks/useExamProctor";
+import { useExamSaver } from "@/hooks/useExamSaver";
+import { useExamPrefs } from "@/hooks/useExamPrefs";
+import { ExamHeader, ExamNotice, ExamPalette, SaveIndicator, type PaletteSection } from "@/components/student/exam/ExamChrome";
+import { FinishDialog, InstructionsDialog, SettingsDialog, type SectionTally } from "@/components/student/exam/ExamDialogs";
+import { CompletedPanel, LockedScreen, ReplacedScreen } from "@/components/student/exam/ExamScreens";
+import type { QuestionStatus } from "@/components/student/exam/QuestionNavigator";
 import { PageHeader } from "@/components/ui/PageHeader";
 
 interface InstrSection {
@@ -43,7 +43,7 @@ interface InstrSection {
   total_marks: number; duration_minutes: number | null;
 }
 interface InstructionsData {
-  exam: { id: string; title: string; description: string | null; general_instructions: string | null; window_start: string; window_end: string; duration_minutes: number };
+  exam: { id: string; title: string; description: string | null; general_instructions: string | null; window_start: string; window_end: string; duration_minutes: number; violation_limit?: number };
   sections: InstrSection[];
 }
 
@@ -59,55 +59,89 @@ interface AttemptSection {
 interface QState { status: QuestionStatus; selectedIndex: number | null; sectionId: string }
 interface CState { status: QuestionStatus; sectionId: string; score?: number; verdict?: string }
 interface AttemptView {
-  exam: { id: string; title: string; duration_minutes: number };
+  exam: { id: string; title: string; duration_minutes: number; general_instructions?: string | null };
   sections: AttemptSection[];
   question_state: Record<string, QState>;
   coding_state: Record<string, CState>;
   seconds_remaining: number | null;
   submitted: boolean;
+  submitted_at?: string | null;
+  auto_submitted?: boolean;
   score: number | null;
   total: number | null;
+  locked?: { reason: string; count: number | null } | null;
+  violation_count?: number;
+  violation_limit?: number;
+  server_time?: string;
+  session_id?: string;
 }
 
-type ViewState = "loading" | "error" | "instructions" | "taking" | "result";
+type ViewState = "loading" | "error" | "instructions" | "taking" | "result" | "replaced" | "locked";
+interface Item { sectionId: string; itemId: string; type: "mcq" | "coding" }
 
 function errStatus(e: unknown): number | undefined {
   return (e as { response?: { status?: number } })?.response?.status;
 }
 
+const clockTime = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : null);
+
 export default function StudentExamPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const toast = useToast();
+  const theme = useTheme();
+  const wide = useMediaQuery(theme.breakpoints.up("md"));
   const id = params.id;
 
   const [view, setView] = React.useState<ViewState>("loading");
   const [errorMsg, setErrorMsg] = React.useState("");
-
   const [instructions, setInstructions] = React.useState<InstructionsData | null>(null);
   const [ackInstructions, setAckInstructions] = React.useState(false);
   const [starting, setStarting] = React.useState(false);
-
   const [attempt, setAttempt] = React.useState<AttemptView | null>(null);
-  const [activeSectionId, setActiveSectionId] = React.useState<string | null>(null);
-  const [activeItemId, setActiveItemId] = React.useState<string | null>(null);
-  const [summaryOpen, setSummaryOpen] = React.useState(false);
+  const [current, setCurrent] = React.useState(0);
   const [submitting, setSubmitting] = React.useState(false);
-  const visitedSectionsRef = React.useRef<Set<string>>(new Set());
-  const questionRefs = React.useRef<Record<string, HTMLDivElement | null>>({});
+  const [checking, setChecking] = React.useState(false);
 
-  // ── Initial load: resume an existing attempt, or fall back to instructions ──
+  const [finishOpen, setFinishOpen] = React.useState(false);
+  const [settingsOpen, setSettingsOpen] = React.useState(false);
+  const [infoOpen, setInfoOpen] = React.useState(false);
+  const [panelOpen, setPanelOpen] = React.useState(true);
+  React.useEffect(() => { setPanelOpen(wide); }, [wide]);
+
+  const { prefs, update: updatePrefs, reset: resetPrefs } = useExamPrefs();
+  const visitedSent = React.useRef<Set<string>>(new Set());
+
+  const adopt = React.useCallback((data: AttemptView) => {
+    if (data.session_id) setExamSession(id, data.session_id);
+    setAttempt(data);
+  }, [id]);
+
+  // Claim the exam for this tab: it becomes the one that may write (a window that held it earlier is told on its next save).
+  const claim = React.useCallback(async (): Promise<AttemptView | null> => {
+    const r = await api.post(`/api/exams/${id}/start`, {});
+    if (!r.data?.success) return null;
+    const data: AttemptView = r.data.data;
+    adopt(data);
+    return data;
+  }, [id, adopt]);
+
+  // ── First load: resume an existing attempt, or show the instructions ──
   React.useEffect(() => {
     let alive = true;
-    api.get(`/api/exams/${id}/attempt`)
-      .then((r) => {
+    (async () => {
+      try {
+        const r = await api.get(`/api/exams/${id}/attempt`);
         if (!alive || !r.data?.success) return;
         const data: AttemptView = r.data.data;
-        setAttempt(data);
-        setActiveSectionId(data.sections[0]?.id ?? null);
-        setView(data.submitted ? "result" : "taking");
-      })
-      .catch((e) => {
+        if (data.submitted) { setAttempt(data); setView("result"); return; }
+        if (data.locked) { setAttempt(data); setView("locked"); return; }
+        // A running attempt with no session in this tab (a new tab, a new device): this tab takes it over.
+        const fresh = examHeaders(id) ? data : (await claim()) ?? data;
+        if (!alive) return;
+        setAttempt(fresh);
+        setView("taking");
+      } catch (e) {
         if (!alive) return;
         if (errStatus(e) === 404) {
           api.get(`/api/exams/${id}/instructions`)
@@ -121,26 +155,19 @@ export default function StudentExamPage() {
           setErrorMsg(apiErrorMessage(e, "Couldn't load this exam."));
           setView("error");
         }
-      });
+      }
+    })();
     return () => { alive = false; };
-  }, [id]);
+  }, [id, claim]);
 
   const startExam = async () => {
-    // Must fire synchronously, inside the click handler and before any
-    // `await`, to count as a user gesture — browsers reject requestFullscreen()
-    // once it's called after a real network round trip, which is why the
-    // useProctor useEffect's own auto-request (on mount) silently fails in
-    // most browsers and previously left fullscreen entry effectively manual.
+    // Must fire synchronously, inside the click handler and before any await, to count as a user gesture: browsers refuse
+    // requestFullscreen() once it is called after a network round trip.
     document.documentElement.requestFullscreen?.().catch(() => {});
     setStarting(true);
     try {
-      const r = await api.post(`/api/exams/${id}/start`, {});
-      if (r.data?.success) {
-        const data: AttemptView = r.data.data;
-        setAttempt(data);
-        setActiveSectionId(data.sections[0]?.id ?? null);
-        setView("taking");
-      }
+      const data = await claim();
+      if (data) { setCurrent(0); setView("taking"); }
     } catch (e) {
       toast(apiErrorMessage(e, "Couldn't start the exam."), { severity: "error" });
     } finally {
@@ -148,196 +175,229 @@ export default function StudentExamPage() {
     }
   };
 
+  const refreshState = React.useCallback(async (): Promise<AttemptView | null> => {
+    const r = await api.get(`/api/exams/${id}/attempt`);
+    if (!r.data?.success) return null;
+    const data: AttemptView = r.data.data;
+    setAttempt((prev) => ({ ...(prev ?? data), ...data }));
+    return data;
+  }, [id]);
+
+  const showResult = React.useCallback(async () => {
+    try {
+      const data = await refreshState();
+      if (data) setView("result");
+    } catch (e) {
+      toast(apiErrorMessage(e, "Submitted, but couldn't load your result. Reload to see it."), { severity: "error" });
+    }
+  }, [refreshState, toast]);
+
+  // The server refused further changes from this tab: say why, in plain words, instead of failing quietly.
+  const onStop = React.useCallback((code: ExamStopCode) => {
+    if (code === "SESSION_REPLACED") setView("replaced");
+    else if (code === "EXAM_LOCKED") setView("locked");
+    else if (code === "SESSION_REQUIRED") { void claim().catch(() => setView("replaced")); }
+    else void showResult(); // TIME_UP or ALREADY_SUBMITTED
+  }, [claim, showResult]);
+
+  const saver = useExamSaver({ examId: id, enabled: view === "taking", onStop });
+
   const doSubmit = React.useCallback(async () => {
     setSubmitting(true);
     try {
-      await api.post(`/api/exams/${id}/submit`, {});
-    } catch {
-      // Fall through and refresh anyway — e.g. a race with the timer's own
-      // auto-submit lands here as "already submitted," which is fine; the
-      // refresh below still gets the authoritative post-submit state.
-    }
-    try {
-      const r = await api.get(`/api/exams/${id}/attempt`);
-      if (r.data?.success) {
-        setAttempt(r.data.data);
-        setView("result");
-      }
+      await saver.flush();
+      await api.post(`/api/exams/${id}/submit`, {}, { headers: examHeaders(id) });
     } catch (e) {
-      toast(apiErrorMessage(e, "Submitted, but couldn't load your result. Refresh to see it."), { severity: "error" });
-    } finally {
-      setSubmitting(false);
-      setSummaryOpen(false);
+      const code = examStopCode(e);
+      if (code === "SESSION_REPLACED") { setSubmitting(false); setFinishOpen(false); setView("replaced"); return; }
+      if (code === "EXAM_LOCKED") { setSubmitting(false); setFinishOpen(false); setView("locked"); return; }
+      if (!code && errStatus(e) !== 409) {
+        // A network failure: the answers are safe on the server and on this device. Do not pretend the exam was submitted.
+        toast(apiErrorMessage(e, "Couldn't submit yet. Your answers are saved. Check your connection and press Finish again."), { severity: "error" });
+        setSubmitting(false);
+        return;
+      }
+      // TIME_UP / ALREADY_SUBMITTED fall through: the state read below gives the authoritative result.
     }
-  }, [id, toast]);
+    await showResult();
+    setSubmitting(false);
+    setFinishOpen(false);
+  }, [id, saver, showResult, toast]);
 
   const timer = useExamTimer({
     initialSeconds: attempt?.seconds_remaining ?? 0,
     active: view === "taking" && !!attempt && !attempt.submitted,
     onExpire: doSubmit,
+    seedKey: attempt?.server_time ?? null,
   });
 
-  // Proctoring covers the whole exam (decision D3), not just the coding
-  // section — mounted here at the exam-shell level for the entire
-  // taking/summary lifecycle. The IDE page mounts its own instance, scoped to
-  // the same examId, while the student is over there; each logs to the same
-  // per-user event stream the backend reads from, so a violation on either
-  // screen is recorded against the same exam.
-  const proctor = useProctor({
-    active: view === "taking" && !!attempt && !attempt.submitted,
-    assignmentId: null,
-    examId: id,
-    onAutoSubmit: doSubmit,
+  // The whole exam is monitored, not only the coding section. Leaving fullscreen or switching tab is recorded and counted by the server;
+  // past the exam's limit the attempt is paused for staff. Nothing here ends the exam: only the server deadline does.
+  const proctor = useExamProctor({
+    active: view === "taking", examId: id,
+    onLocked: () => { void refreshState().catch(() => {}).finally(() => setView("locked")); },
   });
 
-  // Mark every not-yet-touched MCQ question in a section "visited" the moment
-  // its tab is opened. Coding items get their own visit ping from
-  // solveProblem() below, fired right before the deep-link navigation —
-  // Judge0's finalize() only reconciles on an actual Submit, so without that
-  // eager ping a student who opens a problem and reads it without submitting
-  // would incorrectly still show as "not visited" here.
-  const markSectionVisited = React.useCallback(async (sectionId: string) => {
-    if (!attempt || visitedSectionsRef.current.has(sectionId)) return;
-    visitedSectionsRef.current.add(sectionId);
-    const section = attempt.sections.find((s) => s.id === sectionId);
-    if (!section || section.type !== "mcq") return;
-    const notVisited = (section.questions ?? []).filter((q) => !attempt.question_state[q.id]);
-    if (notVisited.length === 0) return;
-    setAttempt((prev) => {
-      if (!prev) return prev;
-      const next = { ...prev.question_state };
-      for (const q of notVisited) next[q.id] = { status: "visited", selectedIndex: null, sectionId };
-      return { ...prev, question_state: next };
-    });
-    await Promise.all(notVisited.map((q) =>
-      api.patch(`/api/exams/${id}/attempt/questions/${q.id}`, { section_id: sectionId }).catch(() => {})
-    ));
-  }, [attempt, id]);
+  // ── what is on screen ──
+  const items: Item[] = React.useMemo(() => {
+    if (!attempt) return [];
+    return attempt.sections.flatMap((s): Item[] => (s.type === "coding"
+      ? (s.problems ?? []).map((p): Item => ({ sectionId: s.id, itemId: p.id, type: "coding" }))
+      : (s.questions ?? []).map((q): Item => ({ sectionId: s.id, itemId: q.id, type: "mcq" }))));
+  }, [attempt]);
+  const idx = Math.min(Math.max(current, 0), Math.max(items.length - 1, 0));
+  const item = items[idx];
+  const section = attempt?.sections.find((s) => s.id === item?.sectionId);
+  const sectionNumber = attempt && section ? attempt.sections.indexOf(section) + 1 : 1;
+  const itemInSection = section && item ? items.filter((it) => it.sectionId === section.id).findIndex((it) => it.itemId === item.itemId) + 1 : 1;
+  const itemsInSection = section ? items.filter((it) => it.sectionId === section.id).length : 0;
 
+  const stateOf = React.useCallback((it: Item): QuestionStatus => (
+    (it.type === "mcq" ? attempt?.question_state[it.itemId]?.status : attempt?.coding_state[it.itemId]?.status) ?? "not_visited"
+  ), [attempt]);
+
+  const paletteSections: PaletteSection[] = React.useMemo(() => {
+    if (!attempt) return [];
+    return attempt.sections.map((s) => ({ id: s.id, title: s.title, type: s.type, items: items.filter((it) => it.sectionId === s.id).map((it) => ({ id: it.itemId, status: stateOf(it) })) }));
+  }, [attempt, items, stateOf]);
+
+  const tallies: SectionTally[] = React.useMemo(() => paletteSections.map((s) => {
+    let answered = 0, notAnswered = 0, notVisited = 0;
+    for (const it of s.items) { if (it.status === "answered" || it.status === "answered_marked") answered += 1; else if (it.status === "not_visited") notVisited += 1; else notAnswered += 1; }
+    return { id: s.id, title: s.title, total: s.items.length, answered, notAnswered, notVisited };
+  }), [paletteSections]);
+
+  // Landing on a question counts as visiting it.
   React.useEffect(() => {
-    if (view === "taking" && activeSectionId) markSectionVisited(activeSectionId);
+    if (view !== "taking" || !attempt || !item || item.type !== "mcq") return;
+    if (attempt.question_state[item.itemId] || visitedSent.current.has(item.itemId)) return;
+    visitedSent.current.add(item.itemId);
+    setAttempt((prev) => prev && ({ ...prev, question_state: { ...prev.question_state, [item.itemId]: { status: "visited", selectedIndex: null, sectionId: item.sectionId } } }));
+    saver.save({ questionId: item.itemId, sectionId: item.sectionId, selectedIndex: null, marked: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [view, activeSectionId]);
+  }, [view, item?.itemId]);
 
-  const answerQuestion = React.useCallback(async (sectionId: string, questionId: string, selectedIndex: number) => {
-    if (!attempt) return;
-    const prevEntry = attempt.question_state[questionId];
-    const marked = prevEntry?.status === "marked" || prevEntry?.status === "answered_marked";
-    const status: QuestionStatus = marked ? "answered_marked" : "answered";
+  const setLocal = (questionId: string, sectionId: string, status: QuestionStatus, selectedIndex: number | null) =>
     setAttempt((prev) => prev && ({ ...prev, question_state: { ...prev.question_state, [questionId]: { status, selectedIndex, sectionId } } }));
-    try {
-      await api.patch(`/api/exams/${id}/attempt/questions/${questionId}`, { section_id: sectionId, selected_index: selectedIndex, marked });
-    } catch (e) {
-      toast(apiErrorMessage(e, "Couldn't save your answer."), { severity: "error" });
-    }
-  }, [attempt, id, toast]);
 
-  const toggleMark = React.useCallback(async (sectionId: string, questionId: string) => {
-    if (!attempt) return;
-    const prevEntry = attempt.question_state[questionId];
-    const hasAnswer = !!prevEntry && Number.isInteger(prevEntry.selectedIndex);
-    const nowMarked = !(prevEntry?.status === "marked" || prevEntry?.status === "answered_marked");
+  const choose = (sectionId: string, questionId: string, selectedIndex: number) => {
+    const prev = attempt?.question_state[questionId];
+    const marked = prev?.status === "marked" || prev?.status === "answered_marked";
+    setLocal(questionId, sectionId, marked ? "answered_marked" : "answered", selectedIndex);
+    saver.save({ questionId, sectionId, selectedIndex, marked });
+  };
+
+  const clearAnswer = (sectionId: string, questionId: string) => {
+    const prev = attempt?.question_state[questionId];
+    const marked = prev?.status === "marked" || prev?.status === "answered_marked";
+    setLocal(questionId, sectionId, marked ? "marked" : "visited", null);
+    saver.save({ questionId, sectionId, selectedIndex: null, marked });
+  };
+
+  const toggleMark = (sectionId: string, questionId: string) => {
+    const prev = attempt?.question_state[questionId];
+    const hasAnswer = prev != null && Number.isInteger(prev.selectedIndex);
+    const nowMarked = !(prev?.status === "marked" || prev?.status === "answered_marked");
     const status: QuestionStatus = hasAnswer ? (nowMarked ? "answered_marked" : "answered") : (nowMarked ? "marked" : "visited");
-    const selectedIndex = hasAnswer ? prevEntry!.selectedIndex : null;
-    setAttempt((prev) => prev && ({ ...prev, question_state: { ...prev.question_state, [questionId]: { status, selectedIndex, sectionId } } }));
-    try {
-      await api.patch(`/api/exams/${id}/attempt/questions/${questionId}`, {
-        section_id: sectionId, marked: nowMarked,
-        ...(hasAnswer ? { selected_index: selectedIndex } : {}),
-      });
-    } catch (e) {
-      toast(apiErrorMessage(e, "Couldn't update mark for review."), { severity: "error" });
-    }
-  }, [attempt, id, toast]);
+    const selectedIndex = hasAnswer ? prev!.selectedIndex : null;
+    setLocal(questionId, sectionId, status, selectedIndex);
+    saver.save({ questionId, sectionId, selectedIndex, marked: nowMarked });
+  };
 
-  // Coding sections deep-link into the existing IDE rather than embedding an
-  // editor inline (decision D2) — ping "visited" first (best-effort; a missed
-  // ping just means the navigator briefly under-reports, not a data loss),
-  // then hand off. The IDE page reads ?exam=&section= to record its own
-  // submissions against this attempt and to extend proctoring across the tab
-  // switch.
-  const solveProblem = React.useCallback(async (sectionId: string, problemId: string) => {
-    // Same reasoning as startExam — re-request synchronously, on the actual
-    // click, so a student who briefly exited fullscreen (or whose browser
-    // never carried it across the exam-shell → IDE navigation) gets put back
-    // into fullscreen from a gesture that will actually be honored.
+  // Coding problems open in the full code editor (decision D2), carrying the exam and this tab's session.
+  const solveProblem = async (sectionId: string, problemId: string) => {
     document.documentElement.requestFullscreen?.().catch(() => {});
     try {
-      await api.patch(`/api/exams/${id}/attempt/visit/${problemId}`, { section_id: sectionId });
+      await api.patch(`/api/exams/${id}/attempt/visit/${problemId}`, { section_id: sectionId }, { headers: examHeaders(id) });
       setAttempt((prev) => {
         if (!prev) return prev;
-        const current = prev.coding_state[problemId];
-        if (current?.status === "answered") return prev; // never downgrade
+        if (prev.coding_state[problemId]?.status === "answered") return prev;
         return { ...prev, coding_state: { ...prev.coding_state, [problemId]: { status: "visited", sectionId } } };
       });
-    } catch {
-      // Non-blocking — still let the student through to solve the problem.
+    } catch (e) {
+      const code = examStopCode(e);
+      if (code) { onStop(code); return; }
+      // Any other failure is non-blocking: still let the student through to the problem.
     }
     router.push(`/app/problems/${problemId}?exam=${id}&section=${sectionId}`);
-  }, [id, router]);
-
-  const handleJump = (sectionId: string, itemId: string) => {
-    setActiveSectionId(sectionId);
-    setActiveItemId(itemId);
-    requestAnimationFrame(() => {
-      questionRefs.current[itemId]?.scrollIntoView({ behavior: "smooth", block: "center" });
-    });
   };
 
-  const navigatorSections: NavigatorSection[] = React.useMemo(() => {
-    if (!attempt) return [];
-    return attempt.sections.map((s) => (
-      s.type === "coding"
-        ? { id: s.id, title: s.title, type: "coding" as const, items: (s.problems ?? []).map((p) => ({ id: p.id, status: attempt.coding_state[p.id]?.status ?? "not_visited" })) }
-        : { id: s.id, title: s.title, type: "mcq" as const, items: (s.questions ?? []).map((q) => ({ id: q.id, status: attempt.question_state[q.id]?.status ?? "not_visited" })) }
-    ));
-  }, [attempt]);
-
-  // Flattened section+item order for sequential Previous/Next — same order
-  // as the navigator grid, just walked linearly instead of jumped-to.
-  const flatItems = React.useMemo(
-    () => navigatorSections.flatMap((s) => s.items.map((it) => ({ sectionId: s.id, itemId: it.id }))),
-    [navigatorSections],
-  );
-  const currentFlatIndex = activeItemId
-    ? flatItems.findIndex((f) => f.sectionId === activeSectionId && f.itemId === activeItemId)
-    : -1;
-  const goToOffset = (offset: number) => {
-    const base = currentFlatIndex < 0 ? 0 : currentFlatIndex;
-    const target = flatItems[Math.min(Math.max(base + offset, 0), flatItems.length - 1)];
-    if (target) handleJump(target.sectionId, target.itemId);
+  const jumpTo = (sectionId: string, itemId: string) => {
+    const i = items.findIndex((it) => it.sectionId === sectionId && it.itemId === itemId);
+    if (i >= 0) { setCurrent(i); if (!wide) setPanelOpen(false); }
   };
 
-  const summaryStats = React.useMemo(() => {
-    if (!attempt) return [];
-    return attempt.sections.map((s) => {
-      const items = s.type === "mcq" ? (s.questions ?? []).map((q) => q.id) : (s.problems ?? []).map((p) => p.id);
-      const stateMap: Record<string, { status: QuestionStatus }> = s.type === "mcq" ? attempt.question_state : attempt.coding_state;
-      let answered = 0, notAnswered = 0, notVisited = 0;
-      for (const itemId of items) {
-        const st = stateMap[itemId]?.status ?? "not_visited";
-        if (st === "answered" || st === "answered_marked") answered += 1;
-        else if (st === "not_visited") notVisited += 1;
-        else notAnswered += 1;
+  // Keyboard: arrows move between questions, 1 to 4 choose an option (when no dialog is open).
+  React.useEffect(() => {
+    if (view !== "taking") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (finishOpen || settingsOpen || infoOpen) return;
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.isContentEditable)) return;
+      if (e.key === "ArrowRight") setCurrent((c) => Math.min(c + 1, Math.max(items.length - 1, 0)));
+      else if (e.key === "ArrowLeft") setCurrent((c) => Math.max(c - 1, 0));
+      else if (/^[1-9]$/.test(e.key) && item?.type === "mcq" && section) {
+        const q = section.questions?.find((x) => x.id === item.itemId);
+        const n = Number(e.key) - 1;
+        if (q && n < q.options.length) choose(section.id, q.id, n);
       }
-      return { id: s.id, title: s.title, total: items.length, answered, notAnswered, notVisited };
-    });
-  }, [attempt]);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, finishOpen, settingsOpen, infoOpen, items.length, item?.itemId, attempt]);
 
-  // ── Loading / error ──
+  // ── paused: wait for staff, then carry on by itself ──
+  const checkResumed = React.useCallback(async () => {
+    setChecking(true);
+    try {
+      const data = await refreshState();
+      if (!data) return;
+      if (data.submitted) { setView("result"); return; }
+      if (!data.locked) {
+        const fresh = await claim();
+        if (fresh) setView("taking");
+      }
+    } catch { /* still paused, or offline: try again on the next check */ } finally {
+      setChecking(false);
+    }
+  }, [refreshState, claim]);
+
+  React.useEffect(() => {
+    if (view !== "locked") return;
+    const t = setInterval(() => { void checkResumed(); }, 8000);
+    return () => clearInterval(t);
+  }, [view, checkResumed]);
+
+  const takeBack = async () => {
+    setChecking(true);
+    try {
+      const fresh = await claim();
+      if (fresh) { visitedSent.current.clear(); setView("taking"); }
+    } catch (e) {
+      toast(apiErrorMessage(e, "Couldn't switch to this window."), { severity: "error" });
+    } finally {
+      setChecking(false);
+    }
+  };
+
+  // ── screens ──
   if (view === "loading") {
-    return <Stack spacing={2}><Skeleton variant="rounded" height={40} width="40%" /><Skeleton variant="rounded" height={320} /></Stack>;
+    return <Stack spacing={2} sx={{ p: 3 }}><Skeleton variant="rounded" height={40} width="40%" /><Skeleton variant="rounded" height={320} /></Stack>;
   }
   if (view === "error") {
     return (
-      <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => router.push("/app/exams")}>Back</Button>}>
-        {errorMsg}
-      </Alert>
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => router.push("/app/exams")}>Back</Button>}>{errorMsg}</Alert>
+      </Box>
     );
   }
+  if (view === "replaced") return <ReplacedScreen busy={checking} onTakeBack={takeBack} onLeave={() => { clearExamSession(id); router.push("/app/exams"); }} />;
+  if (view === "locked") return <LockedScreen count={attempt?.violation_count ?? null} checking={checking} onCheck={checkResumed} />;
 
-  // ── Instructions ──
+  // ── instructions ──
   if (view === "instructions" && instructions) {
+    const limit = instructions.exam.violation_limit;
     return (
       <Box sx={{ maxWidth: 720, mx: "auto", p: { xs: 2, sm: 3, md: 4 } }}>
         <PageHeader
@@ -366,9 +426,7 @@ export default function StudentExamPage() {
               <TableBody>
                 {instructions.sections.map((s) => (
                   <TableRow key={s.id}>
-                    <TableCell>
-                      {s.title} <Chip size="small" label={s.type} sx={{ ml: 1, height: 16, fontSize: 9, textTransform: "uppercase" }} />
-                    </TableCell>
+                    <TableCell>{s.title} <Chip size="small" label={s.type} sx={{ ml: 1, height: 16, fontSize: 9, textTransform: "uppercase" }} /></TableCell>
                     <TableCell align="right">{s.question_count}</TableCell>
                     <TableCell align="right">{s.marks_per_question}</TableCell>
                     <TableCell align="right">{s.total_marks}</TableCell>
@@ -380,6 +438,10 @@ export default function StudentExamPage() {
               Once started you get <strong>{instructions.exam.duration_minutes} minutes</strong>. The window is open{" "}
               {new Date(instructions.exam.window_start).toLocaleString()} → {new Date(instructions.exam.window_end).toLocaleString()}.
             </Typography>
+            <Alert severity="info" sx={{ mt: 2 }}>
+              The exam runs in fullscreen. Your answers save automatically, even if your connection drops for a while.
+              {limit ? ` If you leave fullscreen or switch tabs ${limit} times, your exam is paused until your faculty resumes you. Nothing ends your exam early.` : ""}
+            </Alert>
           </CardContent>
         </Card>
         <FormControlLabel
@@ -394,27 +456,22 @@ export default function StudentExamPage() {
     );
   }
 
-  // ── Result ──
+  // ── result ──
   if (view === "result" && attempt) {
     const total = attempt.total ?? 0;
     const score = attempt.score ?? 0;
     const pct = total ? Math.round((score / total) * 100) : 0;
     const scoreColor = pct >= 60 ? "success.main" : pct >= 35 ? "warning.main" : "error.main";
     return (
-      <Box sx={{ p: { xs: 2, sm: 3, md: 4 } }}>
-        <PageHeader
-          title={attempt.exam.title}
-          subtitle="Result"
-          actions={<Button startIcon={<ChevronLeftIcon />} onClick={() => router.push("/app/exams")}>Back to exams</Button>}
-        />
+      <Box sx={{ maxWidth: 900, mx: "auto", p: { xs: 2, sm: 3, md: 4 } }}>
+        <CompletedPanel title={attempt.exam.title} receipt={clockTime(attempt.submitted_at)} auto={!!attempt.auto_submitted} />
+        <Stack direction="row" justifyContent="center" sx={{ mb: 3 }}>
+          <Button variant="contained" startIcon={<ChevronLeftIcon />} onClick={() => { clearExamSession(id); router.push("/app/exams"); }}>Go to my exams</Button>
+        </Stack>
         <Card variant="outlined" sx={{ borderColor: "outlineVariant", mb: 3 }}>
           <CardContent sx={{ textAlign: "center", py: 4 }}>
-            <Typography variant="h3" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace", color: scoreColor }}>
-              {score}/{total}
-            </Typography>
-            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-              {pct}% — {pct >= 60 ? "Well done!" : "Keep practicing"}
-            </Typography>
+            <Typography variant="h3" fontWeight={700} sx={{ fontFamily: "ui-monospace, monospace", color: scoreColor }}>{score}/{total}</Typography>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>{pct}% — {pct >= 60 ? "Well done!" : "Keep practicing"}</Typography>
           </CardContent>
         </Card>
 
@@ -429,9 +486,7 @@ export default function StudentExamPage() {
                   return (
                     <Card key={p.id} variant="outlined" sx={{ borderColor: "outlineVariant" }}>
                       <CardContent sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-                        {solved
-                          ? <CheckCircleIcon sx={{ fontSize: 18, color: "success.main", flexShrink: 0 }} />
-                          : <CancelIcon sx={{ fontSize: 18, color: "error.main", flexShrink: 0 }} />}
+                        {solved ? <CheckCircleIcon sx={{ fontSize: 18, color: "success.main", flexShrink: 0 }} /> : <CancelIcon sx={{ fontSize: 18, color: "error.main", flexShrink: 0 }} />}
                         <Typography variant="body2" sx={{ flex: 1 }}>{p.title}</Typography>
                         <Typography variant="caption" color="text.secondary">
                           {solved ? `${cState?.verdict ?? "Answered"} · ${cState?.score ?? 0} mark${(cState?.score ?? 0) === 1 ? "" : "s"}` : "Not attempted"}
@@ -451,9 +506,7 @@ export default function StudentExamPage() {
                     <Card key={q.id} variant="outlined" sx={{ borderColor: "outlineVariant" }}>
                       <CardContent>
                         <Stack direction="row" spacing={1} sx={{ mb: 1 }}>
-                          {correct
-                            ? <CheckCircleIcon sx={{ fontSize: 18, color: "success.main", mt: 0.25, flexShrink: 0 }} />
-                            : <CancelIcon sx={{ fontSize: 18, color: "error.main", mt: 0.25, flexShrink: 0 }} />}
+                          {correct ? <CheckCircleIcon sx={{ fontSize: 18, color: "success.main", mt: 0.25, flexShrink: 0 }} /> : <CancelIcon sx={{ fontSize: 18, color: "error.main", mt: 0.25, flexShrink: 0 }} />}
                           <Typography variant="body2" sx={{ flex: 1 }}>Q{i + 1}. {q.question_text}</Typography>
                         </Stack>
                         <Stack spacing={0.5} sx={{ ml: 3.5 }}>
@@ -461,14 +514,7 @@ export default function StudentExamPage() {
                             const isCorrect = oi === q.correct_index;
                             const isSelected = oi === selected;
                             return (
-                              <Stack
-                                key={oi} direction="row" spacing={1} alignItems="center"
-                                sx={{
-                                  px: 1, py: 0.5, borderRadius: 1,
-                                  bgcolor: isCorrect ? "successContainer" : isSelected ? "errorContainer" : "transparent",
-                                  color: isCorrect ? "onSuccessContainer" : isSelected ? "onErrorContainer" : "text.secondary",
-                                }}
-                              >
+                              <Stack key={oi} direction="row" spacing={1} alignItems="center" sx={{ px: 1, py: 0.5, borderRadius: 1, bgcolor: isCorrect ? "successContainer" : isSelected ? "errorContainer" : "transparent", color: isCorrect ? "onSuccessContainer" : isSelected ? "onErrorContainer" : "text.secondary" }}>
                                 <Typography variant="caption" fontWeight={700}>{String.fromCharCode(65 + oi)}</Typography>
                                 <Typography variant="caption" sx={{ flex: 1 }}>{opt}</Typography>
                                 {isCorrect && <Typography variant="caption">correct</Typography>}
@@ -477,11 +523,7 @@ export default function StudentExamPage() {
                             );
                           })}
                         </Stack>
-                        {q.explanation && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, ml: 3.5, fontStyle: "italic" }}>
-                            {q.explanation}
-                          </Typography>
-                        )}
+                        {q.explanation && <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 1, ml: 3.5, fontStyle: "italic" }}>{q.explanation}</Typography>}
                       </CardContent>
                     </Card>
                   );
@@ -494,229 +536,127 @@ export default function StudentExamPage() {
     );
   }
 
-  // ── Taking ──
-  if (view === "taking" && attempt) {
-    const activeSection = attempt.sections.find((s) => s.id === activeSectionId) ?? attempt.sections[0];
-    return (
-      <Box sx={{ display: "flex", flexDirection: "column", height: "100dvh" }}>
-        <AppBar position="sticky" color="default" elevation={0} sx={{ borderBottom: "1px solid", borderColor: "outlineVariant", bgcolor: "surfaceContainer" }}>
-          <Toolbar sx={{ flexWrap: "wrap", gap: 1, py: 1 }}>
-            <Box sx={{ flex: 1, minWidth: 200 }}>
-              <Typography variant="subtitle1" fontWeight={600}>{attempt.exam.title}</Typography>
-            </Box>
-            <Stack direction="row" spacing={1} alignItems="center" sx={{ color: timer.low ? "error.main" : "text.primary" }}>
-              <AccessTimeIcon fontSize="small" />
-              <Typography variant="h6" sx={{ fontFamily: "ui-monospace, monospace", fontWeight: 700 }}>{timer.label}</Typography>
-            </Stack>
-            <Button variant="contained" color="success" onClick={() => setSummaryOpen(true)}>Finish</Button>
-          </Toolbar>
-          <Tabs
-            value={activeSectionId ?? false}
-            onChange={(_, v) => setActiveSectionId(v)}
-            variant="scrollable" scrollButtons="auto"
-            sx={{ borderTop: "1px solid", borderColor: "outlineVariant", px: 2, minHeight: 40 }}
-          >
-            {attempt.sections.map((s) => <Tab key={s.id} value={s.id} label={s.title} sx={{ minHeight: 40 }} />)}
-          </Tabs>
-        </AppBar>
+  // ── taking the exam ──
+  if (view === "taking" && attempt && item && section) {
+    const q = item.type === "mcq" ? section.questions?.find((x) => x.id === item.itemId) : undefined;
+    const problem = item.type === "coding" ? section.problems?.find((x) => x.id === item.itemId) : undefined;
+    const qState = item.type === "mcq" ? attempt.question_state[item.itemId] : undefined;
+    const marked = qState?.status === "marked" || qState?.status === "answered_marked";
+    const marks = item.type === "mcq" ? (q?.marks ?? section.marks_per_question) : section.marks_per_question;
+    const user = (() => { try { return JSON.parse(localStorage.getItem("user") || "null") as { name?: string; roll_no?: string; rollNo?: string } | null; } catch { return null; } })();
 
-        <Box sx={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 1.5, px: 2, py: 1, bgcolor: "secondaryContainer", color: "onSecondaryContainer", borderBottom: "1px solid", borderColor: "outlineVariant" }}>
-          <ShieldOutlinedIcon fontSize="small" />
-          <Typography variant="body2" fontWeight={600} sx={{ flexShrink: 0 }}>Proctored Exam</Typography>
-          <Typography variant="caption" sx={{ opacity: 0.9, flex: "1 1 200px" }}>
-            Stay in fullscreen and don&apos;t switch tabs — this exam is proctored.
-          </Typography>
-          {!proctor.fullscreen && (
-            <Button size="small" variant="contained" color="primary" startIcon={<FullscreenIcon />} onClick={proctor.requestFullscreen} sx={{ ml: "auto", whiteSpace: "nowrap", flexShrink: 0 }}>
-              Enter fullscreen
+    const panel = (
+      <ExamPalette
+        sections={paletteSections} activeSectionId={section.id} activeItemId={item.itemId} timerLabel={timer.label} timerLow={timer.low}
+        onJump={jumpTo} onClose={wide ? undefined : () => setPanelOpen(false)}
+      />
+    );
+    const questionPane = (
+      <Box sx={{ display: "flex", flexDirection: "column", minHeight: 0, bgcolor: "surfaceContainerLowest", borderRadius: 2, overflow: "hidden", border: "1px solid", borderColor: "outlineVariant" }}>
+        <Stack direction="row" alignItems="center" sx={{ px: 2, py: 1.25, bgcolor: "primaryContainer", color: "onPrimaryContainer" }}>
+          <Typography variant="subtitle2" fontWeight={700} sx={{ flex: 1 }}>{item.type === "mcq" ? "Select the correct answer" : problem?.title ?? "Coding problem"}</Typography>
+          {item.type === "mcq" && (
+            <Button size="small" variant={marked ? "contained" : "outlined"} color={marked ? "warning" : "inherit"} startIcon={<FlagOutlinedIcon fontSize="small" />} onClick={() => toggleMark(section.id, item.itemId)} sx={{ color: marked ? undefined : "inherit", borderColor: "currentColor" }}>
+              {marked ? "Marked for review" : "Mark for review"}
             </Button>
           )}
+        </Stack>
+        <Box sx={{ p: 2.5, overflowY: "auto", flex: 1, zoom: prefs.fontScale / 100 }}>
+          {item.type === "mcq" ? (
+            <Typography variant="body1" sx={{ whiteSpace: "pre-wrap" }}>{q?.question_text}</Typography>
+          ) : (
+            <Stack spacing={2}>
+              <Typography variant="body1">{problem?.title}</Typography>
+              <Stack direction="row" spacing={1}>
+                {problem?.difficulty && <Chip label={problem.difficulty} size="small" sx={{ textTransform: "capitalize" }} />}
+                {attempt.coding_state[item.itemId]?.status === "answered" && <Chip label="Solved" size="small" color="success" />}
+              </Stack>
+              <Alert severity="info">The code editor opens on its own screen. Your timer keeps running there and your progress is saved. Use &quot;Back to Exam&quot; to return.</Alert>
+            </Stack>
+          )}
         </Box>
-        {proctor.warning && (
-          <Alert severity="warning" icon={<ShieldOutlinedIcon fontSize="small" />} onClose={proctor.dismissWarning} sx={{ borderRadius: 0 }}>
-            {proctor.warning}
-          </Alert>
-        )}
-        <FullscreenGraceModal secondsLeft={proctor.fsGraceSecondsLeft} onReturn={proctor.requestFullscreen} />
-
-        <Box sx={{ flex: 1, overflow: "auto" }}>
-          <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", md: "1fr 280px" }, gap: 3, p: { xs: 2, sm: 3 }, maxWidth: 1100, mx: "auto" }}>
-            <Box>
-              {activeSection?.type === "mcq" ? (
-                <Stack spacing={2.5}>
-                  {(activeSection.questions ?? []).map((q, qi) => {
-                    const entry = attempt.question_state[q.id];
-                    const marked = entry?.status === "marked" || entry?.status === "answered_marked";
-                    return (
-                      <Card
-                        key={q.id}
-                        ref={(el: HTMLDivElement | null) => { questionRefs.current[q.id] = el; }}
-                        variant="outlined"
-                        sx={{ borderColor: activeItemId === q.id ? "primary.main" : "outlineVariant" }}
-                      >
-                        <CardContent>
-                          <Stack direction="row" alignItems="flex-start" justifyContent="space-between" spacing={1} sx={{ mb: 1.5 }} flexWrap="wrap" useFlexGap>
-                            <Stack direction="row" spacing={1} sx={{ flex: 1, minWidth: 200 }}>
-                              <Typography variant="caption" fontWeight={700} color="primary.main">Q{qi + 1}</Typography>
-                              <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{q.question_text}</Typography>
-                            </Stack>
-                            <Button
-                              size="small" variant={marked ? "contained" : "outlined"} color={marked ? "warning" : "inherit"}
-                              onClick={() => toggleMark(activeSection.id, q.id)} sx={{ flexShrink: 0 }}
-                            >
-                              {marked ? "Marked" : "Mark for review"}
-                            </Button>
-                          </Stack>
-                          <Stack spacing={1}>
-                            {q.options.map((opt, oi) => {
-                              const sel = entry?.selectedIndex === oi;
-                              return (
-                                <Box
-                                  key={oi} component="button" onClick={() => answerQuestion(activeSection.id, q.id, oi)}
-                                  sx={{
-                                    width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 1,
-                                    px: 1.5, py: 1.25, borderRadius: 2, border: "1px solid",
-                                    borderColor: sel ? "primary.main" : "outlineVariant",
-                                    bgcolor: sel ? "primaryContainer" : "transparent",
-                                    color: sel ? "onPrimaryContainer" : "text.secondary",
-                                    cursor: "pointer", font: "inherit",
-                                    "&:hover": { borderColor: sel ? "primary.main" : "outline" },
-                                  }}
-                                >
-                                  <Box
-                                    aria-hidden
-                                    sx={{
-                                      width: 22, height: 22, borderRadius: "50%", border: "1px solid",
-                                      borderColor: sel ? "primary.main" : "outline", display: "grid", placeItems: "center",
-                                      fontSize: 11, fontWeight: 700, flexShrink: 0, color: sel ? "primary.main" : "text.secondary",
-                                    }}
-                                  >
-                                    {String.fromCharCode(65 + oi)}
-                                  </Box>
-                                  <Typography variant="body2">{opt}</Typography>
-                                </Box>
-                              );
-                            })}
-                          </Stack>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </Stack>
-              ) : (
-                <Stack spacing={2}>
-                  <Alert severity="info">
-                    Solving opens the full code editor in a new screen. Your progress here is saved — use
-                    &quot;Back to Exam&quot; to return, or come back to this tab any time before you finish.
-                  </Alert>
-                  {(activeSection?.problems ?? []).map((p) => {
-                    const cState = attempt.coding_state[p.id];
-                    const solved = cState?.status === "answered";
-                    return (
-                      <Card
-                        key={p.id}
-                        ref={(el: HTMLDivElement | null) => { questionRefs.current[p.id] = el; }}
-                        variant="outlined" sx={{ borderColor: "outlineVariant" }}
-                      >
-                        <CardContent sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-                          <Typography variant="body2" sx={{ flex: 1 }}>{p.title}</Typography>
-                          {p.difficulty && <Chip label={p.difficulty} size="small" sx={{ textTransform: "capitalize" }} />}
-                          {solved && <Chip label="Solved" size="small" color="success" sx={{ height: 20, fontSize: 10 }} />}
-                          <Button
-                            size="small" variant={solved ? "outlined" : "contained"}
-                            onClick={() => solveProblem(activeSection.id, p.id)}
-                          >
-                            {solved ? "Revisit" : "Solve"}
-                          </Button>
-                        </CardContent>
-                      </Card>
-                    );
-                  })}
-                </Stack>
-              )}
-            </Box>
-
-            <Box sx={{ position: { md: "sticky" }, top: { md: 96 }, alignSelf: "start" }}>
-              <Card variant="outlined" sx={{ borderColor: "outlineVariant", p: 2 }}>
-                <QuestionNavigator
-                  sections={navigatorSections}
-                  activeSectionId={activeSection?.id ?? ""}
-                  activeItemId={activeItemId}
-                  onJump={handleJump}
-                />
-              </Card>
-            </Box>
-          </Box>
-        </Box>
-
-        <Box
-          sx={{
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: { xs: 1, sm: 2 },
-            px: { xs: 1, sm: 2 }, py: 1.25, borderTop: "1px solid", borderColor: "outlineVariant",
-            bgcolor: "surfaceContainer", flexShrink: 0,
-          }}
-        >
-          <Button
-            size="small"
-            startIcon={<ChevronLeftIcon />}
-            onClick={() => goToOffset(-1)}
-            disabled={currentFlatIndex <= 0}
-            sx={{ flexShrink: 0 }}
-          >
-            Previous
-          </Button>
-          <Typography variant="caption" color="text.secondary" sx={{ whiteSpace: "nowrap" }}>
-            <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>Question </Box>
-            {currentFlatIndex < 0 ? 1 : currentFlatIndex + 1} of {flatItems.length}
-          </Typography>
-          <Button
-            size="small"
-            endIcon={<ChevronRightIcon />}
-            variant="contained"
-            onClick={() => goToOffset(1)}
-            disabled={currentFlatIndex >= 0 && currentFlatIndex >= flatItems.length - 1}
-            sx={{ flexShrink: 0 }}
-          >
-            Next
-          </Button>
-        </Box>
-
-        <Dialog open={summaryOpen} onClose={() => setSummaryOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>Test Summary</DialogTitle>
-          <DialogContent dividers>
-            <Table size="small">
-              <TableHead>
-                <TableRow>
-                  <TableCell>Section</TableCell>
-                  <TableCell align="right">Answered</TableCell>
-                  <TableCell align="right">Not answered</TableCell>
-                  <TableCell align="right">Not visited</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {summaryStats.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell>{s.title}</TableCell>
-                    <TableCell align="right">{s.answered}</TableCell>
-                    <TableCell align="right">{s.notAnswered}</TableCell>
-                    <TableCell align="right">{s.notVisited}</TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-            {timer.secondsLeft > 0 && (
-              <Alert severity="info" icon={<AccessTimeIcon />} sx={{ mt: 2 }}>
-                You still have {timer.label} left. Are you sure you want to finish and submit?
-              </Alert>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setSummaryOpen(false)} disabled={submitting}>No, continue</Button>
-            <Button variant="contained" color="success" onClick={doSubmit} disabled={submitting}>
-              {submitting ? "Submitting…" : "Yes, finish and submit"}
+      </Box>
+    );
+    const answerPane = (
+      <Box sx={{ minHeight: 0, bgcolor: "surfaceContainerLowest", borderRadius: 2, border: "1px solid", borderColor: "outlineVariant", p: 2.5, overflowY: "auto", zoom: prefs.fontScale / 100 }}>
+        {item.type === "mcq" && q ? (
+          <Stack spacing={1.25} role="radiogroup" aria-label="Options">
+            {q.options.map((opt, oi) => {
+              const sel = qState?.selectedIndex === oi;
+              return (
+                <Box
+                  key={oi} component="button" type="button" role="radio" aria-checked={sel} onClick={() => choose(section.id, q.id, oi)}
+                  sx={{
+                    width: "100%", textAlign: "left", display: "flex", alignItems: "center", gap: 1.5, px: 2, py: 1.5, borderRadius: 2, border: "1.5px solid",
+                    borderColor: sel ? "primary.main" : "outlineVariant", bgcolor: sel ? "primaryContainer" : "transparent", color: sel ? "onPrimaryContainer" : "text.primary",
+                    cursor: "pointer", font: "inherit", "&:hover": { bgcolor: sel ? "primaryContainer" : "surfaceContainerHigh" },
+                    "&:focus-visible": { outline: "2px solid", outlineColor: "primary.main", outlineOffset: 2 },
+                  }}
+                >
+                  <Box aria-hidden sx={{ width: 24, height: 24, borderRadius: "50%", border: "2px solid", borderColor: sel ? "primary.main" : "outline", display: "grid", placeItems: "center", flexShrink: 0 }}>
+                    {sel && <Box sx={{ width: 12, height: 12, borderRadius: "50%", bgcolor: "primary.main" }} />}
+                  </Box>
+                  <Typography variant="body1" component="span" sx={{ flex: 1 }}>{opt}</Typography>
+                  <Typography variant="caption" color="text.secondary" aria-hidden sx={{ display: { xs: "none", md: "block" } }}>{oi + 1}</Typography>
+                </Box>
+              );
+            })}
+          </Stack>
+        ) : item.type === "coding" && problem ? (
+          <Stack spacing={2} alignItems="flex-start">
+            <Typography variant="body2" color="text.secondary">{attempt.coding_state[item.itemId]?.status === "answered" ? `Your best result so far: ${attempt.coding_state[item.itemId]?.verdict ?? "answered"}.` : "You have not submitted a solution yet."}</Typography>
+            <Button variant="contained" size="large" onClick={() => solveProblem(section.id, problem.id)}>
+              {attempt.coding_state[item.itemId]?.status === "answered" ? "Open the code editor again" : "Open the code editor"}
             </Button>
-          </DialogActions>
-        </Dialog>
+          </Stack>
+        ) : null}
+      </Box>
+    );
+
+    return (
+      <Box sx={{ display: "flex", flexDirection: "column", height: "100dvh", bgcolor: "background.default" }}>
+        <ExamHeader
+          title={attempt.exam.title} sectionTitle={section.title} sectionNumber={sectionNumber} sectionCount={attempt.sections.length}
+          itemNumber={itemInSection} itemCount={itemsInSection} marksLabel={`${marks} mark${marks === 1 ? "" : "s"}`}
+          timerLabel={timer.label} timerLow={timer.low} studentName={user?.name ?? null} rollNo={user?.roll_no ?? user?.rollNo ?? null} fontScale={prefs.fontScale}
+          saveIndicator={<SaveIndicator status={saver.status} lastSavedAt={saver.lastSavedAt} pendingCount={saver.pendingCount} />}
+          panelOpen={panelOpen} onOpenInstructions={() => setInfoOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onTogglePanel={() => setPanelOpen((v) => !v)}
+        />
+        <ExamNotice
+          text={proctor.notice ?? (!proctor.fullscreen ? "This exam runs in fullscreen." : null)}
+          showFullscreen={!proctor.fullscreen} onFullscreen={proctor.requestFullscreen} onDismiss={proctor.dismissNotice}
+        />
+
+        <Box sx={{ flex: 1, minHeight: 0, display: "flex" }}>
+          <Box component="main" id="main-content" sx={{ flex: 1, minWidth: 0, minHeight: 0, p: { xs: 1, md: 2 }, display: "grid", gap: { xs: 1, md: 2 }, gridTemplateColumns: prefs.layout === "side" && wide ? "1fr 1fr" : "1fr", gridTemplateRows: prefs.layout === "side" && wide ? "1fr" : "minmax(0, 1fr) minmax(0, 1fr)" }}>
+            {questionPane}
+            {answerPane}
+          </Box>
+          {wide && panelOpen && <Box sx={{ width: 320, flexShrink: 0, minHeight: 0 }}>{panel}</Box>}
+        </Box>
+        {!wide && (
+          <Drawer anchor="right" open={panelOpen} onClose={() => setPanelOpen(false)} slotProps={{ paper: { sx: { width: "min(340px, 90vw)" } } }}>{panel}</Drawer>
+        )}
+
+        <Box component="footer" sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1, px: { xs: 1, md: 2 }, py: 1, borderTop: "1px solid", borderColor: "outlineVariant", bgcolor: "surfaceContainerLowest", flexShrink: 0 }}>
+          <Stack direction="row" spacing={1}>
+            <Button variant="contained" color="error" onClick={() => setFinishOpen(true)}>Finish</Button>
+            {item.type === "mcq" && (
+              <Button variant="outlined" startIcon={<DeleteOutlineIcon fontSize="small" />} disabled={!qState || !Number.isInteger(qState.selectedIndex)} onClick={() => clearAnswer(section.id, item.itemId)}>Clear</Button>
+            )}
+          </Stack>
+          <Stack direction="row" spacing={1}>
+            <Button variant="outlined" startIcon={<ChevronLeftIcon />} onClick={() => setCurrent(idx - 1)} disabled={idx <= 0}>Prev</Button>
+            <Button variant="outlined" endIcon={<ChevronRightIcon />} onClick={() => setCurrent(idx + 1)} disabled={idx >= items.length - 1}>Next</Button>
+          </Stack>
+        </Box>
+
+        <FinishDialog open={finishOpen} onClose={() => setFinishOpen(false)} onConfirm={doSubmit} submitting={submitting} tallies={tallies} timeLeftLabel={timer.secondsLeft > 0 ? timer.label : null} />
+        <SettingsDialog open={settingsOpen} onClose={() => setSettingsOpen(false)} prefs={prefs} onChange={updatePrefs} onReset={resetPrefs} />
+        <InstructionsDialog
+          open={infoOpen} onClose={() => setInfoOpen(false)} general={attempt.exam.general_instructions ?? null}
+          rows={attempt.sections.map((s) => ({ id: s.id, title: s.title, type: s.type, count: s.type === "coding" ? (s.problems ?? []).length : (s.questions ?? []).length, marksEach: s.marks_per_question }))}
+        />
       </Box>
     );
   }

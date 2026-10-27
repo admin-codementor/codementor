@@ -151,6 +151,24 @@ async function startAttempt(examId, userId, windowExpiresAt) {
   return getAttempt(examId, userId);
 }
 
+// Every change to an attempt that depends on its CURRENT state (a save, a submit, a violation, a reopen, a session claim) goes through
+// here: the attempt is read, `decide(attempt)` says what to do, and the write happens, all in one transaction. Two requests racing on the
+// same attempt (a double submit, a retry crossing its original, two devices) therefore see each other and cannot both win.
+//
+// `decide` is synchronous and pure (see utils/examAttempt.js). It returns { outcome, update? }: `outcome` is handed back to the caller,
+// and `update`, when present, is written with dot-paths (so a save touches only its own question). The attempt must already exist for
+// an update to be written; with no attempt, decide() sees null and can only return an outcome.
+async function mutateAttempt(examId, userId, decide) {
+  const ref = attemptsCol(examId).doc(userId);
+  return db.runTransaction(async (tx) => {
+    const doc = await tx.get(ref);
+    const attempt = doc.exists ? { userId, ...doc.data() } : null;
+    const result = decide(attempt) || {};
+    if (result.update && attempt) tx.update(ref, result.update);
+    return result.outcome;
+  });
+}
+
 // Dot-path field updates so concurrent per-question saves never clobber
 // siblings under the same questionState/codingState map — unlike
 // set(..., {merge:true}) this is unambiguous about touching only this one leaf.
@@ -197,6 +215,6 @@ module.exports = {
   create, getById, update, remove, listAll, listByFaculty, listPublished,
   createSection, getSections, getSection, updateSection, deleteSection, reorderSections, getSectionCount,
   replaceSectionQuestions, getSectionQuestions, getSectionQuestionCount,
-  getAttempt, startAttempt, patchQuestionState, recordCodingAnswer, finishAttempt,
+  getAttempt, startAttempt, mutateAttempt, patchQuestionState, recordCodingAnswer, finishAttempt,
   listSubmittedAttempts, getAttemptCount,
 };
