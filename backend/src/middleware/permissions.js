@@ -37,7 +37,8 @@ const resolvePermissions = (user) => {
 
 // Middleware factory — gates a route on a single permission flag.
 // Usage: router.post('/problems', requirePermission('manage_problems'), handler)
-const requirePermission = (perm) => (req, res, next) => {
+const requirePermission = (perm) => {
+  const middleware = (req, res, next) => {
   const effective = resolvePermissions(req.user || {});
   if (!effective[perm]) {
     return res.status(403).json({
@@ -46,6 +47,10 @@ const requirePermission = (perm) => (req, res, next) => {
     });
   }
   next();
+  };
+  // Readable by the route audit; does not change behavior.
+  middleware._authz = { permission: perm };
+  return middleware;
 };
 
 module.exports = { ALL_PERMISSIONS, DEFAULT_FACULTY_PERMISSIONS, resolvePermissions, requirePermission };

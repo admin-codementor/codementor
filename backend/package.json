@@ -14,7 +14,8 @@
     "preflight": "node src/scripts/preflight.js",
     "check:ai": "node src/scripts/checkAiKey.js",
     "test:smoke": "node tests/run.js",
-    "test:pure": "node tests/runPure.js"
+    "test:pure": "node tests/runPure.js",
+    "docs:access": "node scripts/access-matrix-doc.js"
   },
   "keywords": [],
   "author": "",
@@ -25,19 +26,19 @@
   },
   "dependencies": {
     "@google/genai": "^2.8.0",
-    "@upstash/ratelimit": "^2.0.5",
+    "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.35.0",
     "adm-zip": "^0.6.1",
     "axios": "^1.17.0",
     "bcryptjs": "^3.0.3",
     "cors": "^2.8.6",
-    "dotenv": "^17.4.2",
+    "dotenv": "^18.0.9",
     "express": "^5.2.1",
     "firebase-admin": "^14.2.0",
-    "helmet": "^8.2.0",
+    "helmet": "^8.3.0",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.3",
-    "mammoth": "^1.12.1",
+    "mammoth": "^1.13.0",
     "morgan": "^1.11.0",
     "multer": "^2.1.1",
     "pdfkit": "^0.19.1",
@@ -47,7 +48,8 @@
     "uuid": "^11.1.1"
   },
   "devDependencies": {
-    "eslint": "^9.39.5",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.13.0",
     "globals": "^17.13.0",
     "nodemon": "^3.1.14"
   },

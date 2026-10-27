@@ -45,6 +45,7 @@ const { publicRoute } = require('./middleware/routeGuard');
 
 const { validateSubmission } = require('./middleware/security');
 const { parseTrustProxy } = require('./utils/trustProxy');
+const { requestContext, errorHandler, notFound } = require('./middleware/requestContext');
 
 const app = express();
 
@@ -54,6 +55,10 @@ app.set('trust proxy', parseTrustProxy(process.env.TRUST_PROXY));
 if (process.env.NODE_ENV === 'production' && (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN.trim() === '*')) {
   console.warn('[SECURITY] CORS_ORIGIN is unset or "*" in production. Set it to the website origin(s).');
 }
+
+// Every request gets a reference (X-Request-Id) and every error response uses one shape. Before everything else, so even a refused
+// cross-origin request or a malformed body is answered the same way.
+app.use(requestContext);
 
 // ── CORS origins ──────────────────────────────────────────────────────────────
 // CORS_ORIGIN may be a single origin or a comma-separated list (dev + prod domains).
@@ -68,10 +73,11 @@ app.use(helmet({
 }));
 app.use(cors({
   origin: corsOrigin,
-  credentials: true
+  credentials: true,
+  exposedHeaders: ['X-Request-Id'],
 }));
 app.use(express.json({ limit: '128kb' }));
-app.use(morgan('dev'));
+app.use(morgan('dev', { skip: () => process.env.NODE_ENV === 'test' })); // quiet while the test suite sends hundreds of requests
 app.use('/api', apiLimiter);
 
 // ── Routes ──────────────────────────────────────────────────────────────────
@@ -105,21 +111,8 @@ app.get('/health', publicRoute('liveness probe for the host, no data'), (req, re
   res.json({ status: 'ok', message: 'CodeMentor API is running', timestamp: new Date().toISOString() });
 });
 
-// ── 404 handler ─────────────────────────────────────────────────────────────
-app.use((req, res) => {
-  res.status(404).json({ success: false, error: `Route ${req.method} ${req.path} not found` });
-});
-
-// ── Global error handler ─────────────────────────────────────────────────────
-// Express identifies an error handler by its four-argument shape, so `next` must
-// stay even though it is unused.
-app.use((err, req, res, next) => {
-  console.error('Unhandled error:', err);
-  const status = err.status || err.statusCode || 500;
-  const message = process.env.NODE_ENV === 'production'
-    ? 'Internal server error'
-    : err.message || 'Internal server error';
-  res.status(status).json({ success: false, error: message });
-});
+// ── 404 handler and the global error handler (middleware/requestContext.js) ──
+app.use(notFound);
+app.use(errorHandler);
 
 module.exports = app;

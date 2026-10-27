@@ -111,9 +111,31 @@ export function EmptyState({
   );
 }
 
+/** The explanation, the next step and (for failures on our side) the reference to quote. */
+function ErrorBody({ classified }: { classified: ClassifiedError }) {
+  return (
+    <>
+      <span>{classified.description}</span>
+      {classified.hint && classified.hint !== classified.description && (
+        <>
+          <br />
+          <span>{classified.hint}</span>
+        </>
+      )}
+      {classified.reference && (
+        <Typography variant="caption" color="text.secondary" component="span" sx={{ display: "block", mt: 1, userSelect: "all" }}>
+          Reference: <b>{classified.reference}</b>. Quote it if this keeps happening.
+        </Typography>
+      )}
+    </>
+  );
+}
+
 const ERROR_ICON: Record<ClassifiedError["kind"], React.ReactNode> = {
   offline: <CloudOffIcon fontSize="medium" />,
   server: <ErrorOutlineIcon fontSize="medium" />,
+  busy: <TimerOutlinedIcon fontSize="medium" />,
+  signedOut: <LockOutlinedIcon fontSize="medium" />,
   forbidden: <LockOutlinedIcon fontSize="medium" />,
   notFound: <SearchIcon fontSize="medium" />,
   timeout: <TimerOutlinedIcon fontSize="medium" />,
@@ -147,7 +169,7 @@ export function ErrorState({
       compact={compact}
       icon={ERROR_ICON[classified.kind]}
       title={title ?? classified.title}
-      description={description ?? classified.description}
+      description={description ?? <ErrorBody classified={classified} />}
       action={
         canRetry ? (
           <Button variant="outlined" onClick={onRetry} startIcon={<RefreshIcon fontSize="small" />}>
@@ -189,7 +211,7 @@ export function InlineError({
       }
     >
       <AlertTitle sx={{ mb: 0.25 }}>{title ?? classified.title}</AlertTitle>
-      {classified.description}
+      <ErrorBody classified={classified} />
     </Alert>
   );
 }

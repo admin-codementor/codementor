@@ -194,7 +194,7 @@ async function extractWithAi(text, source, max = 20) {
 }
 
 async function parseDocx(buffer) {
-  let text = '';
+  let text;
   try {
     ({ value: text } = await mammoth.extractRawText({ buffer }));
   } catch (e) {

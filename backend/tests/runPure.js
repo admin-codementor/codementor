@@ -19,20 +19,23 @@ const only = process.argv.slice(2).filter((a) => !a.startsWith('-'));
 const files = fs.readdirSync(path.join(__dirname, 'pure')).filter((f) => f.endsWith('.js') && (!only.length || only.some((o) => f.includes(o)))).sort();
 if (!files.length) { console.error('No pure test files matched.'); process.exit(2); }
 
-let passed = 0;
-let failed = 0;
-for (const f of files) {
-  const s = new Suite(f.replace(/\.js$/, ''));
-  try {
-    require(path.join(__dirname, 'pure', f))(s);
-  } catch (e) {
-    s.check(`the test file ran without crashing`, false, e.stack.split('\n').slice(0, 3).join(' | '));
+(async () => {
+  let passed = 0;
+  let failed = 0;
+  for (const f of files) {
+    const s = new Suite(f.replace(/\.js$/, ''));
+    try {
+      // A test file may be async (for example one that makes real requests to the app on a local port).
+      await require(path.join(__dirname, 'pure', f))(s);
+    } catch (e) {
+      s.check(`the test file ran without crashing`, false, e.stack.split('\n').slice(0, 3).join(' | '));
+    }
+    const bad = s.results.filter((r) => !r.ok);
+    console.log(`${bad.length ? '✗' : '✓'} ${s.name}: ${s.results.length - bad.length}/${s.results.length}`);
+    bad.forEach((r) => console.log(`    FAIL ${r.label}${r.detail ? `  → ${r.detail}` : ''}`));
+    passed += s.results.length - bad.length;
+    failed += bad.length;
   }
-  const bad = s.results.filter((r) => !r.ok);
-  console.log(`${bad.length ? '✗' : '✓'} ${s.name}: ${s.results.length - bad.length}/${s.results.length}`);
-  bad.forEach((r) => console.log(`    FAIL ${r.label}${r.detail ? `  → ${r.detail}` : ''}`));
-  passed += s.results.length - bad.length;
-  failed += bad.length;
-}
-console.log(`\n${failed ? 'FAILED' : 'ALL PASSED'}: ${passed} passed, ${failed} failed`);
-process.exit(failed ? 1 : 0);
+  console.log(`\n${failed ? 'FAILED' : 'ALL PASSED'}: ${passed} passed, ${failed} failed`);
+  process.exit(failed ? 1 : 0);
+})();

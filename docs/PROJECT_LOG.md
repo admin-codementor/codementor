@@ -5,6 +5,14 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), Dependency updates in one PR
+**Why:** Dependabot opened 15 separate PRs (#51 to #65). Each edits the same lockfile, so merging one made the next conflict. Replaced by **one PR** (with the access-matrix and error-format work from #66), and the Dependabot config now groups minor and patch updates into one PR per app per week and no longer opens the risky majors.
+**Applied:** `mammoth` 1.13, `@upstash/ratelimit` 2.2, `dotenv` 18, `helmet` 8.3, `eslint` 10 (with `@eslint/js` added explicitly and two leftover assignments fixed), `react` and `react-dom` 19.3.1 together (the bot bumped only `react`, which would have broken the site at run time), and the GitHub Actions versions (checkout 7, setup-node 7, setup-java 6, codeql-action 4).
+**Not applied, on purpose:** TypeScript 7 (typescript-eslint does not support it), `@mui/system` 9 (must match `@mui/material` 6), Firebase 13 and framer-motion 14 (need a real sign-in test and a visual check), Node 26 (CI and `engines` use 22).
+**Verified:** clean installs of both apps, backend lint and 466 offline checks, route audit, website `tsc`, eslint and production build, both audit gates, Word import with the new mammoth (a document built in memory), the sign-in page on React 19.3.1 in a browser. **Not verified:** Linux CI; sign-in itself; any signed-in page.
+
+---
+
 ## 2026-10-26 (Mon), S0 security baseline, batch 1
 **Area:** Stream S0 of `docs/TNP_ADMIN_EXAMS_SECURITY_PLAN.md` (branch `feat/s0-security-baseline`). First of the two-week exam-critical slice.
 **Checked first (the five findings from `docs/scale-readiness/05-auth-and-security.md`):** F12 rules file is deny-all in the repo, **deployed state not verifiable from here**; F2, F13, F14 and F17 were open.
@@ -17,7 +25,20 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 **Found:** `npm audit` on production dependencies: **backend 20 findings (1 critical `proxy-addr`, 10 high)**; **website 9 (2 critical: `next`, `dompurify`; 6 high including `firebase`, `sharp`)**. Fixes exist (for example `next@16.4.3`). Not applied here: an upgrade needs its own branch, a clean `npm ci` and a full check. This is the next S0 task.
 **Verified:** 395 offline checks; backend lint and route audit; website `tsc`, eslint and production build; the headers were read on a running dev server and the login page rendered with no CSP violations in the console.
 **Not verified:** the in-memory fallback was only unit-tested (no real Redis outage); the refresh flow was tested as pure logic, not with a real sign-in and a real permission change; the CSP has not been exercised on signed-in pages (only the login page); the CI workflow has not run yet; Firestore rules as deployed.
-**Next:** dependency upgrades (critical first), access-matrix test for the existing roles, error envelope, then S1 (exam reliability and resume).
+**Batch 2 (same branch): access matrix.**
+- `backend/src/config/accessMatrix.js` is now the one written record of who may call which route (rules, the open routes, and four invariants that cannot be loosened by editing a rule). `docs/ACCESS_MATRIX.md` is generated from it (`npm run docs:access`).
+- The route audit now reads each route's real role list (`authorize(...)` and `requirePermission(...)` carry a readable tag; behavior unchanged).
+- `tests/pure/accessMatrix.js` (16 checks) fails the build if a route has no rule (so a new route forces a decision), differs from its rule, is open without being listed, or breaks an invariant. `tests/pure/accessLive.js` (3 checks) sends real requests to the real app on a local port: no token gives 401, a token with the wrong key gives 401, and every role the policy forbids gets 403 (178 role and route pairs). Checked by removing the staff gate from the faculty router: both tests fail; restored, both pass.
+- **Finding:** 28 `/api/student/*` routes (and others) accept any signed-in role. Handlers use the caller's own id, so there is no data exposure, but staff reuse `PUT /api/student/profile` (their own name) and the problem pages, so restricting them is a product decision. Recorded as "any role" in the matrix with the reason.
+- **Mistake and fix:** the first live test loaded `backend/.env`, so it sent its rate-limiter calls to the **real Upstash Redis** (about 800 requests per run, about six runs, counted against the free 10,000 commands a day). Fixed: `tests/hermeticEnv.js` forces an empty Redis URL, an unreachable Firestore address and throwaway secrets before the app loads. Also set the Redis client to one quick retry (it was 5, about 4 seconds in all, which would have delayed every request during an outage). The test runner now waits for async tests; request logging is silent under `NODE_ENV=test`.
+- 421 offline checks; lint and route audit clean; both new tests also pass with no `.env` (as in CI).
+**Batch 3 (same branch): one error format (S7, first part).**
+- Every error the API sends is now `{ success: false, error, code, hint, requestId }`: `error` is a plain sentence, `code` is stable (NOT_FOUND, RATE_LIMITED, DATABASE_UNAVAILABLE, SESSION_ENDED ...), `hint` says what to do next, `requestId` is also the `X-Request-Id` header and is logged next to the full technical error (`utils/apiError.js`, `middleware/requestContext.js`). Older endpoints are upgraded on the way out, so nothing was rewritten; a technical message on a 5xx (database, library or stack text) is replaced by a plain one, and 4xx messages written for users are kept. Four admin routes that sent the raw `e.message` on a 500 now let the global handler answer.
+- Invalid JSON is now a 400 (it was reported as "Internal server error"), an oversized body a 413, a database outage a 503 that says the work is safe, a busy AI provider a 503.
+- Website: `apiError.ts` reads `code`, `hint` and `requestId`; a server-side failure shows "(Reference ABCD1234)" in toasts and a "Reference" line in error panels (`ErrorState`, `InlineError`); new states for "system busy" and "sign in again"; new `app/error.tsx` and `app/global-error.tsx` so a crashing page shows plain words, Try again and a reference instead of a raw framework screen (Next 16 passes `retry`, not `reset`).
+- 466 offline checks (45 new: `apiError` 29 and `errorEnvelope` 16, including real requests and handlers that crash); lint, route audit, website `tsc`, eslint and build pass. The crash page was seen in a browser with a temporary page that threw on purpose (since deleted).
+- **Not verified:** the website's error panels with a real failing API call (the classification was checked with sample server errors only); no signed-in page opened; a real Firestore outage (the 503 mapping is unit-tested).
+**Next:** S1 (exam reliability and resume).
 
 ---
 
