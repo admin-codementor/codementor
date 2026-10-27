@@ -29,6 +29,16 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | `/api/academic/requests` | POST | faculty | a faculty member asks for access to another class |
 | `/api/academic/requests` | GET | faculty, hod, admin | own requests (faculty), the department's (HOD), all (Admin) |
 | `/api/academic/requests/*/decide` | POST | hod, admin | approve or decline, for the class's department (checked inside) |
+| `/api/placement/me` | all | student | a student's own drives, record and offers |
+| `/api/placement/me/**` | all | student | apply to a drive, withdraw |
+| `/api/placement/drives` | GET | tnp, hod, admin | an HOD sees only their department's published drives (checked inside) |
+| `/api/placement/drives/*` | GET | tnp, hod, admin | applicants and results; an HOD only their own department's students |
+| `/api/placement/meta` | GET | tnp, hod, admin | department and year names for the pickers |
+| `/api/placement/analytics` | GET | tnp, hod, admin |  |
+| `/api/placement/readiness` | GET | tnp, hod, admin |  |
+| `/api/placement/records` | GET | tnp, hod, admin | CGPA and backlogs: the student, T&P, Admin and the HOD of the student's department |
+| `/api/placement/outside` | GET | tnp, hod, admin |  |
+| `/api/placement/**` | all | tnp, admin | everything else changes data or leaves the system: drives, results, CGPA uploads, outside offers, notices, exports |
 | `/api/messages/reported` | all | hod, admin | reviewing reported conversations |
 | `/api/messages/reported/**` | all | hod, admin | reviewing reported conversations |
 | `/api/faculty/cohort-topics` | all | hod, admin | department-wide topic comparison |
@@ -42,7 +52,6 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | `/api/faculty/labs` | all | hod, admin |  |
 | `/api/faculty/mentors` | all | hod, admin |  |
 | `/api/faculty/mentors/**` | all | hod, admin |  |
-| `/api/faculty/placement/**` | all | hod, admin | drives, applications, analytics, readiness (T&P joins in S5) |
 | `/api/faculty/platform-scores/refresh` | all | hod, admin | re-reads linked coding profiles |
 | `/api/faculty/platform-thresholds` | all | hod, admin | college red/green thresholds |
 | `/api/faculty/portfolio` | all | hod, admin |  |
@@ -78,6 +87,9 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | `/api/contests/*/scoreboard-mode` | all | faculty, hod, admin | needs the manage_contests permission too |
 | `/api/contests` | all | any signed-in role |  |
 | `/api/contests/**` | all | any signed-in role |  |
+| `/api/exams` | GET | faculty, hod, admin, tnp | T&P sees published exams only |
+| `/api/exams/*/roster` | GET | faculty, hod, admin, tnp | who is in the exam and in what state |
+| `/api/exams/*/attempts/*/reopen` | POST | faculty, hod, admin, tnp | resume a student; a reason is required and kept |
 | `/api/faculty/**` | all | faculty, hod, admin | the staff console; further limited by department and class inside |
 | `/api/classrooms` | all | faculty, hod, admin |  |
 | `/api/classrooms/**` | all | faculty, hod, admin |  |
@@ -112,6 +124,10 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 
 ## Invariants (true however the rules are edited)
 
+- **placement-data-never-open-to-faculty**: Placement routes (CGPA, backlogs, offers) are never callable by a faculty member.
+- **placement-office-routes-never-open-to-students**: Only /api/placement/me is a student route; nothing else under /api/placement is callable by a student.
+- **placement-changes-need-the-office**: Anything under /api/placement that changes data or exports, other than a student's own apply and withdraw, is only for T&P and the Admin.
+- **tnp-has-no-staff-console**: The Training & Placement office never has access to the faculty console.
 - **staff-console-never-open-to-students**: No route under /api/faculty may be callable by a student or by every role.
 - **admin-only-stays-admin-only**: Permissions, the audit log and the staff list are Admin only.
 - **authoring-never-open-to-students**: Importing problems, exporting PDFs and the judge health page are never callable by a student.

@@ -51,6 +51,7 @@ module.exports = function (s) {
   s.check('the exam owner may reopen', A.canReopen({ actor: { id: 'owner1', role: 'faculty' }, exam: ex }));
   s.check('the HOD of the owner\'s department may reopen, another department\'s HOD may not', A.canReopen({ actor: { id: 'h', role: 'hod', department: 'CSE' }, exam: ex, ownerDepartment: 'CSE' }) && !A.canReopen({ actor: { id: 'h', role: 'hod', department: 'ECE' }, exam: ex, ownerDepartment: 'CSE' }));
   s.check('another faculty member, a student and nobody may not', !A.canReopen({ actor: { id: 'other', role: 'faculty' }, exam: ex }) && !A.canReopen({ actor: { id: 's', role: 'student' }, exam: ex }) && !A.canReopen({ actor: null, exam: ex }));
+  s.check('the Training & Placement office may reopen an attempt on any exam, a student may not', A.canReopen({ actor: { id: 't', role: 'tnp', department: null }, exam: ex, ownerDepartment: 'CSE' }) && !A.canReopen({ actor: { id: 's', role: 'student' }, exam: ex, ownerDepartment: 'CSE' }));
   s.check('an HOD with no department set may not reopen on a match of two empty departments', !A.canReopen({ actor: { id: 'h', role: 'hod', department: null }, exam: ex, ownerDepartment: null }));
 
   // ── planReopen ──

@@ -5,6 +5,30 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), HOD completion planned (S8, last in the list), from 11 more CampusTrack HOD screens
+**Did:** read the screens and wrote `docs/HOD_CAMPUSTRACK_PLAN.md`: what each page shows, seven defects in them not to copy (three different at-risk numbers for the same students, 255 of 255 flagged red, an AI page that shows a failure as a score and "performing well" together, a 197 versus 255 pool with no explanation), our feature against each page, the HOD feature list by question, eight rules, eight phases (S8.1 to S8.8) and five open questions. Added S8 as the last row of the stream table in `docs/TNP_ADMIN_EXAMS_SECURITY_PLAN.md`.
+**Not built:** nothing. Starts only after S5, S6 and S7.
+**Needs the owner's answers (section 7):** batch field, which outside platforms count, names on the attention list, who may export, AI insights while AI is off.
+
+---
+
+## 2026-10-27 (Tue), S5 Training & Placement: its own role, drives with rules, CGPA records, outside offers, audited export
+**Asked and decided:** drives are made by T&P and the Admin only (an HOD reads their department's); a student's CGPA is visible to the student, T&P, the Admin and the HOD of their department; exports use a fixed list of fields and every export is logged.
+**Did (backend):**
+- New role `tnp` (no department, no faculty console). Its session carries a `t2` claim until two-factor is set up (`utils/twofaGate.js`, same idea as the first-login password gate): every route except the 2FA setup answers `TWOFA_REQUIRED`, enabling returns fresh tokens, and it cannot turn two-factor off. Kept out of mentor and faculty lists.
+- `utils/placementPolicy.js` (pure, 73 checks): drive validation (several departments and years, minimum CGPA, most backlogs, last date, tier, https link, draft or published), eligibility that lists **every** reason, the dream-tier rule (an offer limits a student to dream drives; an offer is a selection in a published drive or an outside offer), withdrawal, a written reason for overrides, who may see a CGPA, the CGPA list dry run, the fixed export fields and a spreadsheet-safe CSV writer.
+- `services/placementService.js` and `/api/placement/*`: drives, results and adding a student by hand (override needs a reason, nothing is written if any row is bad, selecting someone who already has an offer in a normal drive is refused), notices to eligible students who have not applied, a student's own page (apply with consent, withdraw), CGPA upload with a dry run, an upload history and undo that never overwrites a later change, outside applications, college and department analytics, audited export. CGPA lives in its own collection so no profile endpoint can leak it.
+- The old `/api/faculty/placement/*` routes are gone (HOD reads through the new ones). T&P can open the list of published exams and the live roster and resume a student (integrity evidence stays closed to it).
+- The access matrix gained the placement rules and four invariants (faculty never; students only `/me`; changes and exports only T&P and Admin; T&P never the faculty console).
+**Did (screens):** T&P area (Drives with a draft-to-published flow and a drive page for results and overrides, Students and CGPA with upload, check, apply and undo, Outside offers, Analytics, Export, Exams, Account), a forced two-factor page, the student Placements page (CGPA, offers, open drives with every reason when closed, apply with consent, withdraw, round results), and the HOD Placement tab made read-only on the new routes.
+**Verified:** backend lint and **1056 offline checks** (96 end to end through the real routes: who sees what, every eligibility rule, the dream-tier rule, overrides, upload and undo, outside offers, notices, export and audit, the 2FA gate), route audit, `tsc`, frontend lint on the changed files, and in a browser with the in-memory sandbox (`scripts/placement-sandbox.js`): T&P drives list and drive page, override reason field, CGPA upload check, apply and undo, outside offers, analytics, export (a real CSV), the forced two-factor page, and a student applying with the consent tick.
+**Not verified:** a real Firestore (volumes, the new collections' rules), the HOD placement tab and the Exams pages in a browser (the sandbox has no exam or department data; the API is tested), the QR scan and a real authenticator code, a phone-width check.
+**Not built:** email to students about a new drive (in-app reminder only), an Admin screen to create the T&P account (use `scripts/create-staff-account.js --role tnp`; the Admin persona is S6), a student's CGPA on the faculty student page.
+**Next:** S6 Admin (people, college overview, settings, audit and security); on the college computer, set up the T&P account, upload a CGPA list, publish one test drive.
+**Branch:** `feat/s5-tnp`
+
+---
+
 ## 2026-10-27 (Tue), S4 faculty dashboard: class switcher, needs-attention insights, customisable layout, and closing scoping gaps
 **Found while reading:** the Students tab and a student's detail page for FACULTY covered the whole department, not their own classes, and three department-wide cohort endpoints (unused by the website) were open to faculty. Fixed first, since it is the rule you set.
 **Did (backend):**

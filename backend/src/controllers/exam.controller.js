@@ -51,6 +51,7 @@ async function readableExam(req, examId) {
   const exam = await examRepo.getById(examId);
   if (!exam) return null;
   if (req.user.role === 'admin' || req.user.role === 'hod') return exam;
+  if (req.user.role === 'tnp') return exam.isPublished ? exam : null; // T&P sees published exams only, to help a student who was cut off
   return (await canManageOwnedBy(req, exam.facultyId)) ? exam : null;
 }
 
@@ -282,8 +283,9 @@ exports.updateExam = async (req, res) => {
 
 exports.listExams = async (req, res) => {
   try {
-    const seesAll = req.user.role === 'admin' || req.user.role === 'hod';
+    const seesAll = req.user.role === 'admin' || req.user.role === 'hod' || req.user.role === 'tnp';
     const exams = (seesAll ? await examRepo.listAll() : await examRepo.listByFaculty(req.user.id))
+      .filter((e) => req.user.role !== 'tnp' || e.isPublished)
       .sort((a, b) => (b.createdAt?.toMillis?.() ?? 0) - (a.createdAt?.toMillis?.() ?? 0));
     const usersMap = seesAll ? await userRepo.getAllUsersMap() : new Map();
     const data = await Promise.all(exams.map(async (e) => {
@@ -1230,7 +1232,7 @@ exports.reopenAttempt = async (req, res) => {
     if (!exam) return res.status(404).json({ success: false, code: 'NOT_FOUND', error: 'Exam not found' });
     const actor = actorOf(req);
     if (!examAttempt.canReopen({ actor, exam, ownerDepartment: await ownerDepartmentOf(exam) })) {
-      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'Only an Admin, the exam\'s owner or the owner\'s HOD can resume a student.' });
+      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'Only an Admin, the Training & Placement office, the exam\'s owner or the owner\'s HOD can resume a student.' });
     }
 
     const out = await examRepo.mutateAttempt(id, userId, (attempt) => {

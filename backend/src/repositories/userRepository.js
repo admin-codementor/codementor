@@ -1,6 +1,6 @@
 // Basic user-profile storage — Firestore is the source of truth for identity
 // and profile fields (name, email, role, department, section, year, rollNo,
-// permissions). Students live in `students`, everyone else (faculty/hod/admin)
+// permissions). Students live in `students`, everyone else (faculty/hod/admin/tnp)
 // in `faculty`. Doc ID equals the legacy Postgres `users.id` UUID so existing
 // FK-referencing tables still in Postgres (code_submissions, plagiarism_results, etc.) keep working
 // unchanged — Postgres still holds a minimal stub row for those FKs, but is
@@ -8,7 +8,7 @@
 const { db } = require('../config/firestore');
 const { FieldValue } = require('firebase-admin/firestore');
 
-const COLLECTIONS = { student: 'students', faculty: 'faculty', hod: 'faculty', admin: 'faculty' };
+const COLLECTIONS = { student: 'students', faculty: 'faculty', hod: 'faculty', admin: 'faculty', tnp: 'faculty' };
 const ALL_COLLECTIONS = ['students', 'faculty'];
 
 const collectionFor = (role) => COLLECTIONS[role] || 'students';

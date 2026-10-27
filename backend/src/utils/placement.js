@@ -64,9 +64,11 @@ function validateDrive(input) {
   return { drive: { company, role, date, ctc, eligibleYears, rounds, status } };
 }
 
-/** Whether a student can take part in a drive: same department, and an allowed year when years are listed. */
+/** Whether a student is in a drive's pool: one of its departments, and an allowed year when years are listed. (CGPA, backlogs, the deadline and
+ *  the dream-tier rule are checked by placementPolicy.evaluate; this is only who the drive is for.) */
 function isEligible(student, drive) {
-  if ((student.department || null) !== (drive.department || null)) return false;
+  const departments = Array.isArray(drive.departments) && drive.departments.length ? drive.departments : drive.department ? [drive.department] : [];
+  if (!departments.includes(student.department || null)) return false;
   const years = drive.eligibleYears || [];
   return years.length === 0 || years.includes(Number(student.year));
 }

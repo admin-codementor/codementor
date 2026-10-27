@@ -15,11 +15,11 @@
 //   roles     a list of roles that may call it, or ANY for "any signed-in role"
 //   note      why, for the person reading this file
 //
-// T&P is added here (role 'tnp') when stream S5 lands.
+// 'tnp' is the Training & Placement office: its own routes under /api/placement, and nothing under /api/faculty.
 
 const ANY = 'any';
 const STAFF = ['faculty', 'hod', 'admin'];
-const ROLES = ['student', 'faculty', 'hod', 'admin'];
+const ROLES = ['student', 'faculty', 'hod', 'admin', 'tnp'];
 
 const rules = [
   // ── Admin only ────────────────────────────────────────────────────────────────
@@ -43,6 +43,18 @@ const rules = [
   { methods: ['GET'], path: '/api/academic/requests', roles: STAFF, note: 'own requests (faculty), the department\'s (HOD), all (Admin)' },
   { methods: ['POST'], path: '/api/academic/requests/*/decide', roles: ['hod', 'admin'], note: 'approve or decline, for the class\'s department (checked inside)' },
 
+  // ── Placement: the Training & Placement office manages, an HOD reads their department, a student sees their own ──
+  { path: '/api/placement/me', roles: ['student'], note: "a student's own drives, record and offers" },
+  { path: '/api/placement/me/**', roles: ['student'], note: 'apply to a drive, withdraw' },
+  { methods: ['GET'], path: '/api/placement/drives', roles: ['tnp', 'hod', 'admin'], note: "an HOD sees only their department's published drives (checked inside)" },
+  { methods: ['GET'], path: '/api/placement/drives/*', roles: ['tnp', 'hod', 'admin'], note: "applicants and results; an HOD only their own department's students" },
+  { methods: ['GET'], path: '/api/placement/meta', roles: ['tnp', 'hod', 'admin'], note: 'department and year names for the pickers' },
+  { methods: ['GET'], path: '/api/placement/analytics', roles: ['tnp', 'hod', 'admin'] },
+  { methods: ['GET'], path: '/api/placement/readiness', roles: ['tnp', 'hod', 'admin'] },
+  { methods: ['GET'], path: '/api/placement/records', roles: ['tnp', 'hod', 'admin'], note: "CGPA and backlogs: the student, T&P, Admin and the HOD of the student's department" },
+  { methods: ['GET'], path: '/api/placement/outside', roles: ['tnp', 'hod', 'admin'] },
+  { path: '/api/placement/**', roles: ['tnp', 'admin'], note: 'everything else changes data or leaves the system: drives, results, CGPA uploads, outside offers, notices, exports' },
+
   // ── HOD and Admin ─────────────────────────────────────────────────────────────
   { path: '/api/messages/reported', roles: ['hod', 'admin'], note: 'reviewing reported conversations' },
   { path: '/api/messages/reported/**', roles: ['hod', 'admin'], note: 'reviewing reported conversations' },
@@ -57,7 +69,6 @@ const rules = [
   { path: '/api/faculty/labs', roles: ['hod', 'admin'] },
   { path: '/api/faculty/mentors', roles: ['hod', 'admin'] },
   { path: '/api/faculty/mentors/**', roles: ['hod', 'admin'] },
-  { path: '/api/faculty/placement/**', roles: ['hod', 'admin'], note: 'drives, applications, analytics, readiness (T&P joins in S5)' },
   { path: '/api/faculty/platform-scores/refresh', roles: ['hod', 'admin'], note: 're-reads linked coding profiles' },
   { path: '/api/faculty/platform-thresholds', roles: ['hod', 'admin'], note: 'college red/green thresholds' },
   { path: '/api/faculty/portfolio', roles: ['hod', 'admin'] },
@@ -100,6 +111,11 @@ const rules = [
   { path: '/api/contests', roles: ANY },
   { path: '/api/contests/**', roles: ANY },
 
+  // The Training & Placement office helps a student who was cut off in an exam: the list of exams, who is in one, and resuming them. Nothing more.
+  { methods: ['GET'], path: '/api/exams', roles: [...STAFF, 'tnp'], note: 'T&P sees published exams only' },
+  { methods: ['GET'], path: '/api/exams/*/roster', roles: [...STAFF, 'tnp'], note: 'who is in the exam and in what state' },
+  { methods: ['POST'], path: '/api/exams/*/attempts/*/reopen', roles: [...STAFF, 'tnp'], note: 'resume a student; a reason is required and kept' },
+
   // ── Staff (faculty, HOD, Admin) ───────────────────────────────────────────────
   { path: '/api/faculty/**', roles: STAFF, note: 'the staff console; further limited by department and class inside' },
   { path: '/api/classrooms', roles: STAFF },
@@ -135,6 +151,14 @@ const publicRoutes = [
 
 // Invariants: true however the rules above are edited. Each is checked against the REAL routes.
 const invariants = [
+  { id: 'placement-data-never-open-to-faculty', text: 'Placement routes (CGPA, backlogs, offers) are never callable by a faculty member.',
+    appliesTo: (r) => r.path.startsWith('/api/placement'), forbidRole: 'faculty' },
+  { id: 'placement-office-routes-never-open-to-students', text: 'Only /api/placement/me is a student route; nothing else under /api/placement is callable by a student.',
+    appliesTo: (r) => r.path.startsWith('/api/placement') && !r.path.startsWith('/api/placement/me'), forbidRole: 'student' },
+  { id: 'placement-changes-need-the-office', text: "Anything under /api/placement that changes data or exports, other than a student's own apply and withdraw, is only for T&P and the Admin.",
+    appliesTo: (r) => r.path.startsWith('/api/placement') && !r.path.startsWith('/api/placement/me') && (r.method !== 'GET' || /\/(batches|export)/.test(r.path)), exactRoles: ['tnp', 'admin'] },
+  { id: 'tnp-has-no-staff-console', text: 'The Training & Placement office never has access to the faculty console.',
+    appliesTo: (r) => r.path.startsWith('/api/faculty'), forbidRole: 'tnp' },
   { id: 'staff-console-never-open-to-students', text: 'No route under /api/faculty may be callable by a student or by every role.',
     appliesTo: (r) => r.path.startsWith('/api/faculty'), forbidRole: 'student' },
   { id: 'admin-only-stays-admin-only', text: 'Permissions, the audit log and the staff list are Admin only.',

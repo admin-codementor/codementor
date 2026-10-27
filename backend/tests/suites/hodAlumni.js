@@ -100,7 +100,7 @@ module.exports = async function hodAlumniSuite() {
   s.check('active views: mentors count only the active student', (await get('/api/faculty/mentors', head)).body?.data?.total_students === 1);
   s.check('active views: portfolio completeness drops them', (await get('/api/faculty/portfolio', head)).body?.data?.totals?.students === 1);
   s.check('active views: department activity drops them', (await get('/api/faculty/department/activity?kind=students&days=30', head)).body?.data?.totals?.people === 1);
-  s.check('active views: the placement pool drops them', (await get('/api/faculty/placement/analytics', head)).body?.data?.overview?.pool === 1);
+  s.check('active views: the placement pool drops them', (await get('/api/placement/analytics', head)).body?.data?.overview?.pool === 1);
 
   s.check('alumni: another department HOD sees none of them', (await get(AL, other)).body?.data?.totals?.alumni === 0);
 

@@ -56,3 +56,67 @@ module.exports = {
   createDrive, getDrive, updateDrive, listDrives, removeDrive,
   listApplicationsByDrive, listAllApplications, upsertApplication, removeApplication,
 };
+
+// ── CGPA and backlog records: one document per student, kept apart from the student profile so that no profile endpoint can leak them ──
+const records = () => db.collection('placementRecords');
+const batches = () => db.collection('placementRecordBatches');
+const outside = () => db.collection('placementOutside');
+
+async function listRecords() {
+  const snap = await records().get();
+  return new Map(snap.docs.map((d) => [d.id, d.data()]));
+}
+async function getRecord(studentId) {
+  const d = await records().doc(studentId).get();
+  return d.exists ? d.data() : null;
+}
+/** Writes records in chunks of 400 (a Firestore batch holds at most 500 writes). `items`: {studentId, data | null (delete)}. */
+async function writeRecords(items) {
+  for (let i = 0; i < items.length; i += 400) {
+    const batch = db.batch();
+    for (const it of items.slice(i, i + 400)) {
+      if (it.data == null) batch.delete(records().doc(it.studentId));
+      else batch.set(records().doc(it.studentId), it.data);
+    }
+    await batch.commit();
+  }
+}
+async function createBatch(id, data) {
+  await batches().doc(id).set({ ...data, createdAt: FieldValue.serverTimestamp() });
+  return id;
+}
+async function listBatches() {
+  const snap = await batches().get();
+  return snap.docs.map(toDoc).sort((a, b) => (b.atMs || 0) - (a.atMs || 0));
+}
+async function getBatch(id) { return toDoc(await batches().doc(id).get()); }
+async function updateBatch(id, partial) { await batches().doc(id).set(partial, { merge: true }); }
+
+// ── applications made outside the portal, recorded by T&P ──
+async function listOutside() {
+  return (await outside().get()).docs.map(toDoc).sort((a, b) => (b.atMs || 0) - (a.atMs || 0));
+}
+async function listOutsideByStudent(studentId) {
+  return (await outside().where('studentId', '==', studentId).get()).docs.map(toDoc);
+}
+async function getOutside(id) { return toDoc(await outside().doc(id).get()); }
+async function createOutside(data) {
+  const id = uuidv4();
+  await outside().doc(id).set({ ...data, createdAt: FieldValue.serverTimestamp() });
+  return getOutside(id);
+}
+async function updateOutside(id, partial) {
+  await outside().doc(id).set({ ...partial, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return getOutside(id);
+}
+async function removeOutside(id) { await outside().doc(id).delete(); }
+
+async function listApplicationsByStudent(studentId) {
+  return (await apps().where('studentId', '==', studentId).get()).docs.map(toDoc);
+}
+
+module.exports = {
+  ...module.exports,
+  listRecords, getRecord, writeRecords, createBatch, listBatches, getBatch, updateBatch,
+  listOutside, listOutsideByStudent, getOutside, createOutside, updateOutside, removeOutside, listApplicationsByStudent,
+};

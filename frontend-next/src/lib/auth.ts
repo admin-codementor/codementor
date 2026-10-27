@@ -41,7 +41,7 @@ export function clearSession(): void {
   localStorage.clear();
 }
 
-/** Roles that work in the faculty console (everyone except students). */
+/** Roles that work in the faculty console. Students use /app and the Training & Placement office uses /tnp. */
 export const STAFF_ROLES: Role[] = ["faculty", "hod", "admin"];
 
 export function isStaff(role: Role | null | undefined): boolean {
@@ -54,10 +54,12 @@ export const ROLE_LABEL: Record<Role, string> = {
   faculty: "Faculty",
   hod: "HOD",
   admin: "Admin",
+  tnp: "Training & Placement",
 };
 
-/** Default landing route for a role. Only students use the /app area; every
- * staff role (faculty, HOD, admin) lands in the faculty console. */
+/** Default landing route for a role. Students use the /app area, the Training & Placement office its own /tnp area, and every
+ * other staff role (faculty, HOD, admin) lands in the faculty console. */
 export function homeForRole(role: Role | null | undefined): string {
+  if (role === "tnp") return "/tnp/drives";
   return isStaff(role) ? "/faculty/dashboard" : "/app";
 }
