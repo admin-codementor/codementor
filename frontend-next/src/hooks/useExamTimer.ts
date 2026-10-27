@@ -12,58 +12,61 @@ export function mmss(totalSeconds: number): string {
 }
 
 /**
- * Countdown seeded from a server-computed value (an exam attempt's
- * windowExpiresAt), not a static duration — unlike a plain client timer, the
- * clock has to survive a round trip through the coding IDE and back, and a
- * page reload, without resetting or drifting. `onExpire` fires exactly once.
+ * Countdown to the server's deadline.
  *
- * Same submitRef-style pattern as the aptitude test's own countdown (avoids
- * re-subscribing the interval every render, and avoids the stale-closure trap
- * of calling a captured `onExpire` from an interval created seconds earlier).
+ * It is seeded once from the server's "seconds remaining" and turns that into a DEADLINE on this device's clock; every tick then reads
+ * the clock instead of counting ticks. A browser slows or pauses timers in a background tab, and a counter that subtracts one per tick
+ * drifts behind by exactly that much, showing a student more time than they have. Reading the clock cannot drift.
+ * (The server still decides when time is up. This is only what the student sees.)
+ *
+ * `onExpire` fires once, when the countdown reaches zero.
  */
 export function useExamTimer({
-  initialSeconds, active, onExpire,
+  initialSeconds, active, onExpire, seedKey,
 }: {
   initialSeconds: number;
   active: boolean;
   onExpire: () => void;
+  /** When this changes the countdown is seeded again from `initialSeconds` (for example after the student was resumed with extra time). */
+  seedKey?: string | null;
 }) {
   const [secondsLeft, setSecondsLeft] = React.useState(initialSeconds);
-  const startedRef = React.useRef(false);
+  const deadlineRef = React.useRef<number | null>(null);
+  const seededWith = React.useRef<string | null | undefined>(undefined);
   const onExpireRef = React.useRef(onExpire);
   const firedRef = React.useRef(false);
 
   React.useEffect(() => { onExpireRef.current = onExpire; }, [onExpire]);
 
-  // Seed exactly once, at the moment the timer first becomes active — not on
-  // mount. The caller typically renders this hook before its data has loaded
-  // (initialSeconds still 0/placeholder), and only flips `active` once the
-  // real server value has arrived; seeding here instead of on mount avoids
-  // locking the countdown to that premature placeholder.
+  // Seed exactly once, at the moment the timer first becomes active: the caller renders this hook before its data has loaded and only
+  // flips `active` when the real server value has arrived.
   React.useEffect(() => {
-    if (active && !startedRef.current) {
-      startedRef.current = true;
-      setSecondsLeft(initialSeconds);
+    if (active && (deadlineRef.current === null || seededWith.current !== seedKey)) {
+      deadlineRef.current = Date.now() + initialSeconds * 1000;
+      seededWith.current = seedKey;
+      firedRef.current = false;
+      setSecondsLeft(Math.max(0, initialSeconds));
     }
-  }, [active, initialSeconds]);
+  }, [active, initialSeconds, seedKey]);
 
   React.useEffect(() => {
     if (!active) return;
-    const t = setInterval(() => {
-      setSecondsLeft((s) => {
-        if (s <= 1) {
-          clearInterval(t);
-          if (!firedRef.current) {
-            firedRef.current = true;
-            onExpireRef.current();
-          }
-          return 0;
-        }
-        return s - 1;
-      });
-    }, 1000);
-    return () => clearInterval(t);
+    const tick = () => {
+      if (deadlineRef.current === null) return;
+      const left = Math.max(0, Math.ceil((deadlineRef.current - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left <= 0 && !firedRef.current) {
+        firedRef.current = true;
+        onExpireRef.current();
+      }
+    };
+    tick();
+    const t = setInterval(tick, 500);
+    // A tab that was asleep catches up the moment it wakes, not at the next tick.
+    const onVisible = () => { if (document.visibilityState === "visible") tick(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => { clearInterval(t); document.removeEventListener("visibilitychange", onVisible); };
   }, [active]);
 
-  return { secondsLeft, label: mmss(secondsLeft), low: secondsLeft <= 60 };
+  return { secondsLeft, label: mmss(secondsLeft), low: secondsLeft <= 300 };
 }

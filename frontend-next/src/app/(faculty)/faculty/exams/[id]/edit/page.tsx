@@ -360,6 +360,7 @@ export default function ExamBuilderPage() {
   const [duration, setDuration] = React.useState(60);
   const [generalInstructions, setGeneralInstructions] = React.useState("");
   const [negativeMarkingDefault, setNegativeMarkingDefault] = React.useState(0);
+  const [violationLimit, setViolationLimit] = React.useState(5);
   const [classIds, setClassIds] = React.useState<string[]>([]);
   const [groupIds, setGroupIds] = React.useState<string[]>([]);
   const [groups, setGroups] = React.useState<{ id: string; name: string; student_count: number; description: string }[]>([]);
@@ -389,6 +390,7 @@ export default function ExamBuilderPage() {
         setDuration(exam.duration_minutes ?? 60);
         setGeneralInstructions(exam.general_instructions ?? "");
         setNegativeMarkingDefault(exam.negative_marking_default ?? 0);
+        setViolationLimit(Number.isInteger(exam.violation_limit) ? exam.violation_limit : 5);
         setClassIds(exam.classroom_ids ?? []);
         setGroupIds(exam.group_ids ?? []);
         setIsPublished(!!exam.is_published);
@@ -411,9 +413,9 @@ export default function ExamBuilderPage() {
 
   // Details autosave — same debounce-on-edit pattern as the meta fields in the
   // MCQ/assignment builders.
-  const metaRef = React.useRef({ title, description, windowStart, windowEnd, duration, generalInstructions, negativeMarkingDefault, classIds, groupIds });
+  const metaRef = React.useRef({ title, description, windowStart, windowEnd, duration, generalInstructions, negativeMarkingDefault, violationLimit, classIds, groupIds });
   React.useEffect(() => {
-    metaRef.current = { title, description, windowStart, windowEnd, duration, generalInstructions, negativeMarkingDefault, classIds, groupIds };
+    metaRef.current = { title, description, windowStart, windowEnd, duration, generalInstructions, negativeMarkingDefault, violationLimit, classIds, groupIds };
   });
   const metaTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const [metaError, setMetaError] = React.useState("");
@@ -431,6 +433,7 @@ export default function ExamBuilderPage() {
       duration_minutes: m.duration,
       general_instructions: m.generalInstructions.trim() || null,
       negative_marking_default: m.negativeMarkingDefault,
+      violation_limit: m.violationLimit,
       classroom_ids: m.classIds,
       group_ids: m.groupIds,
     })
@@ -543,6 +546,12 @@ export default function ExamBuilderPage() {
             label="Default negative marking" type="number" size="small" sx={{ width: 260 }} value={negativeMarkingDefault}
             helperText="Applied to MCQ sections that don't set their own"
             onChange={(e) => { const v = Math.max(0, parseFloat(e.target.value) || 0); editMeta(() => setNegativeMarkingDefault(v)); }}
+          />
+          <TextField
+            label="Pause a student after this many violations" type="number" size="small" sx={{ width: 260 }} value={violationLimit}
+            helperText="Leaving fullscreen or switching tab. 0 = never pause. The exam is never ended early."
+            slotProps={{ htmlInput: { min: 0, max: 50 } }}
+            onChange={(e) => { const v = Math.min(50, Math.max(0, parseInt(e.target.value) || 0)); editMeta(() => setViolationLimit(v)); }}
           />
         </Stack>
         <TextField
