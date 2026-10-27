@@ -1,8 +1,9 @@
 // The error shape end to end: real requests to the real app (no database or Redis is reached).
 require('../hermeticEnv');
+const util = require('util');
 const express = require('express');
 const { loadAppWithMounts } = require('../routeAudit');
-const { requestContext, errorHandler, notFound } = require('../../src/middleware/requestContext');
+const { requestContext, errorHandler, notFound, logSafe } = require('../../src/middleware/requestContext');
 
 module.exports = async function (s) {
   const { app } = loadAppWithMounts();
@@ -52,6 +53,7 @@ module.exports = async function (s) {
   const mini = express();
   mini.use(requestContext);
   mini.get('/throws', () => { throw new TypeError("Cannot read properties of undefined (reading 'id')"); });
+  mini.get('/echo/:x', () => { throw new TypeError('boom'); });
   mini.get('/rejects', async () => { await Promise.resolve(); const e = new Error('connect ECONNREFUSED 10.0.0.5:5432'); e.code = 'ECONNREFUSED'; throw e; });
   mini.get('/raw-500', (req, res) => res.status(500).json({ success: false, error: 'FirebaseError: 7 PERMISSION_DENIED: Missing or insufficient permissions.' }));
   mini.get('/db-down', async () => { const e = new Error('14 UNAVAILABLE: No connection established'); e.code = 14; throw e; });
@@ -63,8 +65,9 @@ module.exports = async function (s) {
   const logged = [];
   const origError = console.error;
   const origWarn = console.warn;
-  console.error = (...a) => logged.push(a.map(String).join(' '));
-  console.warn = (...a) => logged.push(a.map(String).join(' '));
+  // What console would really print (format codes applied), so the check sees the actual log line.
+  console.error = (...a) => logged.push(util.format(...a));
+  console.warn = (...a) => logged.push(util.format(...a));
   try {
     const get = async (path) => { const r = await fetch(mbase + path); return { status: r.status, json: await r.json(), id: r.headers.get('x-request-id') }; };
     const t = await get('/throws');
@@ -76,6 +79,14 @@ module.exports = async function (s) {
     const db = await get('/db-down');
     s.check('a database outage is a 503 that tells the person their work is safe', db.status === 503 && db.json.code === 'DATABASE_UNAVAILABLE' && /safe/.test(db.json.hint));
     s.check('the full technical error is logged together with the same reference the person was shown', logged.some((l) => l.includes(`[${t.json.requestId}]`) && l.includes('GET /throws') && l.includes('500')) && logged.some((l) => l.includes('Cannot read properties')));
+    // An address carrying a line break and format codes must not forge a second log line or be read as a format string.
+    await get('/echo/a%0A%5Bforged%5D%20GET%20%2Fadmin%20-%3E%20200%20OK%20%25s%20%25d');
+    const hostile = logged.filter((l) => l.includes('/echo/a'));
+    s.check('a request address with a line break and format codes cannot forge a log line', hostile.length > 0 && hostile.every((l) => !/[\r\n]/.test(l.split('TypeError: boom')[0])) && hostile.some((l) => l.includes('%5Bforged%5D')));
+    // Real control characters, built from character codes so this file holds no invisible characters.
+    const nl = String.fromCharCode(10), cr = String.fromCharCode(13), ls = String.fromCharCode(0x2028), nul = String.fromCharCode(0);
+    const cleaned = logSafe('a' + nl + '[forged] %s' + cr + ls + nul + 'z');
+    s.check('the log sanitiser removes line breaks and control characters, keeps format codes as plain text, and caps the length', cleaned === 'a [forged] %s ??z' && logSafe('x'.repeat(1000)).length === 300);
   } finally {
     console.error = origError;
     console.warn = origWarn;
