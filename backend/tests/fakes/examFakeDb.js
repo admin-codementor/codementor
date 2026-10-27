@@ -37,6 +37,7 @@ function createExamFakeDb({ violationLimit = 1, questionCount = 2 } = {}) {
 
   const setPath = (obj, path, value) => {
     const parts = path.split('.');
+    if (parts.some((p) => p === '__proto__' || p === 'constructor' || p === 'prototype')) throw new Error(`refusing to write through "${path}"`);
     let cur = obj;
     for (let i = 0; i < parts.length - 1; i += 1) { if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {}; cur = cur[parts[i]]; }
     cur[parts[parts.length - 1]] = value;
