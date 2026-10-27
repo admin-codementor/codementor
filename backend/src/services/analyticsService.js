@@ -23,6 +23,7 @@ const academicScope = require('./academicScope');
 
 const DAY_MS = 86400000;
 const SNAPSHOT_TTL = 120; // seconds
+const STUCK_ATTEMPTS = 4;
 
 // Bump whenever the snapshot's SHAPE or its aggregation logic changes.
 //
@@ -30,7 +31,7 @@ const SNAPSHOT_TTL = 120; // seconds
 // version in the key, a release that fixes an aggregation bug keeps serving the
 // old numbers until the TTL happens to lapse. (Caught exactly that way — a
 // language-name fix appeared not to work.)
-const SNAPSHOT_VERSION = 3;
+const SNAPSHOT_VERSION = 4;
 
 const toMillis = (v) => (v?.toMillis?.() ?? (v ? new Date(v).getTime() : 0)) || 0;
 const dayKey = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -183,6 +184,9 @@ async function buildSnapshot(scope) {
       department: st.department, section: st.section, year: st.year,
       subs: st.subs,
       ac: st.ac,
+      // Problems this student keeps trying without a solve (4 or more attempts), most attempts first: who is stuck, and on what.
+      stuck: [...st.attemptsByProblem.entries()].filter(([pid, n]) => n >= STUCK_ATTEMPTS && !st.solved.has(pid)).sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([pid, n]) => ({ problemId: pid, title: problemsById.get(pid)?.title || 'Unknown problem', attempts: n })),
       acRate: st.subs ? Math.round((st.ac / st.subs) * 100) : 0,
       solved: st.solved.size,
       attempted: st.attempted.size,
@@ -310,7 +314,10 @@ function cohortsFrom(snapshot, dimension) {
 // member shouldn't see a colleague's students. Shared by every analytics
 // endpoint (faculty.controller.js) and by pdfExport.controller.js's class
 // report, which used to read every student in the system unconditionally.
-async function resolveAnalyticsScope(req) {
+async function resolveAnalyticsScope(req, { ignoreClassFilter = false } = {}) {
+  // The class switcher (middleware/classFilter.js) narrows everything to one class the caller may look at. `ignoreClassFilter` is for
+  // checks about a single named student, which must use everything the person may see, not the class currently selected.
+  const filter = ignoreClassFilter ? null : req.classFilter;
   if (req.user?.role === 'faculty') {
     const classrooms = await classroomRepo.listByFacultyId(req.user.id);
     const memberLists = await Promise.all(classrooms.map((c) => classroomRepo.listMembers(c.id)));
@@ -319,8 +326,11 @@ async function resolveAnalyticsScope(req) {
     // sub-mentor's own range, an approved access request): see utils/academic.js. Nothing is taken away from the classroom rule above.
     const structure = await academicScope.facultyScope(req.user.id);
     for (const id of structure.studentIds) memberIds.add(id);
-    return { ownClasses: true, dept: req.user.department ?? null, memberIds, cacheKey: req.user.id, classroomCount: classrooms.length + structure.classes.length };
+    // One class: only students who are in it AND already in what this person may see (never wider than their own scope).
+    const narrowed = filter ? new Set([...memberIds].filter((id) => filter.memberIds.has(id))) : memberIds;
+    return { ownClasses: true, dept: req.user.department ?? null, memberIds: narrowed, cacheKey: filter ? `${req.user.id}:${filter.classId}` : req.user.id, classroomCount: classrooms.length + structure.classes.length };
   }
+  if (filter) return { ownClasses: false, dept: scopeDept(req), memberIds: filter.memberIds, cacheKey: `${req.user?.role}:${req.user?.id}:${filter.classId}` };
   return { ownClasses: false, dept: scopeDept(req), memberIds: null };
 }
 

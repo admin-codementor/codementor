@@ -11,6 +11,7 @@ const groupController = require('../controllers/studentGroup.controller');
 const mentorController = require('../controllers/mentor.controller');
 const placementController = require('../controllers/placement.controller');
 const alumniController = require('../controllers/alumni.controller');
+const classFilter = require('../middleware/classFilter');
 const { logAction } = require('../middleware/audit');
 const userRepo = require('../repositories/userRepository');
 const auditLogRepo = require('../repositories/auditLogRepository');
@@ -27,6 +28,8 @@ const insightsLimiter = createLimiter({
 
 router.use(protect);
 router.use(facultyStaff);
+// ?classId= narrows the dashboard and analytics calls to one class the caller may look at (the dashboard's class switcher).
+router.use(classFilter);
 
 // JPlag runs are expensive (~minutes each) — cap them per faculty to prevent
 // accidental or malicious DoS. Keyed by user id (route is always authenticated).
@@ -70,10 +73,11 @@ router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, 
 router.get('/labs', authorize('hod', 'admin'), facultyController.getLabs);
 router.get('/department/activity', authorize('hod', 'admin'), facultyController.getDepartmentActivity);
 router.get('/department-leaderboard', authorize('hod', 'admin'), facultyController.getDepartmentLeaderboard);
-router.get('/cohort-topics', facultyController.getCohortTopics);
+// Department-wide comparisons: for a HOD or an Admin (a faculty member sees their own classes through /analytics/cohort and the dashboard).
+router.get('/cohort-topics', authorize('hod', 'admin'), facultyController.getCohortTopics);
 // Hierarchical drill-down (department-scoped for HOD/faculty; admin = all).
-router.get('/analytics/cohorts', facultyController.getCohorts);
-router.get('/analytics/cohort-students', facultyController.getCohortStudents);
+router.get('/analytics/cohorts', authorize('hod', 'admin'), facultyController.getCohorts);
+router.get('/analytics/cohort-students', authorize('hod', 'admin'), facultyController.getCohortStudents);
 router.get('/question-bank', facultyController.getQuestionBank);
 
 // Analytics — all served from one cached snapshot (services/analyticsService.js).
@@ -100,6 +104,14 @@ router.get('/at-risk',
   requirePermission('manage_students'),
   facultyController.getAtRiskStudents
 );
+router.get('/class-insights',
+  requirePermission('manage_students'),
+  facultyController.getClassInsights
+);
+
+// Each person's own dashboard layout (which widgets, in what order).
+router.get('/dashboard-layout', facultyController.getDashboardLayout);
+router.put('/dashboard-layout', facultyController.saveDashboardLayout);
 router.get('/students/:id/detail',
   requirePermission('manage_students'),
   facultyController.getStudentDetail

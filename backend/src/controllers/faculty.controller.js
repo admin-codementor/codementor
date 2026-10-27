@@ -541,11 +541,13 @@ exports.generateAITestCases = async (req, res) => {
 
 exports.getStudents = async (req, res) => {
   try {
-    // Current students of the caller's own department (an admin sees all); it used to list every student in the college.
+    // A HOD: current students of their own department; an Admin: all. A faculty member: only the students of the classes they are given
+    // (their own classrooms and the academic structure), narrowed to one class when the class switcher is used.
     const dept = scopeDept(req);
+    const scope = await resolveAnalyticsScope(req);
     const allStudents = await userRepo.getMapByRole('student');
     const studentsMap = new Map(activeStudents([...allStudents.values()])
-      .filter((s) => dept === null || (s.department || null) === dept)
+      .filter((s) => (scope.memberIds ? scope.memberIds.has(s.id) : (dept === null || (s.department || null) === dept)))
       .map((s) => [s.id, s]));
     const studentIds = [...studentsMap.keys()];
     if (studentIds.length === 0) {
@@ -1685,6 +1687,11 @@ exports.getStudentDetail = async (req, res) => {
     if (!canSeeDepartment(req, profile.department)) {
       return res.status(403).json({ success: false, error: 'Outside your department scope.' });
     }
+    // And a faculty member only a student of their own classes (not every student of the department).
+    if (req.user.role === 'faculty') {
+      const own = await resolveAnalyticsScope(req, { ignoreClassFilter: true });
+      if (!own.memberIds.has(id)) return res.status(403).json({ success: false, code: 'STUDENT_NOT_YOURS', error: 'That student is not in one of your classes.' });
+    }
 
     const student = {
       id: profile.id, name: profile.name, email: profile.email,
@@ -2416,5 +2423,49 @@ exports.deleteModule = async (req, res) => {
   } catch (error) {
     console.error('Delete Module Error:', error);
     res.status(500).json({ success: false, error: 'Failed to delete module' });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// Dashboard: what needs attention, and the person's own layout
+// ══════════════════════════════════════════════════════════════
+const { classInsights } = require('../utils/classInsights');
+const dashboardLayout = require('../utils/dashboardLayout');
+
+// @route GET /api/faculty/class-insights?classId=
+// Who has not started, who went quiet, who is stuck and on what, and which problems are hardest, for the selected class (or everything
+// the caller may see). Cached with the analytics snapshot, so a dashboard visit costs no extra reads.
+exports.getClassInsights = async (req, res) => {
+  try {
+    const scope = await resolveAnalyticsScope(req);
+    const snap = await analytics.getSnapshot(scope);
+    res.json({ success: true, data: { ...classInsights(snap, Date.now()), class: req.classFilter ? { id: req.classFilter.classId, label: req.classFilter.label } : null } });
+  } catch (error) {
+    console.error('Class insights error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the class insights.' });
+  }
+};
+
+// @route GET /api/faculty/dashboard-layout
+exports.getDashboardLayout = async (req, res) => {
+  try {
+    const me = await userRepo.getById(req.user.id, 'faculty');
+    res.json({ success: true, data: { layout: dashboardLayout.normalise(me?.dashboardLayout), registry: dashboardLayout.REGISTRY, presets: dashboardLayout.PRESETS } });
+  } catch (error) {
+    console.error('Get dashboard layout error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load your dashboard layout.' });
+  }
+};
+
+// @route PUT /api/faculty/dashboard-layout   body { widgets: [{id, visible}] } or { preset }
+exports.saveDashboardLayout = async (req, res) => {
+  try {
+    const v = dashboardLayout.validateInput(req.body);
+    if (!v.ok) return res.status(400).json({ success: false, code: 'BAD_LAYOUT', error: v.error });
+    await userRepo.update(req.user.id, 'faculty', { dashboardLayout: v.layout });
+    res.json({ success: true, data: { layout: v.layout } });
+  } catch (error) {
+    console.error('Save dashboard layout error:', error);
+    res.status(500).json({ success: false, error: 'Failed to save your dashboard layout.' });
   }
 };

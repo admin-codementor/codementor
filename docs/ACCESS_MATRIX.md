@@ -31,6 +31,9 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | `/api/academic/requests/*/decide` | POST | hod, admin | approve or decline, for the class's department (checked inside) |
 | `/api/messages/reported` | all | hod, admin | reviewing reported conversations |
 | `/api/messages/reported/**` | all | hod, admin | reviewing reported conversations |
+| `/api/faculty/cohort-topics` | all | hod, admin | department-wide topic comparison |
+| `/api/faculty/analytics/cohorts` | all | hod, admin | department-wide cohort comparison |
+| `/api/faculty/analytics/cohort-students` | all | hod, admin | ranked students of a department cohort |
 | `/api/faculty/alumni` | all | hod, admin |  |
 | `/api/faculty/alumni/**` | all | hod, admin |  |
 | `/api/faculty/department` | all | hod, admin | department dashboard |

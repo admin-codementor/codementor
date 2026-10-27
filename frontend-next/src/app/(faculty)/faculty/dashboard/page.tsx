@@ -40,6 +40,11 @@ import { SearchField } from "@/components/ui/SearchField";
 import { EmptyState } from "@/components/ui/States";
 import { radius, typeScale } from "@/theme/tokens";
 import { useToast } from "@/components/feedback/ToastProvider";
+import MenuItem from "@mui/material/MenuItem";
+import { SettingsOutlinedIcon } from "@/components/ui/icons";
+import { useClassOptions, useDashboardClass } from "@/components/faculty/dashboard/useDashboardClass";
+import { AttentionWidget, HardestWidget, useInsights } from "@/components/faculty/dashboard/Widgets";
+import { CustomizeDialog, useDashboardLayout } from "@/components/faculty/dashboard/Customize";
 
 // ── Types ───────────────────────────────────────────────────────────────────
 interface Stats {
@@ -668,10 +673,22 @@ export default function FacultyDashboardPage() {
   const router = useRouter();
   const showToast = useToast();
 
+  // The class switcher (remembered per person) and the saved layout. Every call below is narrowed to the chosen class by the server.
+  const classOptions = useClassOptions();
+  const { classId, setClassId } = useDashboardClass(classOptions.data);
+  const classParams = React.useMemo(() => (classId === "all" ? {} : { classId }), [classId]);
+  const layoutQ = useDashboardLayout();
+  const insights = useInsights(classId);
+  const [customizing, setCustomizing] = React.useState(false);
+  // Until a layout has loaded (or if it cannot), show everything in the order below, so the dashboard never depends on it.
+  const layoutWidgets = layoutQ.data?.layout.widgets;
+  const orderOf = (id: string) => { const i = layoutWidgets?.findIndex((w) => w.id === id) ?? -1; return i < 0 ? 99 : i; };
+  const shown = (id: string) => (layoutWidgets ? (layoutWidgets.find((w) => w.id === id)?.visible ?? true) : true);
+
   const loadDashboard = React.useCallback(() => {
     setLoadError("");
     api
-      .get("/api/faculty/dashboard")
+      .get("/api/faculty/dashboard", { params: classParams })
       .then((r) => {
         if (r.data?.success) {
           setStats(r.data.data.stats ?? r.data.data);
@@ -680,25 +697,28 @@ export default function FacultyDashboardPage() {
       })
       .catch((e) => setLoadError(apiErrorMessage(e, "Couldn't load the dashboard.")))
       .finally(() => setLoading(false));
-  }, []);
+  }, [classParams]);
 
   React.useEffect(() => {
     loadDashboard();
     // At-risk is supplementary — a failure here shouldn't take over the page, but
     // it must not vanish silently either.
-    api.get("/api/faculty/at-risk")
+    api.get("/api/faculty/at-risk", { params: classParams })
       .then((r) => { if (r.data?.success) setAtRisk(r.data.data); })
       .catch((e) => showToast(apiErrorMessage(e, "Couldn't load at-risk students."), { severity: "warning" }));
-  }, [loadDashboard, showToast]);
+  }, [loadDashboard, showToast, classParams]);
+
+  // A different class means a different list of students.
+  React.useEffect(() => { setStudents([]); }, [classId]);
 
   const loadStudents = React.useCallback(() => {
     if (students.length) return;
     setStudentsLoading(true);
-    api.get("/api/faculty/students")
+    api.get("/api/faculty/students", { params: classParams })
       .then((r) => { if (r.data?.success) setStudents(r.data.data); })
       .catch((e) => showToast(apiErrorMessage(e, "Couldn't load students."), { severity: "error" }))
       .finally(() => setStudentsLoading(false));
-  }, [students.length, showToast]);
+  }, [students.length, showToast, classParams]);
 
   React.useEffect(() => {
     if (tab === "students") loadStudents();
@@ -712,9 +732,15 @@ export default function FacultyDashboardPage() {
     <Box>
       <PageHeader
         title="Faculty Dashboard"
-        subtitle="Monitor student performance and class engagement."
+        subtitle={classId === "all" ? "Monitor student performance and class engagement." : `Showing ${classOptions.data?.find((o) => o.id === classId)?.label ?? "one class"} only.`}
         actions={
-          <Stack direction="row" spacing={1}>
+          <Stack direction="row" spacing={1} alignItems="center" useFlexGap flexWrap="wrap">
+            <TextField select size="small" label="Class" value={classId} onChange={(e) => setClassId(e.target.value)} sx={{ minWidth: 220 }} disabled={classOptions.isLoading}
+              helperText={classOptions.isError ? "Couldn't load your classes" : undefined} error={classOptions.isError}>
+              <MenuItem value="all">All my classes</MenuItem>
+              {(classOptions.data ?? []).map((o) => <MenuItem key={o.id} value={o.id}>{o.label}{o.detail ? ` (${o.detail})` : ""}</MenuItem>)}
+            </TextField>
+            <Button variant="outlined" size="small" startIcon={<SettingsOutlinedIcon />} onClick={() => setCustomizing(true)}>Customise</Button>
             <Button variant="outlined" size="small" startIcon={<DownloadOutlinedIcon />} onClick={() => downloadBlob("/api/pdf/class-report", "class_report.pdf", (m) => showToast(m, { severity: "error" }))}>
               Class Report
             </Button>
@@ -731,16 +757,6 @@ export default function FacultyDashboardPage() {
         </Alert>
       )}
 
-      {/* Stat cards */}
-      <Reveal>
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2, mb: 3 }}>
-          <StatCard icon={<PeopleOutlineIcon />} label="Total Students" value={loading ? "—" : stats.totalStudents} accent="primary" />
-          <StatCard icon={<BoltOutlinedIcon />} label="Active (7d)" value={loading ? "—" : stats.activeStudents} accent="success" />
-          <StatCard icon={<TrackChangesOutlinedIcon />} label="Class AC Rate" value={loading ? "—" : `${stats.acRate}%`} accent="tertiary" />
-          <StatCard icon={<DescriptionOutlinedIcon />} label="Total Submissions" value={loading ? "—" : stats.totalSubs} accent="warning" />
-        </Box>
-      </Reveal>
-
       <Tabs value={tab} onChange={(_, v: Tab) => setTab(v)} sx={{ mb: 3, borderBottom: "1px solid", borderColor: "outlineVariant" }}>
         <Tab value="overview" label="Overview" />
         <Tab value="students" label="Students" />
@@ -750,6 +766,31 @@ export default function FacultyDashboardPage() {
       {/* Overview */}
       {tab === "overview" && (
         <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr", xl: "1fr 1fr" }, gap: 3 }}>
+          {shown("stats") && (
+            <Box sx={{ order: orderOf("stats"), gridColumn: { xl: "1 / -1" } }}>
+              <Reveal>
+                <Box sx={{ display: "grid", gridTemplateColumns: { xs: "1fr 1fr", xl: "repeat(4, 1fr)" }, gap: 2 }}>
+                  <StatCard icon={<PeopleOutlineIcon />} label="Total Students" value={loading ? "—" : stats.totalStudents} accent="primary" />
+                  <StatCard icon={<BoltOutlinedIcon />} label="Active (7d)" value={loading ? "—" : stats.activeStudents} accent="success" />
+                  <StatCard icon={<TrackChangesOutlinedIcon />} label="Class AC Rate" value={loading ? "—" : `${stats.acRate}%`} accent="tertiary" />
+                  <StatCard icon={<DescriptionOutlinedIcon />} label="Total Submissions" value={loading ? "—" : stats.totalSubs} accent="warning" />
+                </Box>
+              </Reveal>
+            </Box>
+          )}
+          {shown("attention") && (
+            <Box sx={{ order: orderOf("attention"), gridColumn: { xl: "1 / -1" } }}>
+              <SectionCard title="Needs attention" icon={<ShieldOutlinedIcon sx={{ color: "warning.main", fontSize: 20 }} />}>
+                <AttentionWidget query={insights} />
+              </SectionCard>
+            </Box>
+          )}
+          {shown("hardest") && (
+            <Box sx={{ order: orderOf("hardest") }}>
+              <SectionCard title="Hardest problems"><HardestWidget query={insights} /></SectionCard>
+            </Box>
+          )}
+          {shown("summary") && <Box sx={{ order: orderOf("summary") }}>
           <SectionCard title="Quick Summary">
             <Stack divider={<Divider sx={{ borderColor: "outlineVariant" }} />}>
               {[
@@ -765,7 +806,9 @@ export default function FacultyDashboardPage() {
               ))}
             </Stack>
           </SectionCard>
+          </Box>}
 
+          {shown("deadlines") && <Box sx={{ order: orderOf("deadlines") }}>
           <SectionCard title="Upcoming Deadlines">
             {assignments.length === 0 ? (
               <EmptyState title="No assignments created yet" />
@@ -785,8 +828,9 @@ export default function FacultyDashboardPage() {
               </Stack>
             )}
           </SectionCard>
+          </Box>}
 
-          <Box sx={{ gridColumn: { xl: "1 / -1" } }}>
+          {shown("at-risk") && <Box sx={{ order: orderOf("at-risk"), gridColumn: { xl: "1 / -1" } }}>
             <SectionCard
               title="At-Risk Students"
               icon={<ShieldOutlinedIcon sx={{ color: "error.main", fontSize: 20 }} />}
@@ -813,7 +857,7 @@ export default function FacultyDashboardPage() {
                 </Stack>
               )}
             </SectionCard>
-          </Box>
+          </Box>}
         </Box>
       )}
 
@@ -922,6 +966,7 @@ export default function FacultyDashboardPage() {
         onSaved={loadDashboard}
       />
       <CreateContestDialog open={showCreateContest} onClose={() => setShowCreateContest(false)} />
+      <CustomizeDialog open={customizing} onClose={() => setCustomizing(false)} data={layoutQ.data} />
     </Box>
   );
 }
