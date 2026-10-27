@@ -27,10 +27,13 @@ function errorHandler(err, req, res, next) {
   if (e.log !== 'none') {
     // The address and user id come from the client: strip line breaks and control characters (so a request cannot forge a log line),
     // cap the length, and pass them as arguments to a fixed format string (so a "%" in an address is never read as a format code).
-    const who = req.user?.id ? ` user=${logSafe(req.user.id)}` : '';
+    const who = req.user?.id ? ' user=' + logSafe(req.user.id) : '';
+    const ref = logSafe(req.id);                                  // from the X-Request-Id header when the client sent one
     const where = logSafe(String(req.originalUrl).split('?')[0]);
-    if (e.log === 'error') console.error('[%s] %s %s -> %d %s%s', req.id, logSafe(req.method), where, e.status, e.code, who, err);
-    else console.warn('[%s] %s %s -> %d %s%s', req.id, logSafe(req.method), where, e.status, e.code, who, err?.message ?? '');
+    const method = logSafe(req.method);
+    const code = logSafe(e.code);
+    if (e.log === 'error') console.error('[%s] %s %s -> %d %s%s', ref, method, where, e.status, code, who, err);
+    else console.warn('[%s] %s %s -> %d %s%s', ref, method, where, e.status, code, who, err?.message ?? '');
   }
   return res.status(e.status).json({ success: false, error: e.error, code: e.code, hint: e.hint });
 }
