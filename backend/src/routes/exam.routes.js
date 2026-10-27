@@ -1,7 +1,11 @@
 const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
 const { facultyStaff } = require('../middleware/role.middleware');
+const { createLimiter } = require('../middleware/rateLimiter');
 const c = require('../controllers/exam.controller');
+
+// Sending integrity mail again is rare; a hard limit keeps a stuck button from mailing a student over and over.
+const resendLimiter = createLimiter({ windowMs: 60 * 1000, max: 10, prefix: 'exam-integrity-resend', keyGenerator: (req) => req.user?.id || 'anon', message: 'Too many resend attempts. Wait a minute.' });
 
 const router = express.Router();
 router.use(protect);
@@ -36,6 +40,8 @@ router.put('/:id/sections/:sid/problems', facultyStaff, c.attachProblems);
 
 router.get('/:id/roster', facultyStaff, c.getRoster);
 router.post('/:id/attempts/:userId/reopen', facultyStaff, c.reopenAttempt);
+router.get('/:id/integrity', facultyStaff, c.getIntegrity);
+router.post('/:id/integrity/:userId/resend', facultyStaff, resendLimiter, c.resendIntegrity);
 router.get('/:id/results', facultyStaff, c.getResults);
 router.get('/:id/results/:userId', facultyStaff, c.getAttemptDetail);
 

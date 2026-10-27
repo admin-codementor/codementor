@@ -60,6 +60,10 @@ function collect() {
     warn('JUDGE0_URL is not set', 'Code submissions will fail. See backend/.env.example.');
   }
 
+  if (!process.env.SMTP_HOST || !process.env.MAIL_FROM) {
+    warn('Mail (SMTP) is not configured', 'Exam integrity evidence is recorded and shown to staff, but nobody is emailed. Set SMTP_HOST and MAIL_FROM (see .env.example).');
+  }
+
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
     warn('Upstash Redis is not configured', 'Analytics caching and rate limiting are disabled (requests are never limited).');
   }

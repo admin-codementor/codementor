@@ -126,7 +126,12 @@ export default function ExamRosterPage() {
       <PageHeader
         title={d?.exam.title ?? "Live roster"}
         subtitle={d ? `${d.counts.total} started · refreshes every 10 seconds · pauses after ${d.exam.violation_limit === 0 ? "never" : `${d.exam.violation_limit} violations`}` : undefined}
-        actions={<Button startIcon={<RefreshIcon />} onClick={() => query.refetch()} disabled={query.isFetching}>Refresh</Button>}
+        actions={(
+          <Stack direction="row" spacing={1}>
+            <Button component={NextLink} href={`/faculty/exams/${id}/integrity`}>Integrity report</Button>
+            <Button startIcon={<RefreshIcon />} onClick={() => query.refetch()} disabled={query.isFetching}>Refresh</Button>
+          </Stack>
+        )}
       />
 
       {query.isError ? (
