@@ -57,6 +57,9 @@ What CampusTrack has that we still do not (details and phases in `docs/COMPETITO
 **Do not copy:** the unscaled platform formulas (one outside rating can dominate the total, one LeetCode problem is worth five
 CodeChef problems), and an alert that says 97% of students "need attention" without saying what to do.
 
+## 3b. Second walk-through (2026-10-27)
+Eleven pages were seen again with real data in them (a department of 255 students). What they show, what is wrong in them, what a HOD needs and the phases to build it are in `docs/HOD_CAMPUSTRACK_PLAN.md` (stream S8, last in the work list, not started).
+
 ## 4. Open items (not verified)
 - Student and mentor views, the Student Rankings tab, Detailed Scores, and every Export were not opened.
 - Whether the AI insights are useful, and how messaging behaves after the consent screen, are unknown.

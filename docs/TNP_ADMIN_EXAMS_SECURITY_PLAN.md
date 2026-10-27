@@ -79,6 +79,7 @@ Order of personas (locked): Student, Faculty, HOD, **T&P, Admin**. Super Admin i
 | **S5** T&P persona | role, drives, eligibility, student Placements page, exports | XL | S0, S3 (students per term) |
 | **S6** Admin persona | people, overview, settings, audit and security | XL | S0, S3 |
 | **S7** Errors and self-healing | error envelope, friendly messages, retries, auto-repair | M, cross-cutting | starts in S0 |
+| **S8** HOD completion (last) | one definition of at risk and top everywhere, department practice analytics, needs-attention and People, mentor load, honest AI insights; planned in `docs/HOD_CAMPUSTRACK_PLAN.md` | XL | S5, S6, S7 done first |
 
 **Proposed order** (changes with the answers to questions 1 and 2):
 A. S0 + S7 foundations, S1.1 to S1.3 (reliable attempts and resume), because the next real exam is the biggest risk.
@@ -86,6 +87,7 @@ B. S3 data model and faculty scoping, then S4.
 C. S1.4 to S1.6 (exam screen, integrity engine) together with S2 (scale work and load tests).
 D. S5 T&P.
 E. S6 Admin.
+F. S8 HOD completion, **last** (plan only until everything above is done; see `docs/HOD_CAMPUSTRACK_PLAN.md`).
 
 Each stream ends with the usual gate: offline tests, lint, route audit, build, a browser check, and an honest "not verified" list.
 

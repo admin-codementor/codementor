@@ -5,6 +5,13 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), HOD completion planned (S8, last in the list), from 11 more CampusTrack HOD screens
+**Did:** read the screens and wrote `docs/HOD_CAMPUSTRACK_PLAN.md`: what each page shows, seven defects in them not to copy (three different at-risk numbers for the same students, 255 of 255 flagged red, an AI page that shows a failure as a score and "performing well" together, a 197 versus 255 pool with no explanation), our feature against each page, the HOD feature list by question, eight rules, eight phases (S8.1 to S8.8) and five open questions. Added S8 as the last row of the stream table in `docs/TNP_ADMIN_EXAMS_SECURITY_PLAN.md`.
+**Not built:** nothing. Starts only after S5, S6 and S7.
+**Needs the owner's answers (section 7):** batch field, which outside platforms count, names on the attention list, who may export, AI insights while AI is off.
+
+---
+
 ## 2026-10-27 (Tue), S5 Training & Placement: its own role, drives with rules, CGPA records, outside offers, audited export
 **Asked and decided:** drives are made by T&P and the Admin only (an HOD reads their department's); a student's CGPA is visible to the student, T&P, the Admin and the HOD of their department; exports use a fixed list of fields and every export is logged.
 **Did (backend):**
