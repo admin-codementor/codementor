@@ -162,6 +162,14 @@ module.exports = async function (s) {
     s.check('and placed by running the build again, without touching anyone else', (await call('POST', `/api/academic/terms/${T}/generate`, 'hodC', { department: 'CSE' })).data.enrolled === 1 && !!db.enrollments.get(`${A.id}_late`));
     s.check('with the new student class A has 29 and the ranges cover it again, so that problem goes away', !(await call('GET', `/api/academic/terms/${T}/consistency?department=CSE`, 'hodC')).data.issues.some((i) => i.code === 'RANGES'));
 
+    // ── limits on the expensive actions ──
+    const codes = [];
+    for (let i = 0; i < 14; i += 1) codes.push((await call('POST', `/api/academic/terms/${T}/generate`, 'adm', { department: 'ECE' })).status);
+    s.check('building classes is limited per person: the first few work, then 429 with a plain message', codes[0] === 200 && codes.includes(429) && codes.indexOf(429) <= 12);
+    const limited = await call('POST', `/api/academic/terms/${T}/generate`, 'adm', { department: 'ECE' });
+    s.check('the refusal explains itself in the standard shape', limited.status === 429 && limited.code === 'RATE_LIMITED' && /Wait/.test(limited.json.error));
+    s.check('the limit is per person: another Admin-level person is not blocked, and everyday reads are not limited by it', (await call('POST', `/api/academic/terms/${T}/generate`, 'hodC', { department: 'CSE' })).status === 200 && (await call('GET', '/api/academic/terms', 'adm')).status === 200);
+
     // ── electives ──
     const el = await call('POST', `/api/academic/terms/${T}/electives`, 'hodC', { department: 'CSE', name: 'Cloud Computing' });
     s.check('the HOD makes an elective group; making it twice is refused', el.status === 200 && el.data.kind === 'elective' && (await call('POST', `/api/academic/terms/${T}/electives`, 'hodC', { department: 'CSE', name: 'cloud computing' })).code === 'EXISTS');

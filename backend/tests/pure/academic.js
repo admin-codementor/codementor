@@ -15,6 +15,10 @@ module.exports = async function (s) {
   s.check('a section class always has the same id (so generating twice never doubles it)', A.sectionClassId('t1', 'CSE (AIML)', 3, 'a ') === A.sectionClassId('t1', 'cse (aiml)', '3', 'A') && !A.sectionClassId('t1', 'CSE', 3, 'A').includes('/'));
   s.check('different term, year or section give different ids', new Set([A.sectionClassId('t1', 'CSE', 3, 'A'), A.sectionClassId('t2', 'CSE', 3, 'A'), A.sectionClassId('t1', 'CSE', 2, 'A'), A.sectionClassId('t1', 'CSE', 3, 'B')]).size === 4);
 
+  const t1 = Date.now();
+  const hostile = A.slug('-'.repeat(200000) + 'ab' + '-'.repeat(200000)) + A.slug('!'.repeat(200000)) + A.slug('x' + '-!'.repeat(100000));
+  s.check('ids are built from odd or hostile text quickly and safely (dashes trimmed, length bounded)', Date.now() - t1 < 200 && A.slug('  --CSE (AIML)--  ') === 'CSE-AIML' && A.slug(null) === '' && A.slug('a'.repeat(500)).length === 100 && typeof hostile === 'string');
+
   // ── ranges ──
   const ok = A.validateRanges([{ mentorId: 'm1', from: 1, to: 24 }, { mentorId: 'm2', from: 25, to: 48 }, { mentorId: 'm3', from: 49, to: 60 }], 60);
   s.check('ranges 1-24, 25-48, 49-60 cover a class of 60 exactly once', ok.ok && ok.gaps.length === 0 && ok.overlaps.length === 0);

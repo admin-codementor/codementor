@@ -38,7 +38,14 @@ function sortedRoster(students) {
 }
 
 // ── class identity ──
-const slug = (v) => String(v ?? '').trim().toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+/** Upper-case letters and digits with single dashes, no dash at either end. Trimmed by a loop, not a pattern, so odd input cannot make it slow. */
+function slug(v) {
+  const dashed = String(v ?? '').trim().slice(0, 100).toUpperCase().replace(/[^A-Z0-9]+/g, '-');
+  let a = 0; let b = dashed.length;
+  while (a < b && dashed[a] === '-') a += 1;
+  while (b > a && dashed[b - 1] === '-') b -= 1;
+  return dashed.slice(a, b);
+}
 
 /** The same section class always gets the same id, so generating classes twice never makes a second one. */
 function sectionClassId(termId, department, year, section) {
