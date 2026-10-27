@@ -138,6 +138,24 @@ Each stream ends with the usual gate: offline tests, lint, route audit, build, a
 - Rules for the screen: one timer, one **saved** indicator, one **connection** indicator, **at most one message at a time**, calm wording, no stacked warnings, big touch targets, keyboard friendly, works on a low-end laptop and a 5 Mbps line.
 - The design pass uses the existing `codementor-ui` rules and is shown to you as a layout for approval before it is built.
 
+#### 5.4a Reference: CodeTantra's exam screens (screenshots shared by the owner, 2026-10-27)
+Screenshots are **not** stored in the repo (they are a commercial product's screens and one shows a student's name and roll number); the notes below are what we take from them.
+
+| CodeTantra does | We do |
+|---|---|
+| One header: exam title and id, breadcrumb "Section 3 of 4 > Question 7 of 10 (1 marks)", total time left, **student name and roll number**, font size, instructions (i), settings (gear) | Same. The name and roll number are useful for invigilators and for any screenshot a student sends. |
+| A **collapsible right panel**: time remaining, sections as accordions with counts (Technical 9/10), a **numbered palette** with a small coloured corner (green answered, red not answered, grey not visited), a legend with counts, and an "Overall Summary" | Same layout. **Improve:** do not rely on colour alone (add a shape or label for colour-blind students), and keep **one** timer in the header even when the panel is open. |
+| Fixed bottom bar: **Finish** (left), Clear, Prev, Next | Same. Keep "mark for review" (ours has it; theirs does not). |
+| Finish opens a **Test Summary** (totals, per-section counts, "You still have time left, are you sure?") with "No, I want to continue the test" and "Yes, Finish and Exit" | Same. Add the count of unanswered questions per section, and the plain sentence that this cannot be undone. |
+| After finishing: "Your test has been marked as completed" and **Go to Home** | Same, plus a receipt line ("Submitted 10:42:15, answers saved"). |
+| Coding: problem on the left, editor on the right, results underneath: average and maximum time, "3 out of 3 shown test cases passed", "5 out of 7 hidden test cases passed", expected against actual per case; Submit; editor fullscreen | Same. The coding screen already has most of this; the exam shell must wrap it with the same header, palette and bottom bar. |
+| Settings: **layout** (side by side or stacked) and **font size 50 to 200% with Reset** | Same, saved on the device. |
+| Instructions modal (the (i) icon) listing each section's question count and marks per question | Same, always reachable. |
+| Leaving the window: **one** modal "You have stepped out of the window. If you do not continue, your test may end soon", a 45-second ring and a Continue button | **Different on purpose (D-22):** one calm notice, a flag, and a lock after N flags; **nothing ends the exam before the server deadline**. No spoken warning (ours speaks the warning aloud today, which is one of the "unwanted warnings"). |
+| No visible save or connection state | Add a small "Saved 10:42:15" and a connection indicator (S1.6). |
+
+What our current page does that should go: the spoken warning, the persistent shield banner, and the browser-side auto-submit after 45 seconds (`useProctor.ts`).
+
 ### 5.5 Integrity engine and reporting (D-17)
 - **Signals:** tampered or replayed requests (hard evidence), impossible timings (solved in 2 seconds), identical or near-identical code (JPlag exists), devtools / paste / tab / fullscreen events (soft evidence), submitting after the deadline. **A changing IP address is NOT a signal** (D-30): students use any Wi-Fi, mobile data or hotspot, and mobile addresses change constantly. Two different devices at once is handled by the second-device takeover rule (D-23), not by IP.
 - Each flag stores **what, when and the evidence**. Hard evidence and soft signals are kept apart.
