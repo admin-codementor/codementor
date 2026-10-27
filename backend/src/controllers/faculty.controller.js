@@ -10,7 +10,6 @@ const examRepo = require('../repositories/examRepository');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
-const classroomRepo = require('../repositories/classroomRepository');
 const courseRepo = require('../repositories/courseRepository');
 const ratingHistoryRepo = require('../repositories/ratingHistoryRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
@@ -18,6 +17,7 @@ const codingProfileRepo = require('../repositories/codingProfileRepository');
 const contestRepo = require('../repositories/contestRepository');
 const mcqRepo = require('../repositories/mcqRepository');
 const analytics = require('../services/analyticsService');
+const classTargets = require('../services/classTargets');
 const courseAnalyticsService = require('../services/courseAnalyticsService');
 const departmentAnalyticsService = require('../services/departmentAnalyticsService');
 const departmentLeaderboardService = require('../services/departmentLeaderboardService');
@@ -162,13 +162,9 @@ async function normaliseAssignmentInput({ title, deadline, problem_ids, allowed_
   let classroomIds = [];
   if (Array.isArray(classroom_ids) && classroom_ids.length) {
     classroomIds = [...new Set(classroom_ids.map(String))].slice(0, 50);
-    const unknown = [];
-    for (const cid of classroomIds) {
-      const c = await classroomRepo.getById(cid);
-      // Only classes the requester may act on — otherwise an assignment could be
-      // pushed into another faculty member's class.
-      if (!c || !(req && await canManageOwnedBy(req, c.facultyId))) unknown.push(cid);
-    }
+    // Only classes the requester may act on — otherwise an assignment could be pushed into another faculty member's class.
+    // A class is a classroom of theirs or an academic class they are given (services/classTargets.js).
+    const { unknown } = await classTargets.validateTargets(classroomIds, req);
     if (unknown.length) {
       return { error: `Unknown or inaccessible class id(s): ${unknown.slice(0, 3).join(', ')}` };
     }
@@ -241,8 +237,8 @@ exports.getAssignmentDetail = async (req, res) => {
     const classroomIds = assignment.classroomIds || [];
     const classes = [];
     for (const cid of classroomIds) {
-      const c = await classroomRepo.getById(cid);
-      classes.push({ id: cid, name: c?.name || '(deleted class)', member_count: c ? await classroomRepo.getMemberCount(cid) : 0 });
+      const d = await classTargets.describeTarget(cid);
+      classes.push({ id: cid, name: d.name, member_count: d.member_count });
     }
 
     res.json({

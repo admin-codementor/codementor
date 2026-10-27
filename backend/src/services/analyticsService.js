@@ -19,6 +19,7 @@ const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
 const classroomRepo = require('../repositories/classroomRepository');
 const { scopeDept } = require('../middleware/role.middleware');
+const academicScope = require('./academicScope');
 
 const DAY_MS = 86400000;
 const SNAPSHOT_TTL = 120; // seconds
@@ -314,7 +315,11 @@ async function resolveAnalyticsScope(req) {
     const classrooms = await classroomRepo.listByFacultyId(req.user.id);
     const memberLists = await Promise.all(classrooms.map((c) => classroomRepo.listMembers(c.id)));
     const memberIds = new Set(memberLists.flat().map((m) => m.userId));
-    return { ownClasses: true, dept: req.user.department ?? null, memberIds, cacheKey: req.user.id, classroomCount: classrooms.length };
+    // Plus the students the academic structure gives this faculty member (class teacher, a subject they currently teach, a
+    // sub-mentor's own range, an approved access request): see utils/academic.js. Nothing is taken away from the classroom rule above.
+    const structure = await academicScope.facultyScope(req.user.id);
+    for (const id of structure.studentIds) memberIds.add(id);
+    return { ownClasses: true, dept: req.user.department ?? null, memberIds, cacheKey: req.user.id, classroomCount: classrooms.length + structure.classes.length };
   }
   return { ownClasses: false, dept: scopeDept(req), memberIds: null };
 }

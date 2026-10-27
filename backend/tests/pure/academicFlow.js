@@ -4,6 +4,8 @@ const jwt = require('jsonwebtoken');
 const { createAcademicFakeDb } = require('../fakes/academicFakeDb');
 const { loadAppWithMounts } = require('../routeAudit');
 const academicScope = require('../../src/services/academicScope');
+const classTargets = require('../../src/services/classTargets');
+const classroomRepo = require('../../src/repositories/classroomRepository');
 
 const fake = createAcademicFakeDb();
 const { db } = fake;
@@ -166,6 +168,27 @@ module.exports = async function (s) {
     s.check('a student can be in an elective without leaving their section', db.enrollments.get(`${el.data.id}_a5`)?.primary === false && db.enrollments.get(`${A.id}_a5`)?.primary === true);
     const me3 = await call('GET', '/api/academic/me', 'a5');
     s.check('and sees both', me3.data.class.section === 'A' && me3.data.electives.length === 1 && me3.data.electives[0].name === 'Cloud Computing');
+
+    // ── aiming exams and assignments at classes ──
+    const rooms = new Map([['room1', { id: 'room1', name: 'Python Lab', facultyId: 'f1' }], ['room2', { id: 'room2', name: 'Other Lab', facultyId: 'f2' }]]);
+    Object.assign(classroomRepo, {
+      getById: async (id) => rooms.get(id) || null,
+      getMemberCount: async () => 7,
+      listByStudentId: async (sid) => (sid === 'a5' ? [rooms.get('room1')] : []),
+    });
+    const as = (id) => ({ user: { id, role: db.users.get(id).role, department: db.users.get(id).department ?? null } });
+    s.check('a faculty member can aim at their own classroom, not at a colleagues', (await classTargets.validateTargets(['room1'], as('f1'))).unknown.length === 0 && (await classTargets.validateTargets(['room2'], as('f1'))).unknown.join() === 'room2');
+    s.check('a faculty member can aim at an academic class they are class teacher of or teach, not one they are not given', (await classTargets.validateTargets([A.id], as('f1'))).unknown.length === 0 && (await classTargets.validateTargets([B.id], as('f1'))).unknown.join() === B.id);
+    s.check('a sub-mentor sees their students but cannot aim work at the whole class', (await classTargets.validateTargets([A.id], as('f3'))).unknown.join() === A.id);
+    s.check('an unknown id is refused for everyone', (await classTargets.validateTargets(['nothing'], as('adm'))).unknown.join() === 'nothing');
+    s.check('a HOD can aim at any class of their department, not another departments', (await classTargets.validateTargets([A.id, B.id], as('hodC'))).unknown.length === 0 && (await classTargets.validateTargets([A.id], as('hodE'))).unknown.join() === A.id);
+    s.check('an Admin can aim at any class', (await classTargets.validateTargets([A.id, B.id, 'room1'], as('adm'))).unknown.length === 0);
+    s.check('a class of a term that is no longer the active one cannot be aimed at', (await classTargets.validateTargets([A.id], as('adm'))).unknown.length === 0 && (() => { db.terms.get(T).status = 'planned'; return true; })() && (await classTargets.validateTargets([A.id], as('adm'))).unknown.join() === A.id && (() => { db.terms.get(T).status = 'active'; return true; })());
+    const mine = await classTargets.studentClassIds('a5');
+    s.check('a student is in their section class, their elective and the classrooms they joined', mine.has(A.id) && mine.has(el.data.id) && mine.has('room1') && mine.size === 3);
+    s.check('a student in no class of any kind is in none', (await classTargets.studentClassIds('nobodyHere')).size === 0);
+    const d1 = await classTargets.describeTarget(A.id); const d2 = await classTargets.describeTarget('room1'); const d3 = await classTargets.describeTarget('gone');
+    s.check('targets are described for the builder: an academic class by its label, a classroom by its name, a missing one as deleted', d1.kind === 'academic' && /CSE/.test(d1.name) && d1.member_count >= 28 && d2.name === 'Python Lab' && d3.name === '(deleted class)');
 
     // ── no active term ──
     db.terms.get(T).status = 'closed';
