@@ -10,6 +10,8 @@ For the people running a graded exam: the exam owner, the invigilators and whoev
 - **Answers save as the student clicks.** The top bar shows "Saved 10:42:15". If the connection drops it says "Waiting for connection" and keeps the answers on that computer; they upload when the connection returns.
 - **One window at a time.** Opening the exam on a second device or tab makes that one active; the first shows "open in another window" and can take it back with one button.
 - **Leaving fullscreen or switching tab is counted.** After the number set on the exam (default 5, 0 means never), the student's exam is **paused**: they see a plain screen and their time keeps running. **Nothing ends an exam early.** Only the server deadline does.
+- **Each student sees their own order.** The questions of a multiple-choice section, and the options of each question, are shuffled per student when they start. The order stays the same after a reload, a second device or a resume. Questions whose options refer to each other ("All of the above", "Both A and B") keep their written option order. Marks are always worked out from the exam's own list, so scoring is unaffected.
+- **Tampering is recorded, and mailed.** If the SERVER proves something the exam page never does (a made-up session code, an answer for a question that is not in the exam, an option that cannot exist, marks sent from the browser, repeated changes long after time ended), it is written to the exam's **Integrity report** and the student and every admin get a plain mail with the reason. Nothing is mailed for leaving fullscreen or switching tab. It is a record, not a verdict.
 - **Time ran out:** the saved answers are marked as submitted at the deadline. This happens when the exam owner opens the report, or when the student next opens the exam.
 
 ## A week before
@@ -43,6 +45,7 @@ The roster refreshes every 10 seconds and shows each student's state, time left,
 | **Paused** | The student passed the violation limit | Ask the student what happened. If it was accidental, press **Resume**, write the reason (kept on the record, at least 5 characters), add extra minutes only if they lost real time. They are told and their page continues by itself. |
 | **Last saved** is many minutes ago for someone **In progress** | Their connection is down or the computer is asleep | Go to them. Answers already saved are safe. When the connection returns they continue. |
 | Student sees "open in another window" | They opened the exam twice | Press **Use this window instead** on the one they want. |
+| An **Integrity** entry or a mail "Exam integrity" | The server proved tampering (see above) | Open **Faculty > Exams > Integrity** for the exam. It lists what was seen, when, and whether the mails were sent ("Send mails again" if not). Decide with the student; the page is evidence, not a decision. Only an Admin, the exam's owner or the owner's HOD can see it. |
 | **Time ran out** | The deadline passed without Finish | Answers are saved and will be marked. If it was our fault (see below), use **Resume** with extra minutes. Limits: the owner can add up to 60 minutes and resume a student 3 times, an Admin up to 180 and 6. |
 | Many students **Paused** at once | A shared cause (the network dropped everyone out of fullscreen, a projector, a room-wide event) | Do not resume one by one yet. Fix the cause, then resume them. |
 
@@ -67,8 +70,8 @@ Every 15 minutes look at: the roster counts, `/api/system-status`, and (on the s
 
 ## What does not exist yet (do not rely on it)
 
+- **Integrity mail needs SMTP settings in `.env`** (`SMTP_HOST`, `MAIL_FROM`, and user/password if the mail server needs them). Without them the evidence is still recorded on the Integrity page, and the page says mail is not set up.
 - **Alerts to a phone** (Telegram or email) when the site goes down. Today a person has to look at `/api/system-status`; a free uptime monitor can watch it every 5 minutes (alert on anything but HTTP 200), and that should be set up before the first graded exam.
-- **Randomised question order** per student and the **integrity report and email** for hard evidence.
 - **A 3-hour soak and a real rehearsal on the college server** with about 100 students. The load numbers in `loadtest/README.md` come from a single PC with a simulated database.
 - **Autoscaling and several API copies** (the Kubernetes plan). One API process on the test PC handled about 500 saves per second, about 20 times a real exam, but the college server has not been measured.
 - **The load of the sign-in rush** when 1000 students log in within a minute.

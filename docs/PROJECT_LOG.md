@@ -5,6 +5,19 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), Exam integrity: per-student shuffle, evidence, report and mail
+**Asked and decided:** SMTP settings in `.env` (any provider); email only for server-proven tampering; shuffle question order AND options; exam integrity first, then the class and mentor model.
+**Did:**
+- **Shuffle** (`utils/examLayout.js`): each new attempt gets its own question order and option order, stored once on the attempt, so reload, second device and resume show the same order. Stored answers stay in the exam's own numbering (scoring, reports and analytics unchanged); only what goes to and comes from the page is translated. Questions with positional options ("All of the above", "Both A and B") keep their written option order. Attempts that started before this keep what they were shown.
+- **Evidence** (`utils/examIntegrity.js`, `services/integrityService.js`, `repositories/integrityRepository.js`): five server-proven kinds (invented session code, question not in the exam, impossible option, marks/result fields in a request, repeated writes long after time ended). One record per attempt, one write per kind per 20 s at most, never blocks a save. Live edits of an exam cannot cause false evidence (a missing but real-looking id and an option just past the list are refused without a record).
+- **Mail** (`services/mailService.js`, nodemailer over SMTP from `.env`): one message per person (student and each admin), max 3 per attempt, plain wording, no header injection, never throws; with no SMTP the status says "not_configured".
+- **Staff:** `GET /api/exams/:id/integrity` and `POST .../integrity/:userId/resend` (Admin, the exam's owner, the owner's HOD); page `/faculty/exams/:id/integrity` linked from the exam list and the roster.
+**Verified:** backend lint, 696 offline checks (shuffle: choosing the correct shown option scores full marks, reload and review agree; every evidence rule incl. the not-evidence cases; mail failures leave the exam untouched; real mail library against a local SMTP server), route audit; load scenarios with shuffle on (300 students sustained and 200 storm: 0 lost answers, 0 errors, all old windows refused); browser: shuffled exam screen and reload, four tampering requests listed on the integrity page with plain labels and mail status.
+**Not verified:** a real SMTP provider (set `SMTP_HOST` and send a test); real Firestore for the new `examIntegrity` collection (server-only, rules unchanged); the integrity page as owner/HOD in a browser (API checked).
+**Next:** class and mentor model.
+
+---
+
 ## 2026-10-27 (Tue), Server update script, status endpoint, exam-day playbook
 **Why:** the project already runs with Docker on the college computer, and `deploy/update.sh` still built the old Vite `frontend`, so it could not be used.
 **Did:** rewrote `deploy/update.sh` for the current compose file: refuses a dirty or diverged checkout, checks `.env` (JWT secrets, `TRUST_PROXY`, CORS), asks, fast-forwards to `main`, rebuilds the website and API only (never Judge0), waits for both to answer, and rolls back by itself if they do not; `--check` changes nothing; `rollback <commit>`. 18 checks in `deploy/tests/test-update.sh` against a throwaway repo with stand-ins for docker, curl and sleep (the test found a real bug: a missing `.env` key killed the script silently). `*.sh` files are forced to LF. New public `GET /api/system-status` (api, database, judge reachable; cached 30 s, one shared check; 503 only when the database is down; no details), listed in the access matrix, 13 checks. New `docs/SERVER_UPDATE.md` and `docs/EXAM_DAY_PLAYBOOK.md`.

@@ -75,6 +75,7 @@ check_env() {
   if [ -z "$trust" ]; then env_warn "TRUST_PROXY is not set. It is how many proxies sit in front of the API (Caddy or a tunnel in front: 1 or 2). Wrong values mix up client IPs"
   elif printf '%s' "$trust" | grep -qiE '^(true|false)$'; then env_error "TRUST_PROXY must be a number or an address list, not true/false"; fi
   [ -n "$(env_get FIREBASE_SERVICE_ACCOUNT)" ] || [ -f "$ROOT/backend/service-account.json" ] || env_warn "No Firebase service account found (FIREBASE_SERVICE_ACCOUNT in .env, or backend/service-account.json)"
+  [ -n "$(env_get SMTP_HOST)" ] || env_warn "SMTP_HOST is not set: students and admins will NOT be emailed when the server proves tampering in an exam (the evidence is still recorded)"
   [ -n "$(env_get NEXT_PUBLIC_FIREBASE_API_KEY)" ] || env_warn "NEXT_PUBLIC_FIREBASE_API_KEY is empty: the website is built with it, sign-in needs it"
   if [ "$ENV_ERRORS" -eq 0 ] && [ "$ENV_WARNINGS" -eq 0 ]; then say "  .env looks right."; fi
 }
