@@ -4,18 +4,23 @@ const { authorize, facultyStaff } = require('../middleware/role.middleware');
 const { rateLimit, ipKeyGenerator } = require('express-rate-limit');
 const c = require('../controllers/academic.controller');
 
-// Limits on top of the app-wide one (middleware/rateLimiter.js), per signed-in person. Per API copy, in memory.
+// Limits on top of the app-wide one (middleware/rateLimiter.js). Per API copy, in memory.
+const perAddress = (req) => ipKeyGenerator(req.ip || '');
 const perPerson = (req) => req.user?.id || ipKeyGenerator(req.ip || '');
-const limiter = ({ windowMs, limit, message }) => rateLimit({
-  windowMs, limit, keyGenerator: perPerson, standardHeaders: 'draft-7', legacyHeaders: false,
+const limiter = ({ windowMs, limit, message, key = perPerson }) => rateLimit({
+  windowMs, limit, keyGenerator: key, standardHeaders: 'draft-7', legacyHeaders: false,
   message: { success: false, code: 'RATE_LIMITED', error: message },
 });
-// Everything on these routes: generous, for a HOD working through a screen.
+// In front of sign-in checking, by address: generous (a whole class shares one campus address), so it never gets in the way of normal use
+// but a flood of bad tokens is stopped before any work is done.
+const beforeSignIn = limiter({ windowMs: 60 * 1000, limit: 1500, key: perAddress, message: 'Too many requests from this network. Wait a minute and try again.' });
+// Everything on these routes once signed in: generous, for a HOD working through a screen.
 const general = limiter({ windowMs: 60 * 1000, limit: 240, message: 'Too many requests. Wait a minute and try again.' });
 // Building a department's classes or applying an uploaded list reads every student, so it is limited much harder.
 const heavy = limiter({ windowMs: 10 * 60 * 1000, limit: 12, message: 'That takes a lot of work for the server. Wait a few minutes before running it again.' });
 
 const router = express.Router();
+router.use(beforeSignIn);
 router.use(protect);
 router.use(general);
 
