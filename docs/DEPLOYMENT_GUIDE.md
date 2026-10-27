@@ -423,6 +423,8 @@ Two cost traps specific to your situation:
 
 ## Part 4 — Path B: College server
 
+> **Already running with Docker on the college computer?** Updating it is covered, with a tested script, in `docs/SERVER_UPDATE.md`. Running an exam: `docs/EXAM_DAY_PLAYBOOK.md`.
+
 ### B1. What to ask the college for
 
 Take this list to your HOD or IT department. These are the actual requirements —
