@@ -22,14 +22,17 @@ const recall = (map, key) => {
   return hit && hit.until > Date.now() ? hit : null;
 };
 
-/** @returns {Promise<{type: 'mcq'|'coding', ids: Set<string>}|null>}  the ids a student may answer in this section */
+/** @returns {Promise<{type: 'mcq'|'coding', ids: Set<string>, optionCounts?: Map<string, number>}|null>}  the ids a student may answer in this section, and for multiple choice how many options each question has */
 async function sectionIds(examId, sectionId) {
   const key = `${examId}:${sectionId}`;
   const hit = recall(sectionMemo, key);
   if (hit) return hit.value;
   const section = await examRepo.getSection(examId, sectionId);
   let value = null;
-  if (section?.type === 'mcq') value = { type: 'mcq', ids: new Set((await examRepo.getSectionQuestions(examId, sectionId)).map((q) => q.id)) };
+  if (section?.type === 'mcq') {
+    const qs = await examRepo.getSectionQuestions(examId, sectionId);
+    value = { type: 'mcq', ids: new Set(qs.map((q) => q.id)), optionCounts: new Map(qs.map((q) => [q.id, (q.options || []).length])) };
+  }
   else if (section?.type === 'coding') value = { type: 'coding', ids: new Set(section.problemIds || []) };
   return remember(sectionMemo, key, value);
 }
@@ -62,4 +65,7 @@ async function recordViolation({ examId, userId, eventType }) {
   return { ...out, limit };
 }
 
-module.exports = { sectionIds, examDoc, recordViolation };
+/** For tests: forget what was remembered (another test may have loaded a different exam under the same id). */
+const clearMemo = () => { sectionMemo.clear(); examMemo.clear(); };
+
+module.exports = { sectionIds, examDoc, recordViolation, clearMemo };

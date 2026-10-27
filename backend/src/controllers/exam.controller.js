@@ -13,6 +13,11 @@ const nudgeRepo = require('../repositories/nudgeRepository');
 const examAttempt = require('../utils/examAttempt');
 const examLive = require('../services/examLiveService');
 const classTargets = require('../services/classTargets');
+const examLayout = require('../utils/examLayout');
+const examIntegrity = require('../utils/examIntegrity');
+const integrity = require('../services/integrityService');
+const integrityRepo = require('../repositories/integrityRepository');
+const mailService = require('../services/mailService');
 const { cached } = require('../utils/cache');
 
 const SECTION_TYPES = ['mcq', 'coding'];
@@ -818,6 +823,9 @@ exports.getInstructions = async (req, res) => {
 async function buildAttemptView(examId, exam, attempt) {
   const submitted = !!attempt.submittedAt;
   const sections = await examRepo.getSections(examId);
+  // Each student has their own question and option order (utils/examLayout.js). Everything stored stays in the original numbering; what
+  // goes to the page is translated, and permsByQuestion is how a saved choice is translated back for display.
+  const permsByQuestion = new Map();
   const sectionsOut = await Promise.all(sections.map(async (s) => {
     if (s.type === 'coding') {
       const problems = await problemRepo.getMapByIds(s.problemIds || []);
@@ -829,11 +837,15 @@ async function buildAttemptView(examId, exam, attempt) {
         })),
       };
     }
-    const questions = (await examRepo.getSectionQuestions(examId, s.id)).map((q) => ({
-      id: q.id, question_text: q.questionText, options: q.options || [], marks: q.marks ?? 1,
-      topic: q.topic || null, position: q.position ?? 0,
-      ...(submitted ? { correct_index: q.correctIndex, explanation: q.explanation || null } : {}),
-    }));
+    const arranged = examLayout.arrange(await examRepo.getSectionQuestions(examId, s.id), attempt.layout?.sections?.[s.id]);
+    const questions = arranged.map(({ question: q, perm }, i) => {
+      permsByQuestion.set(q.id, perm);
+      return {
+        id: q.id, question_text: q.questionText, options: examLayout.displayOptions(q.options || [], perm), marks: q.marks ?? 1,
+        topic: q.topic || null, position: i,
+        ...(submitted ? { correct_index: examLayout.toDisplayed(perm, q.correctIndex), explanation: q.explanation || null } : {}),
+      };
+    });
     return {
       id: s.id, title: s.title, type: s.type, order: s.order, instructions: s.instructions,
       marks_per_question: s.marksPerQuestion, questions,
@@ -846,7 +858,7 @@ async function buildAttemptView(examId, exam, attempt) {
   return {
     exam: { id: exam.id, title: exam.title, duration_minutes: exam.durationMinutes, general_instructions: exam.generalInstructions || null },
     sections: sectionsOut,
-    question_state: attempt.questionState || {},
+    question_state: examLayout.displayState(attempt.questionState || {}, permsByQuestion),
     coding_state: attempt.codingState || {},
     seconds_remaining: secondsRemaining,
     submitted,
@@ -901,13 +913,33 @@ exports.startAttempt = async (req, res) => {
     // exists-check make this idempotent — a resumed attempt keeps its original clock.
     const proposedExpiry = now + exam.durationMinutes * 60 * 1000;
     const windowExpiresAt = new Date(windowEndMs != null ? Math.min(proposedExpiry, windowEndMs) : proposedExpiry);
+
+    // A NEW attempt gets its own question and option order, decided once here and kept on the attempt. An attempt that already exists
+    // keeps what the student has already been shown (never reshuffle mid-exam).
+    let newLayout = null;
+    if (!existing) {
+      const mcq = [];
+      for (const s of await examRepo.getSections(id)) {
+        if (s.type === 'mcq') mcq.push({ id: s.id, questions: await examRepo.getSectionQuestions(id, s.id) });
+      }
+      newLayout = examLayout.buildLayout(mcq);
+    }
     await examRepo.startAttempt(id, req.user.id, windowExpiresAt);
 
     const sessionId = examAttempt.newSessionId();
     const claim = await examRepo.mutateAttempt(id, req.user.id, (a) => {
       if (!a) return { outcome: { missing: true } };
       if (a.submittedAt) return { outcome: { submitted: true } };
-      return { outcome: { previous: a.session?.id || null }, update: { session: { id: sessionId, claimedAt: now, epoch: (Number.isInteger(a.session?.epoch) ? a.session.epoch : 0) + 1 } } };
+      return {
+        outcome: { previous: a.session?.id || null },
+        update: {
+          session: { id: sessionId, claimedAt: now, epoch: (Number.isInteger(a.session?.epoch) ? a.session.epoch : 0) + 1 },
+          // Only a brand new attempt gets a layout (two simultaneous starts cannot overwrite each other's), and only attempts that
+          // keep a session history can tell an old window from an invented session code.
+          ...(newLayout && a.layout === undefined ? { layout: newLayout } : {}),
+          ...(newLayout || Array.isArray(a.sessionHistory) ? { sessionHistory: examIntegrity.pushSessionHistory(a.sessionHistory, a.session?.id) } : {}),
+        },
+      };
     });
     if (claim?.submitted) return res.status(409).json({ success: false, code: 'ALREADY_SUBMITTED', error: 'You have already submitted this exam.', hint: 'Your answers are saved.' });
     if (claim?.previous) {
@@ -958,13 +990,26 @@ exports.answerQuestion = async (req, res) => {
   try {
     const { id, qid } = req.params;
     const { section_id, selected_index, marked, seq } = req.body;
+    const userId = req.user.id;
+
+    // Hard evidence (utils/examIntegrity.js): things the real exam page never does. Recorded without waiting; the save carries on.
+    const sentFields = examIntegrity.forbiddenFields(req.body);
+    if (sentFields.length) integrity.report({ examId: id, userId, type: 'client_score_fields', detail: sentFields.join(',') });
 
     const known = await examLive.sectionIds(id, section_id);
-    if (!known || known.type !== 'mcq') return res.status(404).json({ success: false, error: 'Section not found' });
-    if (!known.ids.has(qid)) return res.status(404).json({ success: false, error: 'Question not found' });
+    if (!known || known.type !== 'mcq') {
+      if (!examIntegrity.looksLikeRealId(section_id)) integrity.report({ examId: id, userId, type: 'foreign_question', detail: `section ${examIntegrity.cleanDetail(section_id, 40)}` });
+      return res.status(404).json({ success: false, error: 'Section not found' });
+    }
+    if (!known.ids.has(qid)) {
+      if (!examIntegrity.looksLikeRealId(qid)) integrity.report({ examId: id, userId, type: 'foreign_question', detail: `question ${examIntegrity.cleanDetail(qid, 40)}` });
+      return res.status(404).json({ success: false, error: 'Question not found' });
+    }
 
     const hasSelection = selected_index !== undefined && selected_index !== null;
-    if (hasSelection && !(Number.isInteger(selected_index) && selected_index >= 0 && selected_index < 26)) {
+    const optionCount = known.optionCounts?.get(qid) ?? 0;
+    if (hasSelection && !(Number.isInteger(selected_index) && selected_index >= 0 && selected_index < optionCount)) {
+      if (examIntegrity.isTamperedSelection(selected_index)) integrity.report({ examId: id, userId, type: 'invalid_selection', detail: `value ${examIntegrity.cleanDetail(JSON.stringify(selected_index), 30)}` });
       return res.status(400).json({ success: false, error: 'That option does not exist.' });
     }
     const isMarked = marked === true;
@@ -973,21 +1018,28 @@ exports.answerQuestion = async (req, res) => {
       : (isMarked ? 'marked' : 'visited');
 
     const sessionId = sessionOf(req);
-    const out = await examRepo.mutateAttempt(id, req.user.id, (attempt) => {
-      const g = examAttempt.guardLive(attempt, { sessionId, now: Date.now() });
-      if (!g.ok) return { outcome: { refused: g } };
+    const out = await examRepo.mutateAttempt(id, userId, (attempt) => {
+      const now = Date.now();
+      const g = examAttempt.guardLive(attempt, { sessionId, now });
+      if (!g.ok) return { outcome: { refused: g, evidence: examIntegrity.refusalEvidence({ attempt, refusal: g, sessionId, now }) } };
       const epoch = Number.isInteger(attempt.session?.epoch) ? attempt.session.epoch : 0;
       const d = examAttempt.decideSave(attempt.questionState?.[qid], seq, epoch);
       if (!d.apply) return { outcome: { stale: true, status: attempt.questionState?.[qid]?.status ?? status } };
+      // The page sends the option as it was SHOWN to this student; what is stored is the option's place in the exam's own list.
+      const perm = hasSelection ? examLayout.permFor(attempt.layout?.sections?.[section_id], qid, optionCount) : null;
+      const stored = hasSelection ? examLayout.toOriginal(perm, selected_index) : null;
       return {
         outcome: { status, seq: d.seq },
         update: {
-          [`questionState.${qid}`]: { status, selectedIndex: hasSelection ? selected_index : null, sectionId: section_id, ...(d.seq != null ? { seq: d.seq, epoch } : {}) },
+          [`questionState.${qid}`]: { status, selectedIndex: stored, sectionId: section_id, ...(d.seq != null ? { seq: d.seq, epoch } : {}) },
           lastSaveAt: new Date(),
         },
       };
     });
-    if (out.refused) return refuse(res, out.refused);
+    if (out.refused) {
+      if (out.evidence) integrity.report({ examId: id, userId, type: out.evidence, detail: out.evidence === 'forged_session' ? `session code ${examIntegrity.cleanDetail(sessionId, 8)}...` : '' });
+      return refuse(res, out.refused);
+    }
     res.json({ success: true, data: out.stale ? { status: out.status, stale: true } : { status: out.status, seq: out.seq ?? null } });
   } catch (e) {
     console.error('Exam answerQuestion error:', e.message);
@@ -1000,20 +1052,28 @@ exports.markVisited = async (req, res) => {
     const { id, qid: problemId } = req.params;
     const { section_id } = req.body;
 
+    const sentFields = examIntegrity.forbiddenFields(req.body);
+    if (sentFields.length) integrity.report({ examId: id, userId: req.user.id, type: 'client_score_fields', detail: sentFields.join(',') });
+
     const known = await examLive.sectionIds(id, section_id);
     if (!known || known.type !== 'coding' || !known.ids.has(problemId)) {
+      if (!examIntegrity.looksLikeRealId(problemId) || !examIntegrity.looksLikeRealId(section_id)) integrity.report({ examId: id, userId: req.user.id, type: 'foreign_question', detail: `problem ${examIntegrity.cleanDetail(problemId, 40)}` });
       return res.status(404).json({ success: false, error: 'Problem not found in this section' });
     }
 
     const sessionId = sessionOf(req);
     const out = await examRepo.mutateAttempt(id, req.user.id, (attempt) => {
-      const g = examAttempt.guardLive(attempt, { sessionId, now: Date.now() });
-      if (!g.ok) return { outcome: { refused: g } };
+      const now = Date.now();
+      const g = examAttempt.guardLive(attempt, { sessionId, now });
+      if (!g.ok) return { outcome: { refused: g, evidence: examIntegrity.refusalEvidence({ attempt, refusal: g, sessionId, now }) } };
       // Never downgrade an already-answered problem back to merely "visited".
       if (attempt.codingState?.[problemId]?.status === 'answered') return { outcome: { status: 'answered' } };
       return { outcome: { status: 'visited' }, update: { [`codingState.${problemId}`]: { status: 'visited', sectionId: section_id }, lastSaveAt: new Date() } };
     });
-    if (out.refused) return refuse(res, out.refused);
+    if (out.refused) {
+      if (out.evidence) integrity.report({ examId: id, userId: req.user.id, type: out.evidence, detail: out.evidence === 'forged_session' ? `session code ${examIntegrity.cleanDetail(sessionId, 8)}...` : '' });
+      return refuse(res, out.refused);
+    }
     res.json({ success: true, data: { status: out.status } });
   } catch (e) {
     console.error('Exam markVisited error:', e.message);
@@ -1068,16 +1128,23 @@ exports.submitExam = async (req, res) => {
       if (s.type === 'mcq') questionsBySection.set(s.id, await examRepo.getSectionQuestions(id, s.id));
     }
 
+    const sentFields = examIntegrity.forbiddenFields(req.body);
+    if (sentFields.length) integrity.report({ examId: id, userId: req.user.id, type: 'client_score_fields', detail: sentFields.join(',') });
+
     const sessionId = sessionOf(req);
     const out = await examRepo.mutateAttempt(id, req.user.id, (attempt) => {
       if (!attempt) return { outcome: { refused: examAttempt.guardLive(null) } };
       if (attempt.submittedAt) return { outcome: { already: true, attempt } };
-      const g = examAttempt.guardLive(attempt, { sessionId, now: Date.now() });
-      if (!g.ok) return { outcome: { refused: g } };
+      const now = Date.now();
+      const g = examAttempt.guardLive(attempt, { sessionId, now });
+      if (!g.ok) return { outcome: { refused: g, evidence: examIntegrity.refusalEvidence({ attempt, refusal: g, sessionId, now }) } };
       const result = examScoring.scoreAttempt({ sections, questionsBySection, attempt, exam });
       return { outcome: { result }, update: { submittedAt: new Date(), score: result.score, total: result.total } };
     });
-    if (out.refused) return refuse(res, out.refused);
+    if (out.refused) {
+      if (out.evidence) integrity.report({ examId: id, userId: req.user.id, type: out.evidence, detail: out.evidence === 'forged_session' ? `session code ${examIntegrity.cleanDetail(sessionId, 8)}...` : '' });
+      return refuse(res, out.refused);
+    }
 
     if (out.already) {
       const result = examScoring.scoreAttempt({ sections, questionsBySection, attempt: out.attempt, exam });
@@ -1182,6 +1249,70 @@ exports.reopenAttempt = async (req, res) => {
     res.json({ success: true, data: { expires_at: new Date(newExpiry).toISOString(), reopen_count: (out.plan.patch.reopens || []).length } });
   } catch (e) {
     console.error('Exam reopenAttempt error:', e.message);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// Staff: the integrity report (hard evidence recorded by the server)
+// ══════════════════════════════════════════════════════════════
+
+// @route GET /api/exams/:id/integrity
+// Who may look: an Admin, the exam's owner, or the owner's HOD (the same people who may resume a student). Soft signals (leaving
+// fullscreen, switching tab) are on the roster; this page is only for things the real exam page never does.
+exports.getIntegrity = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const exam = await examRepo.getById(id);
+    if (!exam) return res.status(404).json({ success: false, code: 'NOT_FOUND', error: 'Exam not found' });
+    if (!examAttempt.canReopen({ actor: actorOf(req), exam, ownerDepartment: await ownerDepartmentOf(exam) })) {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'Only an Admin, the exam\'s owner or the owner\'s HOD can see the integrity report.' });
+    }
+    const records = await integrityRepo.listForExam(id);
+    const rows = await Promise.all(records.map(async (r) => {
+      const [u, attempt] = await Promise.all([userRepo.getById(r.userId), examRepo.getAttempt(id, r.userId)]);
+      const counts = r.counts || {};
+      return {
+        userId: r.userId, name: u?.name || 'Unknown', rollNo: u?.rollNo || null, section: u?.section || null,
+        total: Object.values(counts).reduce((n, c) => n + c, 0),
+        types: examIntegrity.TYPES.filter((t) => counts[t]).map((t) => ({
+          type: t, label: examIntegrity.EVIDENCE[t].label, reason: examIntegrity.EVIDENCE[t].reason, count: counts[t],
+          mail: r.mail?.[t] ? { status: r.mail[t].status, at: r.mail[t].at ? new Date(r.mail[t].at).toISOString() : null, recipients: r.mail[t].recipients ?? 0, error: r.mail[t].error || null } : (r.emailed?.[t] ? { status: 'pending', at: null, recipients: 0, error: null } : null),
+        })),
+        events: (r.events || []).slice(-15).reverse().map((e) => ({ type: e.type, label: examIntegrity.EVIDENCE[e.type]?.label || e.type, at: new Date(e.at).toISOString(), detail: e.detail || null })),
+        firstAt: r.firstAt ? new Date(r.firstAt).toISOString() : null, lastAt: r.lastAt ? new Date(r.lastAt).toISOString() : null,
+        violationCount: attempt?.violationCount || 0, submitted: !!attempt?.submittedAt, score: attempt?.score ?? null, total_marks: attempt?.total ?? null,
+      };
+    }));
+    rows.sort((a, b) => b.total - a.total || String(b.lastAt).localeCompare(String(a.lastAt)));
+    res.json({
+      success: true,
+      data: { exam: { id: exam.id, title: exam.title }, rows, students: rows.length, events: rows.reduce((n, r) => n + r.total, 0), mail_configured: mailService.isConfigured(), server_time: new Date().toISOString() },
+    });
+  } catch (e) {
+    console.error('Exam getIntegrity error:', e.message);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// @route POST /api/exams/:id/integrity/:userId/resend   body { type }
+// Send the mails for one kind of evidence again (the first send may have failed, or SMTP was not set up yet).
+exports.resendIntegrity = async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const type = req.body?.type;
+    const exam = await examRepo.getById(id);
+    if (!exam) return res.status(404).json({ success: false, code: 'NOT_FOUND', error: 'Exam not found' });
+    if (!examAttempt.canReopen({ actor: actorOf(req), exam, ownerDepartment: await ownerDepartmentOf(exam) })) {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'Only an Admin, the exam\'s owner or the owner\'s HOD can send integrity mails.' });
+    }
+    if (!examIntegrity.TYPES.includes(type)) return res.status(400).json({ success: false, code: 'BAD_TYPE', error: 'Choose which kind of evidence to send.' });
+    const out = await integrity.resend({ examId: id, userId, type });
+    if (out.status === 'none') return res.status(404).json({ success: false, code: 'NOT_FOUND', error: 'There is no such evidence on record for this student.' });
+    logAction(req, 'exam.integrity.resend', `exam ${id} student ${userId} ${type}: ${out.status}`);
+    res.json({ success: true, data: { status: out.status } });
+  } catch (e) {
+    console.error('Exam resendIntegrity error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };

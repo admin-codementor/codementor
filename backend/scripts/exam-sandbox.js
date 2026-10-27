@@ -27,6 +27,8 @@ const fake = createExamFakeDb({
   violationLimit: Number(process.env.SANDBOX_LIMIT ?? 3), questionCount: Number(process.env.SANDBOX_QUESTIONS ?? 12),
   studentCount: Number(process.env.SANDBOX_STUDENTS ?? 0), durationMinutes: Number(process.env.SANDBOX_DURATION_MIN ?? 60), latencyMs: Number(process.env.SANDBOX_LATENCY_MS ?? 0),
 });
+// Realistic options, so the per-student shuffle of options is exercised (the default "Option A..." text is never shuffled).
+fake.questions.forEach((q) => { q.options = ['red', 'green', 'blue', 'pink']; });
 fake.install();
 
 const app = require('../src/app');

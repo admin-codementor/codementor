@@ -11,6 +11,7 @@
 //     recorded on the attempt, and audited by the caller (D-21)
 const crypto = require('crypto');
 const { isFlagEvent } = require('./proctorEvents');
+const { pushSessionHistory } = require('./examIntegrity');
 
 const MAX_REOPENS = 3; // per attempt, for the exam owner and the HOD
 const ADMIN_MAX_REOPENS = 6;
@@ -144,6 +145,8 @@ function planReopen({ attempt, exam, actor, input = {}, now = Date.now() }) {
       session: { id: newSessionId(), claimedAt: now, epoch: (Number.isInteger(attempt.session?.epoch) ? attempt.session.epoch : 0) + 1, placeholder: true },
       violationCount: 0, lastViolationAt: null,
       reopens: [...reopens, entry],
+      // The window that was cut off still holds its old session code: remember it, so it is told apart from an invented one.
+      ...(Array.isArray(attempt.sessionHistory) ? { sessionHistory: pushSessionHistory(attempt.sessionHistory, attempt.session?.id) } : {}),
     },
     entry,
     newExpiry,

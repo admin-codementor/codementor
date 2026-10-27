@@ -46,6 +46,8 @@ It only warns (and asks you to look) when `NODE_ENV` is not `production`, `CORS_
 | `TRUST_PROXY` | Number of proxies in front of the API. Wrong value mixes up client addresses (rate limits, exam network check). |
 | `CORS_ORIGIN` | The address people open the site at. |
 | `JWT_SECRET`, `JWT_REFRESH_SECRET` | Real secrets, different from each other. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASS`, `MAIL_FROM` | Optional but wanted. Mail for exam integrity (to the student and the admins). Gmail with an app password, Brevo, or the college mail server all work. Without it nothing is emailed; the evidence is still recorded. |
+| `APP_URL` | Optional. The site address used for the link in the admin mail (defaults to the first `CORS_ORIGIN`). |
 | `KEEP_ALIVE_TIMEOUT_MS` | Optional. How long the API keeps an idle connection (default 65000). Leave it unless the proxy in front holds idle connections longer than that. |
 
 ## Checking by hand
