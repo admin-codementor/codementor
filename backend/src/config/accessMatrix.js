@@ -28,6 +28,19 @@ const rules = [
   { path: '/api/faculty/faculty-list', roles: ['admin'], note: 'all staff accounts' },
   { path: '/api/faculty/analytics', roles: ['admin'], note: 'college-wide class analytics' },
 
+  // ── Academic structure: terms, classes, mentors, assignments, access requests ───
+  { methods: ['POST'], path: '/api/academic/terms', roles: ['admin'], note: 'only the Admin creates a term' },
+  { methods: ['POST'], path: '/api/academic/terms/*/activate', roles: ['admin'], note: 'only the Admin makes a term the active one' },
+  { methods: ['GET'], path: '/api/academic/terms', roles: STAFF },
+  { path: '/api/academic/terms/**', roles: ['hod', 'admin'], note: 'classes, placements, electives, consistency: a HOD for their department (checked inside), the Admin for all' },
+  { path: '/api/academic/classes/**', roles: ['hod', 'admin'], note: 'roster, class teacher, sub-mentors, assignments' },
+  { path: '/api/academic/assignments/**', roles: ['hod', 'admin'], note: 'reallocate or end a teaching assignment' },
+  { methods: ['GET'], path: '/api/academic/me', roles: ['student'], note: 'a student\'s own class, class teacher and sub-mentor' },
+  { methods: ['GET'], path: '/api/academic/my-classes', roles: ['faculty', 'hod'], note: 'a faculty member\'s own classes this term' },
+  { methods: ['POST'], path: '/api/academic/requests', roles: ['faculty'], note: 'a faculty member asks for access to another class' },
+  { methods: ['GET'], path: '/api/academic/requests', roles: STAFF, note: 'own requests (faculty), the department\'s (HOD), all (Admin)' },
+  { methods: ['POST'], path: '/api/academic/requests/*/decide', roles: ['hod', 'admin'], note: 'approve or decline, for the class\'s department (checked inside)' },
+
   // ── HOD and Admin ─────────────────────────────────────────────────────────────
   { path: '/api/messages/reported', roles: ['hod', 'admin'], note: 'reviewing reported conversations' },
   { path: '/api/messages/reported/**', roles: ['hod', 'admin'], note: 'reviewing reported conversations' },
