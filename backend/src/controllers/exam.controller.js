@@ -802,6 +802,7 @@ exports.getInstructions = async (req, res) => {
           id: exam.id, title: exam.title, description: exam.description,
           general_instructions: exam.generalInstructions,
           window_start: toISO(exam.windowStart), window_end: toISO(exam.windowEnd), duration_minutes: exam.durationMinutes,
+          violation_limit: Number.isInteger(exam.violationLimit) ? exam.violationLimit : examAttempt.DEFAULT_VIOLATION_LIMIT,
         },
         sections: sectionsOut,
       },
@@ -847,12 +848,14 @@ async function buildAttemptView(examId, exam, attempt) {
   const secondsRemaining = expiresAt != null ? Math.max(0, Math.floor((expiresAt - Date.now()) / 1000)) : null;
 
   return {
-    exam: { id: exam.id, title: exam.title, duration_minutes: exam.durationMinutes },
+    exam: { id: exam.id, title: exam.title, duration_minutes: exam.durationMinutes, general_instructions: exam.generalInstructions || null },
     sections: sectionsOut,
     question_state: attempt.questionState || {},
     coding_state: attempt.codingState || {},
     seconds_remaining: secondsRemaining,
     submitted,
+    submitted_at: toISO(attempt.submittedAt),
+    auto_submitted: !!attempt.autoSubmitted,
     score: attempt.score ?? null,
     total: attempt.total ?? null,
     // Whether the attempt is paused for staff to decide (too many violations), and how close the student is to that.
@@ -908,7 +911,7 @@ exports.startAttempt = async (req, res) => {
     const claim = await examRepo.mutateAttempt(id, req.user.id, (a) => {
       if (!a) return { outcome: { missing: true } };
       if (a.submittedAt) return { outcome: { submitted: true } };
-      return { outcome: { previous: a.session?.id || null }, update: { session: { id: sessionId, claimedAt: now } } };
+      return { outcome: { previous: a.session?.id || null }, update: { session: { id: sessionId, claimedAt: now, epoch: (Number.isInteger(a.session?.epoch) ? a.session.epoch : 0) + 1 } } };
     });
     if (claim?.submitted) return res.status(409).json({ success: false, code: 'ALREADY_SUBMITTED', error: 'You have already submitted this exam.', hint: 'Your answers are saved.' });
     if (claim?.previous) {
@@ -977,12 +980,13 @@ exports.answerQuestion = async (req, res) => {
     const out = await examRepo.mutateAttempt(id, req.user.id, (attempt) => {
       const g = examAttempt.guardLive(attempt, { sessionId, now: Date.now() });
       if (!g.ok) return { outcome: { refused: g } };
-      const d = examAttempt.decideSave(attempt.questionState?.[qid], seq);
+      const epoch = Number.isInteger(attempt.session?.epoch) ? attempt.session.epoch : 0;
+      const d = examAttempt.decideSave(attempt.questionState?.[qid], seq, epoch);
       if (!d.apply) return { outcome: { stale: true, status: attempt.questionState?.[qid]?.status ?? status } };
       return {
         outcome: { status, seq: d.seq },
         update: {
-          [`questionState.${qid}`]: { status, selectedIndex: hasSelection ? selected_index : null, sectionId: section_id, ...(d.seq != null ? { seq: d.seq } : {}) },
+          [`questionState.${qid}`]: { status, selectedIndex: hasSelection ? selected_index : null, sectionId: section_id, ...(d.seq != null ? { seq: d.seq, epoch } : {}) },
           lastSaveAt: new Date(),
         },
       };

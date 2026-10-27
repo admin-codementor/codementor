@@ -2,79 +2,15 @@
 // start -> save -> stale save -> second device takes over -> violations lock -> staff resume -> double submit -> late coding submission.
 require('../hermeticEnv');
 const jwt = require('jsonwebtoken');
-const examRepo = require('../../src/repositories/examRepository');
-const userRepo = require('../../src/repositories/userRepository');
-const nudgeRepo = require('../../src/repositories/nudgeRepository');
-const proctorEventRepo = require('../../src/repositories/proctorEventRepository');
-const auditLogRepo = require('../../src/repositories/auditLogRepository');
-const problemRepo = require('../../src/repositories/problemRepository');
+const { createExamFakeDb, EXAM_ID, SEC_MCQ, SEC_CODE, PROBLEM } = require('../fakes/examFakeDb');
 const { loadAppWithMounts } = require('../routeAudit');
 
-// ── the stand-in database ──
-const EXAM_ID = '11111111-1111-4111-8111-111111111111';
-const SEC_MCQ = 'secMcq';
-const SEC_CODE = 'secCode';
-const PROBLEM = '22222222-2222-4222-8222-222222222222';
-const NOW0 = Date.now();
-
-const db = { attempts: new Map(), nudges: [], events: [] };
-const exam = { id: EXAM_ID, title: 'Mock Test', isPublished: true, facultyId: 'owner1', durationMinutes: 60, windowStart: new Date(NOW0 - 3600000), windowEnd: new Date(NOW0 + 7200000), violationLimit: 1, classroomIds: [], groupIds: [] };
-const sections = [
-  { id: SEC_MCQ, type: 'mcq', order: 0, title: 'Aptitude', marksPerQuestion: 1, negativeMarking: 0 },
-  { id: SEC_CODE, type: 'coding', order: 1, title: 'Coding', marksPerQuestion: 10, problemIds: [PROBLEM] },
-];
-const questions = [
-  { id: 'q1', questionText: 'Q1?', options: ['a', 'b', 'c', 'd'], correctIndex: 1, marks: 1, position: 0 },
-  { id: 'q2', questionText: 'Q2?', options: ['a', 'b', 'c', 'd'], correctIndex: 2, marks: 1, position: 1 },
-];
-const users = new Map([
-  ['owner1', { id: 'owner1', name: 'Owner Faculty', role: 'faculty', department: 'CSE' }],
-  ['other1', { id: 'other1', name: 'Other Faculty', role: 'faculty', department: 'CSE' }],
-  ['hodCSE', { id: 'hodCSE', name: 'HOD CSE', role: 'hod', department: 'CSE' }],
-  ['hodECE', { id: 'hodECE', name: 'HOD ECE', role: 'hod', department: 'ECE' }],
-  ['adm1', { id: 'adm1', name: 'Admin', role: 'admin' }],
-]);
-for (const id of ['stu1', 'stu2', 'stu3', 'stuLate', 'stuDone', 'stuLock', 'stuSess']) users.set(id, { id, name: `Student ${id}`, role: 'student', rollNo: `R-${id}`, section: 'A' });
-
-const setPath = (obj, path, value) => {
-  const parts = path.split('.');
-  let cur = obj;
-  for (let i = 0; i < parts.length - 1; i += 1) { if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {}; cur = cur[parts[i]]; }
-  cur[parts[parts.length - 1]] = value;
-};
-const applyUpdate = (doc, update) => { for (const [k, v] of Object.entries(update)) { if (k.includes('.')) setPath(doc, k, structuredClone(v)); else doc[k] = structuredClone(v); } };
-const view = (userId) => { const d = db.attempts.get(userId); return d ? { userId, ...structuredClone(d) } : null; };
-
-function installFakes() {
-  Object.assign(examRepo, {
-    getById: async (id) => (id === EXAM_ID ? { ...exam } : null),
-    listPublished: async () => [{ ...exam }],
-    getSections: async () => sections.map((s) => ({ ...s })),
-    getSection: async (_e, sid) => { const s = sections.find((x) => x.id === sid); return s ? { ...s } : null; },
-    getSectionQuestions: async () => questions.map((q) => ({ ...q })),
-    getSectionCount: async () => sections.length,
-    getAttempt: async (_e, uid) => view(uid),
-    startAttempt: async (_e, uid, windowExpiresAt) => {
-      if (!db.attempts.has(uid)) db.attempts.set(uid, { startedAt: new Date(), windowExpiresAt, submittedAt: null, score: null, total: null, questionState: {}, codingState: {} });
-      return view(uid);
-    },
-    mutateAttempt: async (_e, uid, decide) => {
-      const r = decide(view(uid)) || {};
-      if (r.update && db.attempts.has(uid)) applyUpdate(db.attempts.get(uid), r.update);
-      return r.outcome;
-    },
-    listAttempts: async () => [...db.attempts.keys()].map(view),
-    finishAttempt: async (_e, uid, f) => { applyUpdate(db.attempts.get(uid), { submittedAt: f.submittedAt ?? new Date(), score: f.score, total: f.total, ...(f.autoSubmitted ? { autoSubmitted: true } : {}) }); },
-  });
-  Object.assign(userRepo, { getById: async (id) => users.get(id) || null, getAllUsersMap: async () => new Map(users) });
-  nudgeRepo.addMany = async (rows) => { db.nudges.push(...rows); };
-  proctorEventRepo.create = async (e) => { db.events.push(e); };
-  auditLogRepo.create = async () => {};
-  problemRepo.getMapByIds = async (ids) => new Map((ids || []).map((id) => [id, { title: 'Two Sum', difficulty: 'easy' }]));
-}
+// The stand-in database (tests/fakes/examFakeDb.js): one exam with an MCQ section and a coding section, staff and students.
+const fake = createExamFakeDb({ violationLimit: 1, questionCount: 2 });
+const { db, users } = fake;
 
 module.exports = async function (s) {
-  installFakes();
+  fake.install();
   const { app } = loadAppWithMounts();
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
@@ -121,6 +57,8 @@ module.exports = async function (s) {
     const S2 = st2.data.session_id;
     s.check('starting again from another window makes it the active one', st2.status === 200 && S2 !== S1 && db.events.some((e) => e.eventType === 'session_takeover' && e.userId === 'stu1'));
     s.check('the first window is told it was replaced on its next save', (await answer('stu1', S1, 'q1', 0, 5)).json.code === 'SESSION_REPLACED');
+    s.check('a new window counting from zero is not treated as older than the previous window (epochs)', (await answer('stu1', S2, 'q1', 3, 1)).data.stale !== true && db.attempts.get('stu1').questionState.q1.selectedIndex === 3 && db.attempts.get('stu1').questionState.q1.epoch === 2);
+    await answer('stu1', S2, 'q1', 2, 2);
     s.check('the new window saves, and its answers include what the first window saved', (await answer('stu1', S2, 'q2', 2, 1)).status === 200 && st2.data.question_state.q1.selectedIndex === 2);
     s.check('the clock was not reset by the takeover', Math.abs(st2.data.seconds_remaining - st.data.seconds_remaining) < 5);
 

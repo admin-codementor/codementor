@@ -59,14 +59,19 @@ function guardLive(attempt, { sessionId = null, now = Date.now() } = {}) {
 /**
  * Is this save older than what is already stored? A stale save is acknowledged and ignored: it is not an error, it is a delayed
  * retry that lost the race.
- * @param {{seq?: number}|undefined} existing the stored entry for this question
- * @param {*} seq                              what the client sent
+ *
+ * Sequence numbers only compare INSIDE one session ("epoch"): each device or window counts from zero when it takes the exam over, so
+ * its first saves must not look older than the previous window's last ones. The epoch rises by one on every takeover, on the server.
+ * @param {{seq?: number, epoch?: number}|undefined} existing the stored entry for this question
+ * @param {*} seq                                           what the client sent
+ * @param {number} epoch                                    the attempt's current session epoch
  */
-function decideSave(existing, seq) {
+function decideSave(existing, seq, epoch = 0) {
   const incoming = Number.isInteger(seq) && seq >= 0 ? seq : null;
   if (incoming == null) return { apply: true, seq: null };
   const stored = Number.isInteger(existing?.seq) ? existing.seq : null;
-  if (stored != null && incoming <= stored) return { apply: false, seq: stored };
+  const sameEpoch = (Number.isInteger(existing?.epoch) ? existing.epoch : 0) === epoch;
+  if (stored != null && sameEpoch && incoming <= stored) return { apply: false, seq: stored };
   return { apply: true, seq: incoming };
 }
 
@@ -136,7 +141,7 @@ function planReopen({ attempt, exam, actor, input = {}, now = Date.now() }) {
       windowExpiresAt: new Date(newExpiry),
       // A placeholder session nobody holds: the cut-off device (which still has its old session) is refused, and the student gets a
       // valid session only by starting the exam again, which claims it. (A MISSING session would let any old page write.)
-      session: { id: newSessionId(), claimedAt: now, placeholder: true },
+      session: { id: newSessionId(), claimedAt: now, epoch: (Number.isInteger(attempt.session?.epoch) ? attempt.session.epoch : 0) + 1, placeholder: true },
       violationCount: 0, lastViolationAt: null,
       reopens: [...reopens, entry],
     },

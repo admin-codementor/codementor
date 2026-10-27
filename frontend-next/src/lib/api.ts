@@ -82,8 +82,15 @@ api.interceptors.response.use(
       return api(original);
     } catch (err) {
       processQueue(err, null);
-      localStorage.clear();
-      window.location.href = "/login";
+      // Sign out only when the server clearly says the session is over (or there is nothing to refresh with). A network drop or a
+      // server hiccup while refreshing is NOT the end of the session: signing out then, in the middle of an exam, cleared the
+      // student's saved work and sent them to the login page. The request simply fails and is retried by whoever made it.
+      const status = (err as AxiosError)?.response?.status;
+      const sessionOver = status === 401 || status === 403 || (err instanceof Error && err.message === "No refresh token");
+      if (sessionOver) {
+        localStorage.clear();
+        window.location.href = "/login";
+      }
       return Promise.reject(err);
     } finally {
       isRefreshing = false;

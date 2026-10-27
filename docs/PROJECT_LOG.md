@@ -5,6 +5,17 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), S1 reliable exams
+**Area:** Stream S1 of `docs/TNP_ADMIN_EXAMS_SECURITY_PLAN.md` (branch `feat/s1-reliable-exams`). One PR for the whole exam phase (backend and screens).
+**Backend:** the server owns the clock (`windowExpiresAt`) and one active session per attempt (header `X-Exam-Session`; a second device takes over and the first is told). Saves are ordered and repeat-safe (per-session sequence numbers). Too many violations (exam setting, default 5, 0 = never) pause the attempt; nothing in the browser ever submits an exam. Staff (Admin, the exam's owner, the owner's HOD) resume a student with a written reason and optional extra minutes; the reason, who, and the earlier state are kept and the student is notified. Submit is repeat-safe. Coding submissions are refused once time is up, submitted or paused, and judged by the time the server received them.
+**Screens:** the exam page is rebuilt as one question at a time with a right-hand question panel, bottom bar, finish summary, settings (layout, text size), instructions, a plain "completed" page, and clear screens for "open in another window" and "paused". The header always shows whether answers are saved; answers wait safely on the device while the connection is down. The timer follows the clock instead of counting ticks. The code editor sends the exam session and goes back to the exam page when the server says time is up, paused or replaced. New staff page `/faculty/exams/:id/roster` (live states, resume dialog) and a violation-limit field in the exam editor.
+**Also fixed:** a failed token refresh on a network error used to sign a student out mid-exam; it no longer does.
+**Verified:** backend 568 offline checks, route audit, lint, website `tsc`, eslint (0 errors) and production build. In a browser against an in-memory sandbox (`backend/scripts/exam-sandbox.js`): instructions → start → answer and save → second device takes over → paused after 3 violations → staff resume with reason → student continues with saved answers → finish → result review.
+**Not verified:** the code editor page inside an exam (the sandbox has no problems, only API and types checked); real Firestore (transactions run against a fake); signed-in use with real accounts; load; phone layout. Deploy not during a live exam: the session header is strict, so open tabs would be asked to take the exam over again.
+**Next:** load-test harness, exam-day playbook, monitoring; randomised question order and integrity email (S1.5/S1.6 remainder).
+
+---
+
 ## 2026-10-27 (Tue), Dependency updates in one PR
 **Why:** Dependabot opened 15 separate PRs (#51 to #65). Each edits the same lockfile, so merging one made the next conflict. Replaced by **one PR** (with the access-matrix and error-format work from #66), and the Dependabot config now groups minor and patch updates into one PR per app per week and no longer opens the risky majors.
 **Applied:** `mammoth` 1.13, `@upstash/ratelimit` 2.2, `dotenv` 18, `helmet` 8.3, `eslint` 10 (with `@eslint/js` added explicitly and two leftover assignments fixed), `react` and `react-dom` 19.3.1 together (the bot bumped only `react`, which would have broken the site at run time), and the GitHub Actions versions (checkout 7, setup-node 7, setup-java 6, codeql-action 4).

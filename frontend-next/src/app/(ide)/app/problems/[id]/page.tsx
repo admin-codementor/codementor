@@ -34,6 +34,8 @@ import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
 import { pollUntilDone } from "@/lib/pollJudging";
 import { useProctor } from "@/hooks/useProctor";
+import { useExamProctor } from "@/hooks/useExamProctor";
+import { examHeaders, examStopCode } from "@/lib/examSession";
 import { useClipboardGuard } from "@/hooks/useClipboardGuard";
 import { FullscreenGraceModal } from "@/components/proctor/FullscreenGraceModal";
 import { fireConfetti } from "@/components/feedback/confetti";
@@ -1222,7 +1224,8 @@ export default function ProblemSolvingPage() {
         if (examId) body.exam_id = examId;
         if (examSectionId) body.section_id = examSectionId;
 
-        const res = await api.post<{ success: boolean; jobId?: string; error?: string }>("/api/submit", body);
+        // In an exam the request carries this tab's session, so the server can tell the active window from a replaced one.
+        const res = await api.post<{ success: boolean; jobId?: string; error?: string }>("/api/submit", body, examId ? { headers: examHeaders(examId) } : undefined);
         if (!res.data.success || !res.data.jobId) {
           setVerdict({ success: false, state: "failed", error: res.data.error ?? "Submission failed" });
           setOutputOpen(true);
@@ -1238,6 +1241,15 @@ export default function ProblemSolvingPage() {
           handleVerdict(payload);
         });
       } catch (e) {
+        // The server will not take more from this tab (time is up, already submitted, paused, or the exam is open elsewhere):
+        // the exam page explains which, so go there instead of showing a confusing judge error.
+        if (examId && examStopCode(e)) {
+          setSubmitting(false);
+          setRunning(false);
+          settle();
+          router.push(`/app/exams/${examId}`);
+          return;
+        }
         // The judge returns 503 with a precise reason ("unreachable" vs
         // "overloaded"), and axios throws on it — so this branch, not the
         // !success branch above, is where that message has to be surfaced.
@@ -1254,7 +1266,7 @@ export default function ProblemSolvingPage() {
         settle();
       }
     },
-    [problem, code, langId, customInput, assignmentId, contestId, examId, examSectionId, handleVerdict]
+    [problem, code, langId, customInput, assignmentId, contestId, examId, examSectionId, handleVerdict, router]
   );
 
   // ── Keyboard shortcuts ──
@@ -1283,31 +1295,25 @@ export default function ProblemSolvingPage() {
     [],
   );
 
-  // Repeated fullscreen violations while sitting an Exam finish the WHOLE exam,
-  // not just this one coding submission — unlike the exam-assignment path,
-  // there's no attempt to also flush the in-progress code first (that would
-  // need execute() to resolve before this fires, which it can't cheaply do
-  // from a fire-and-forget poll callback); the student's last explicit Submit
-  // for this problem, if any, already reconciled via the exam_id on execute().
-  const examAutoSubmitRef = React.useRef<() => void>(() => {});
-  React.useEffect(() => {
-    examAutoSubmitRef.current = () => {
-      api.post(`/api/exams/${examId}/submit`, {}).catch(() => {
-        // Already submitted (a race with a manual Finish) or a transient
-        // error — either way, still navigate back to show the student where
-        // they stand.
-      }).finally(() => router.push(`/app/exams/${examId}`));
-    };
-  }, [examId, router]);
-
-  // ── Proctored-exam monitor (assignment ?proctor=1, or any exam coding section) ──
-  const proctor = useProctor({
-    active: proctored,
+  // ── Proctored monitors ──
+  // An exam records leaving fullscreen / switching tab and lets the SERVER pause the attempt past its limit; nothing here ever
+  // submits an exam from the browser. (The old monitor, which did, stays for proctored assignments only.)
+  const assignmentProctor = useProctor({
+    active: proctored && !examId,
     assignmentId,
-    examId,
+    examId: null,
     problemId,
-    onAutoSubmit: () => (examId ? examAutoSubmitRef.current() : autoSubmitRef.current()),
+    onAutoSubmit: () => autoSubmitRef.current(),
   });
+  const examProctor = useExamProctor({
+    active: !!examId,
+    examId: examId ?? "",
+    problemId,
+    onLocked: () => { if (examId) router.push(`/app/exams/${examId}`); },
+  });
+  const proctor = examId
+    ? { fullscreen: examProctor.fullscreen, requestFullscreen: examProctor.requestFullscreen, warning: examProctor.notice, dismissWarning: examProctor.dismissNotice }
+    : { fullscreen: assignmentProctor.fullscreen, requestFullscreen: assignmentProctor.requestFullscreen, warning: assignmentProctor.warning, dismissWarning: assignmentProctor.dismissWarning };
 
   // Clipboard lock on the editor itself. Always on here — this is assessed or
   // course practice; the sandbox is the place for pasting your own code.
@@ -1474,7 +1480,7 @@ export default function ProblemSolvingPage() {
           {proctor.warning}
         </Alert>
       )}
-      {proctored && <FullscreenGraceModal secondsLeft={proctor.fsGraceSecondsLeft} onReturn={proctor.requestFullscreen} />}
+      {proctored && !examId && <FullscreenGraceModal secondsLeft={assignmentProctor.fsGraceSecondsLeft} onReturn={proctor.requestFullscreen} />}
 
       {/* ── Header ── */}
       <IDEHeader

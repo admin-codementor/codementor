@@ -29,6 +29,8 @@ module.exports = function (s) {
   s.check('a first save is applied', A.decideSave(undefined, 1).apply === true && A.decideSave({}, 0).apply === true);
   s.check('a newer save wins', A.decideSave({ seq: 3 }, 4).apply === true && A.decideSave({ seq: 3 }, 4).seq === 4);
   s.check('an older or repeated save is ignored, not an error', A.decideSave({ seq: 5 }, 4).apply === false && A.decideSave({ seq: 5 }, 5).apply === false);
+  s.check('sequence numbers only compare inside one session: a new window counting from zero is not "older" than the last window', A.decideSave({ seq: 40, epoch: 1 }, 1, 2).apply === true && A.decideSave({ seq: 40, epoch: 2 }, 1, 2).apply === false && A.decideSave({ seq: 3 }, 1, 0).apply === false);
+  s.check('an entry written before epochs existed counts as epoch 0', A.decideSave({ seq: 5 }, 6, 0).apply === true && A.decideSave({ seq: 5 }, 5, 0).apply === false && A.decideSave({ seq: 5 }, 1, 1).apply === true);
   s.check('a save with no sequence number (an older page) is applied', A.decideSave({ seq: 9 }, undefined).apply === true && A.decideSave({ seq: 9 }, 'x').apply === true && A.decideSave({ seq: 9 }, -2).apply === true);
 
   // ── violations and the lock ──
@@ -66,7 +68,7 @@ module.exports = function (s) {
 
   const ok = run({}, { reason: 'Browser crashed at 10:40', extraMinutes: 15 });
   s.check('a submitted attempt restarts the clock from now with the extra time', ok.patch && ok.newExpiry === NOW + 15 * MIN && ok.patch.windowExpiresAt.getTime() === NOW + 15 * MIN);
-  s.check('reopening clears the submission, the score and the lock, and installs a session nobody holds so the cut-off page cannot write', ok.patch.submittedAt === null && ok.patch.score === null && ok.patch.locked === null && ok.patch.autoSubmitted === null && A.validSessionId(ok.patch.session.id) && ok.patch.session.id !== SID && ok.patch.session.placeholder === true);
+  s.check('reopening clears the submission, the score and the lock, and installs a session nobody holds so the cut-off page cannot write', ok.patch.submittedAt === null && ok.patch.score === null && ok.patch.locked === null && ok.patch.autoSubmitted === null && A.validSessionId(ok.patch.session.id) && ok.patch.session.id !== SID && ok.patch.session.placeholder === true && ok.patch.session.epoch === 1);
   s.check('the violation count restarts so the student is not locked again at once', ok.patch.violationCount === 0);
   s.check('the old score and state are kept on the record, with who, why and when', (() => { const e = ok.patch.reopens[0]; return e.byId === 'owner1' && e.reason === 'Browser crashed at 10:40' && e.extraMinutes === 15 && e.previous.score === 12 && e.previous.autoSubmitted === true && e.at === NOW; })());
   s.check('the reason is tidied to one line', run({}, { reason: 'Browser\n\n crashed   again', extraMinutes: 5 }).entry.reason === 'Browser crashed again');
