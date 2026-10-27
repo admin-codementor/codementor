@@ -45,6 +45,14 @@ A faculty member who needs another class uses *My classes > Ask for access to a 
 
 An exam or an assignment can be aimed at classrooms (join-code groups) and at academic classes. A faculty member can aim only at classes they teach or are class teacher of (a sub-mentor sees their students but does not set work for the whole class); a HOD at any class of the department; an Admin at any.
 
+## The faculty dashboard
+
+- **Class switcher** at the top: "All my classes", each academic class you teach or look after, and your own join-code classrooms. The choice is remembered on that computer. Every number and list on the dashboard (and the Students tab) is then for that class only. A HOD sees every class of the department; an Admin every class. A class that is not yours is refused, never widened.
+- A faculty member sees only the students of their own classes in the Students list and on a student's page. (Before, the Students tab listed the whole department.)
+- **Needs attention:** students who have not started, went quiet for a week or more, or are stuck (four or more tries on a problem, not solved). **Hardest problems:** problems where fewer than 40% of those who tried got it.
+- **Customise** (top right): show or hide each widget, move it up or down, or start from a preset (everything, watching students, just the essentials). Saved for you, on any computer. If a widget is later removed from the system, your saved layout fixes itself.
+- Department-wide cohort comparisons are for HODs and Admins.
+
 ## Not built yet
 
 - Content ownership moving to the new teacher on reallocation (assignments and exams stay with the old owner; the HOD can still manage them).
@@ -52,4 +60,3 @@ An exam or an assignment can be aimed at classrooms (join-code groups) and at ac
 - A notification to the faculty member when a request is decided (they see the status on *My classes*).
 - The rollover wizard (promote years, carry assignments forward, dry run, rollback): for now each term is built from the students' current year and section.
 - Automatic repair of simple consistency problems.
-- A faculty class switcher on the dashboards (stream S4).

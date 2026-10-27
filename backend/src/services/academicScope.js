@@ -46,3 +46,50 @@ async function facultyScope(facultyId, at = Date.now()) {
 }
 
 module.exports = { facultyScope, TTL_SECONDS };
+
+// ── one class, for the dashboard's class switcher ──
+const classroomRepo = require('../repositories/classroomRepository');
+const userRepo = require('../repositories/userRepository');
+
+/**
+ * The students of ONE class the caller is allowed to look at: a join-code classroom of theirs, or an academic class of this term.
+ * @returns {Promise<{ok: true, kind: string, label: string, memberIds: Set<string>} | {ok: false, status: number, code: string, error: string}>}
+ */
+async function resolveClassMembers(user, classId) {
+  const id = String(classId || '').slice(0, 200);
+  const notYours = { ok: false, status: 403, code: 'CLASS_NOT_YOURS', error: 'That class is not one of yours.' };
+
+  const room = await classroomRepo.getById(id);
+  if (room) {
+    let allowed = user.role === 'admin' || room.facultyId === user.id;
+    if (!allowed && user.role === 'hod' && user.department != null) {
+      const owner = await userRepo.getById(room.facultyId, 'faculty');
+      allowed = (owner?.department ?? null) === user.department;
+    }
+    if (!allowed) return notYours;
+    const members = await classroomRepo.listMembers(id);
+    return { ok: true, kind: 'classroom', label: room.name || 'Class', memberIds: new Set(members.map((m) => m.userId)) };
+  }
+
+  const cls = await academicRepo.getClass(id);
+  const term = await academicRepo.getActiveTerm();
+  if (!cls || !term || cls.termId !== term.id) return { ok: false, status: 404, code: 'NO_CLASS', error: 'That class does not exist this term.' };
+
+  let mentees = false;
+  let scope = null;
+  if (user.role === 'admin') { /* any class */ } else if (user.role === 'hod') {
+    if (user.department == null || user.department !== cls.department) return notYours;
+  } else if (user.role === 'faculty') {
+    scope = await facultyScope(user.id);
+    const mine = scope.classes.find((c) => c.id === id);
+    if (!mine) return notYours;
+    mentees = !!mine.mentees;
+  } else return notYours;
+
+  const enrolled = (await academicRepo.listEnrollmentsForClass(id)).filter((e) => cls.kind === 'elective' || e.primary).map((e) => e.studentId);
+  let memberIds = new Set(enrolled);
+  if (mentees && scope) memberIds = new Set(enrolled.filter((sid) => scope.studentIds.includes(sid)));   // a sub-mentor sees only their own range
+  return { ok: true, kind: cls.kind === 'elective' ? 'elective' : 'section', label: academic.classLabel(cls), memberIds };
+}
+
+module.exports.resolveClassMembers = resolveClassMembers;

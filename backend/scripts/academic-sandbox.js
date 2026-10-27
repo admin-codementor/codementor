@@ -27,6 +27,38 @@ for (let i = 1; i <= 20; i += 1) fake.addUser({ id: `e${i}`, role: 'student', na
 fake.addUser({ id: 'nosec', role: 'student', name: 'Student NoSection', rollNo: '21CS900', department: 'CSE', year: null, section: '' });
 fake.install();
 
+// Dashboard data: submissions, problems, assignments and a join-code classroom, so the faculty dashboard has something to show.
+const userRepo = require('../src/repositories/userRepository');
+const submissionRepo = require('../src/repositories/submissionRepository');
+const problemRepo = require('../src/repositories/problemRepository');
+const assignmentRepo = require('../src/repositories/assignmentRepository');
+const classroomRepo = require('../src/repositories/classroomRepository');
+const DAY = 86400000;
+const now = Date.now();
+const subs = [];
+const add = (userId, problemId, verdict, ageDays, n = 1) => { for (let i = 0; i < n; i += 1) subs.push({ userId, problemId, verdict, submittedAt: now - ageDays * DAY, language: 71 }); };
+for (let i = 1; i <= 52; i += 1) {
+  const id = 'a' + i;
+  if (i % 9 === 0) continue;                                            // never started
+  if (i % 7 === 0) { add(id, 'p2', 'Accepted', 20); continue; }        // quiet for 20 days
+  if (i % 5 === 0) { add(id, 'p1', 'Wrong Answer', 1, 5); continue; }  // stuck on the hard problem
+  add(id, 'p2', 'Accepted', (i % 6) + 1); add(id, 'p3', i % 2 ? 'Accepted' : 'Wrong Answer', (i % 4) + 1); add(id, 'p1', 'Wrong Answer', 2, i % 3);
+}
+for (let i = 1; i <= 30; i += 1) { add('b' + i, 'p2', 'Accepted', (i % 5) + 1); if (i % 3 === 0) add('b' + i, 'p1', 'Wrong Answer', 2, 4); }
+Object.assign(userRepo, { getMapByRole: async (role) => new Map([...db.users.values()].filter((u) => (role === 'student' ? u.role === 'student' : u.role !== 'student')).map((u) => [u.id, structuredClone(u)])) });
+Object.assign(submissionRepo, { listAllForAnalytics: async () => subs.map((x) => ({ ...x })) });
+Object.assign(problemRepo, {
+  getAll: async () => [{ id: 'p1', title: 'Two Sum', difficulty: 'easy', tags: [] }, { id: 'p2', title: 'Hello Loops', difficulty: 'easy', tags: [] }, { id: 'p3', title: 'Prime Check', difficulty: 'medium', tags: [] }],
+  getMapByIds: async (ids) => new Map((ids || []).map((id) => [id, { id, title: id }])),
+});
+Object.assign(assignmentRepo, { getAll: async () => [], listByFacultyId: async () => [] });
+const rooms = new Map([['lab1', { id: 'lab1', name: 'Python Lab group', facultyId: 'f1', department: 'CSE' }]]);
+Object.assign(classroomRepo, {
+  listByFacultyId: async (fid) => [...rooms.values()].filter((r) => r.facultyId === fid), listAll: async () => [...rooms.values()],
+  getById: async (id) => rooms.get(id) || null, listMembers: async (id) => (id === 'lab1' ? ['a1', 'a2', 'a3', 'b1'].map((userId) => ({ userId })) : []),
+  listByStudentId: async () => [], getMemberCount: async (id) => (id === 'lab1' ? 4 : 0),
+});
+
 db.terms.set('term1', { id: 'term1', label: '2026-27 odd semester', academicYear: '2026-27', semester: 'odd', startDate: '2026-06-15T00:00:00.000Z', endDate: '2026-11-30T00:00:00.000Z', status: 'active' });
 
 const app = require('../src/app');

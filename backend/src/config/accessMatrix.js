@@ -46,6 +46,9 @@ const rules = [
   // ── HOD and Admin ─────────────────────────────────────────────────────────────
   { path: '/api/messages/reported', roles: ['hod', 'admin'], note: 'reviewing reported conversations' },
   { path: '/api/messages/reported/**', roles: ['hod', 'admin'], note: 'reviewing reported conversations' },
+  { path: '/api/faculty/cohort-topics', roles: ['hod', 'admin'], note: 'department-wide topic comparison' },
+  { path: '/api/faculty/analytics/cohorts', roles: ['hod', 'admin'], note: 'department-wide cohort comparison' },
+  { path: '/api/faculty/analytics/cohort-students', roles: ['hod', 'admin'], note: 'ranked students of a department cohort' },
   { path: '/api/faculty/alumni', roles: ['hod', 'admin'] },
   { path: '/api/faculty/alumni/**', roles: ['hod', 'admin'] },
   { path: '/api/faculty/department', roles: ['hod', 'admin'], note: 'department dashboard' },

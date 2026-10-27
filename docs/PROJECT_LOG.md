@@ -5,6 +5,20 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), S4 faculty dashboard: class switcher, needs-attention insights, customisable layout, and closing scoping gaps
+**Found while reading:** the Students tab and a student's detail page for FACULTY covered the whole department, not their own classes, and three department-wide cohort endpoints (unused by the website) were open to faculty. Fixed first, since it is the rule you set.
+**Did (backend):**
+- `middleware/classFilter.js` + `academicScope.resolveClassMembers`: `?classId=` narrows every faculty analytics call to one class the caller may look at (own classroom; an academic class they teach, are class teacher or sub-mentor of, or hold access to; HOD: any class of the department; Admin: any). Anything else is refused (403/404), never widened. `resolveAnalyticsScope` honours it, with its own cache key per class, and can only narrow a faculty member's scope.
+- Faculty Students list and student detail now limited to their own classes; `/analytics/cohorts`, `/analytics/cohort-students`, `/cohort-topics` are HOD and Admin only (matrix updated).
+- `GET /api/faculty/class-insights` (pure `utils/classInsights.js`): not started, gone quiet, stuck (with the problem and tries), hardest problems; the snapshot gained a per-student `stuck` list (cache version bumped to 4).
+- `GET/PUT /api/faculty/dashboard-layout` (pure `utils/dashboardLayout.js`): per-person widget order and visibility, three presets, strict on input and self-healing on read (removed widgets dropped, new ones appended).
+**Did (screens):** class switcher (remembered per person), Customise dialog (show or hide, up and down, presets, reset), "Needs attention" and "Hardest problems" widgets, and the dashboard drawn from the saved layout; `docs/ACADEMIC_STRUCTURE.md` updated.
+**Verified:** backend lint, **886 offline checks** (43 end to end through the real routes: who sees which students, every class-switch case incl. refusals, the cache keys, insights, layout), route audit, website `tsc`, eslint (0 errors) and build. Browser (sandbox): a faculty member saw 53 students, switched to a classroom (4 students, 10 submissions) with the choice remembered, customised (hid a widget, moved another to the top), saved, reloaded: same order on screen.
+**Not verified:** real Firestore data volumes; the HOD and Admin versions of the dashboard in a browser (the API is tested); a phone-width check.
+**Not built:** widgets for HOD and Admin that are different from the faculty ones (departmental comparison, college view: S4 for HOD, S6 for Admin); drag-and-drop (up and down buttons only); email or in-app reminders to the students listed under "needs attention".
+
+---
+
 ## 2026-10-27 (Tue), S3 academic structure: terms, classes, class teacher, sub-mentors, assignments, access requests
 **Asked and decided:** sub-mentors by position in the roll-sorted class list; classes built automatically from each student's department, year and section, with a CSV for exceptions; a teaching assignment is a class plus a subject the HOD types.
 **Did (backend):**
