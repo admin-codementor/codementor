@@ -10,6 +10,7 @@
 const jwt = require('jsonwebtoken');
 const { resolvePermissions } = require('../middleware/permissions');
 const { gateClaim } = require('./passwordGate');
+const { twofaClaim } = require('./twofaGate');
 
 const ACCESS_TTL = '30m';
 const REFRESH_TTL = '7d';
@@ -19,7 +20,7 @@ const versionOf = (x) => Number.isInteger(x) && x >= 0 ? x : 0;
 /** The claims every token carries. */
 const claimsFor = (user) => ({
   id: user.id, role: user.role, permissions: resolvePermissions(user), department: user.department ?? null,
-  tv: versionOf(user.tokenVersion), ...gateClaim(user),
+  tv: versionOf(user.tokenVersion), ...gateClaim(user), ...twofaClaim(user),
 });
 
 const signAccess = (user) => jwt.sign(claimsFor(user), process.env.JWT_SECRET, { expiresIn: ACCESS_TTL });

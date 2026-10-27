@@ -25,6 +25,12 @@ exports.authorize = (...roles) => {
 exports.facultyStaff = exports.authorize('faculty', 'admin', 'hod');
 
 /**
+ * The staff above plus the Training & Placement office, for the only exam screens T&P uses: the list of published exams, who is in an exam,
+ * and resuming a student who was cut off. Nothing else about exams (authoring, results, integrity evidence) is open to T&P.
+ */
+exports.examSupport = exports.authorize('faculty', 'admin', 'hod', 'tnp');
+
+/**
  * May the requester modify a resource created by someone else?
  *   admin   → anything
  *   owner   → their own, always
@@ -57,11 +63,11 @@ exports.canManageOwnedBy = async (req, ownerId) => {
 };
 
 /**
- * Department scope for analytics. Admin sees everything (returns null); HOD and
+ * Department scope for analytics. Admin and the Training & Placement office see everything (returns null); HOD and
  * faculty are restricted to their own department. Returns the department string to
  * filter by, or null for "no restriction".
  */
-exports.scopeDept = (req) => (req.user?.role === 'admin' ? null : (req.user?.department ?? null));
+exports.scopeDept = (req) => (req.user?.role === 'admin' || req.user?.role === 'tnp' ? null : (req.user?.department ?? null));
 
 /** True when the requester may view data for the given department. */
 exports.canSeeDepartment = (req, department) =>

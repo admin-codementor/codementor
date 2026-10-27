@@ -4,6 +4,7 @@
 //   node scripts/create-staff-account.js --role hod                      dry run (default)
 //   node scripts/create-staff-account.js --role hod --confirm
 //   node scripts/create-staff-account.js --role faculty --email a@b.c --name "A B" --confirm
+//   node scripts/create-staff-account.js --role tnp --email placement@college.edu --name "T&P Officer" --confirm   (no department; must set up 2FA at first sign-in)
 //
 // Defaults: department CSE(AIML); email hod.test@codementor.test / faculty.test@codementor.test (a fake domain,
 // so it can never reach a real mailbox); marked isTestAccount. Make it a real person later with
@@ -20,11 +21,12 @@ const ROLE = opt('role');
 const CONFIRM = args.includes('--confirm');
 
 async function main() {
-  if (!['hod', 'faculty'].includes(ROLE)) { console.error('Give --role hod or --role faculty.'); process.exit(2); }
-  const DEPARTMENT = opt('department', DEFAULT_DEPT);
+  if (!['hod', 'faculty', 'tnp'].includes(ROLE)) { console.error('Give --role hod, --role faculty or --role tnp.'); process.exit(2); }
+  // The Training & Placement office belongs to the whole college, so it has no department.
+  const DEPARTMENT = ROLE === 'tnp' ? null : opt('department', DEFAULT_DEPT);
   const EMAIL = opt('email', `${ROLE}.test@codementor.test`).trim().toLowerCase();
-  const NAME = opt('name', ROLE === 'hod' ? `HOD (test) ${DEPARTMENT}` : `Faculty (test) ${DEPARTMENT}`);
-  console.log(`${ROLE} account: ${EMAIL} · department ${DEPARTMENT} · ${CONFIRM ? 'WILL WRITE' : 'dry run (add --confirm to create)'}`);
+  const NAME = opt('name', ROLE === 'hod' ? `HOD (test) ${DEPARTMENT}` : ROLE === 'tnp' ? 'Training & Placement (test)' : `Faculty (test) ${DEPARTMENT}`);
+  console.log(`${ROLE} account: ${EMAIL} · ${ROLE === 'tnp' ? 'whole college' : `department ${DEPARTMENT}`} · ${CONFIRM ? 'WILL WRITE' : 'dry run (add --confirm to create)'}`);
 
   const { firebaseAuth } = require('../src/config/firebaseAdmin');
   const userRepo = require('../src/repositories/userRepository');
@@ -58,12 +60,12 @@ async function main() {
     if (createdHere) await firebaseAuth.deleteUser(uid).catch(() => {});
     throw e;
   }
-  console.log(`Wrote faculty/${uid} (role ${ROLE}, department ${DEPARTMENT}).`);
+  console.log(`Wrote faculty/${uid} (role ${ROLE}, ${ROLE === 'tnp' ? 'no department' : `department ${DEPARTMENT}`}).`);
 
   if (password) {
     fs.mkdirSync(PRIVATE_DIR, { recursive: true });
     const file = path.join(PRIVATE_DIR, `${ROLE}-test-account-${stamp()}.txt`);
-    fs.writeFileSync(file, `${ROLE} test account (department ${DEPARTMENT})\nemail:    ${EMAIL}\npassword: ${password}\nuid:      ${uid}\n\nMake it real later: node scripts/change-account-email.js --from ${EMAIL} --to <real email> --name "<Name>" --real --confirm\n`, { mode: 0o600 });
+    fs.writeFileSync(file, `${ROLE} test account (${ROLE === 'tnp' ? 'whole college' : `department ${DEPARTMENT}`})\nemail:    ${EMAIL}\npassword: ${password}\nuid:      ${uid}\n\nMake it real later: node scripts/change-account-email.js --from ${EMAIL} --to <real email> --name "<Name>" --real --confirm\n`, { mode: 0o600 });
     console.log(`Credentials saved to ${path.relative(process.cwd(), file)} (gitignored). Not printed.`);
   } else console.log('No new password was generated because the sign-in already existed.');
 }

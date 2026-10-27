@@ -1,6 +1,6 @@
 const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
-const { facultyStaff } = require('../middleware/role.middleware');
+const { facultyStaff, examSupport } = require('../middleware/role.middleware');
 const { createLimiter } = require('../middleware/rateLimiter');
 const c = require('../controllers/exam.controller');
 
@@ -22,7 +22,7 @@ router.patch('/:id/attempt/visit/:qid', c.markVisited);
 router.post('/:id/submit', c.submitExam);
 
 // ── Faculty/HOD/admin endpoints ──────────────────────────────────────────────
-router.get('/', facultyStaff, c.listExams);
+router.get('/', examSupport, c.listExams);
 router.post('/', facultyStaff, c.createExam);
 router.get('/:id', facultyStaff, c.getExamFaculty);
 router.put('/:id', facultyStaff, c.updateExam);
@@ -38,8 +38,8 @@ router.delete('/:id/sections/:sid', facultyStaff, c.deleteSection);
 router.put('/:id/sections/:sid/questions', facultyStaff, c.setSectionQuestions);
 router.put('/:id/sections/:sid/problems', facultyStaff, c.attachProblems);
 
-router.get('/:id/roster', facultyStaff, c.getRoster);
-router.post('/:id/attempts/:userId/reopen', facultyStaff, c.reopenAttempt);
+router.get('/:id/roster', examSupport, c.getRoster);
+router.post('/:id/attempts/:userId/reopen', examSupport, c.reopenAttempt);
 router.get('/:id/integrity', facultyStaff, c.getIntegrity);
 router.post('/:id/integrity/:userId/resend', facultyStaff, resendLimiter, c.resendIntegrity);
 router.get('/:id/results', facultyStaff, c.getResults);

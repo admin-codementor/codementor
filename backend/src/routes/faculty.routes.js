@@ -9,7 +9,6 @@ const platformScoreController = require('../controllers/platformScore.controller
 const plagiarismController = require('../controllers/plagiarism.controller');
 const groupController = require('../controllers/studentGroup.controller');
 const mentorController = require('../controllers/mentor.controller');
-const placementController = require('../controllers/placement.controller');
 const alumniController = require('../controllers/alumni.controller');
 const classFilter = require('../middleware/classFilter');
 const { logAction } = require('../middleware/audit');
@@ -54,15 +53,7 @@ router.get('/department', authorize('hod', 'admin'), facultyController.getDepart
 // Aggregates only: a head may compare departments, never see another department's students.
 // Mentor mapping: HOD/admin only, and an HOD is confined to their own department by the token.
 router.get('/portfolio', authorize('hod', 'admin'), facultyController.getPortfolioOverview);
-// Placement drives, applications and analytics: HOD/admin only; an HOD is confined to their own department.
-router.get('/placement/drives', authorize('hod', 'admin'), placementController.listDrives);
-router.post('/placement/drives', authorize('hod', 'admin'), placementController.createDrive);
-router.get('/placement/drives/:id', authorize('hod', 'admin'), placementController.getDrive);
-router.patch('/placement/drives/:id', authorize('hod', 'admin'), placementController.updateDrive);
-router.delete('/placement/drives/:id', authorize('hod', 'admin'), placementController.deleteDrive);
-router.put('/placement/drives/:id/applications', authorize('hod', 'admin'), placementController.saveApplications);
-router.get('/placement/analytics', authorize('hod', 'admin'), placementController.getAnalytics);
-router.get('/placement/readiness', authorize('hod', 'admin'), require('../controllers/career.controller').getReadiness);
+// Placement moved to /api/placement (routes/placement.routes.js): the Training & Placement office manages it, an HOD reads their department.
 // Alumni: HOD/admin only; an HOD is confined to their own department.
 router.get('/alumni', authorize('hod', 'admin'), alumniController.getAlumni);
 router.put('/alumni/graduation', authorize('hod', 'admin'), alumniController.setGraduation);

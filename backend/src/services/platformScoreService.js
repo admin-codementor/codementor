@@ -75,6 +75,9 @@ exports.getScores = async (req, { year, section } = {}) => {
   return cached(key, TTL, () => compute({ scope, year, section }));
 };
 
+/** Every student's score, for the Training & Placement export. Cached like the staff table. */
+exports.collegeScores = () => cached(`platform-scores:v${VERSION}:college`, TTL, () => compute({ scope: { ownClasses: false, dept: null, memberIds: null } }));
+
 /** One student's own score (for their profile page). */
 exports.getMine = async (userId) => {
   const [me, profiles, submissions, settings] = await Promise.all([

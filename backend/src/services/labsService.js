@@ -18,8 +18,8 @@ async function compute(dept) {
     userRepo.getMapByRole('student'), userRepo.getMapByRole('faculty'),
     classroomRepo.listAll(), assignmentRepo.getAll(), submissionRepo.listAllForAnalytics(),
   ]);
-  // `faculty` holds teaching staff, HODs and admins; an admin never owns a department's class.
-  const staff = [...facultyMap.values()].filter((u) => u.role !== 'admin' && (dept === null || (u.department || null) === dept));
+  // `faculty` holds teaching staff, HODs, admins and T&P; only teaching staff and HODs own a department's class.
+  const staff = [...facultyMap.values()].filter((u) => u.role !== 'admin' && u.role !== 'tnp' && (dept === null || (u.department || null) === dept));
   const ownerNames = new Map(staff.map((u) => [u.id, u.name || u.email || 'Staff']));
   const ownerDept = new Map([...facultyMap.values()].map((u) => [u.id, u.department || null]));
 

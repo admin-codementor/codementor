@@ -6,6 +6,7 @@ const { resolvePermissions } = require('../middleware/permissions');
 
 // Token creation lives in utils/tokens.js (one place, one lifetime, tokenVersion).
 const { generateTokens } = require('../utils/tokens');
+const { mayChangeTwofa } = require('../utils/twofaGate');
 
 const ISSUER = 'CodeMentor';
 
@@ -25,6 +26,14 @@ exports.setup2FA = async (req, res) => {
       issuer: ISSUER,
       length: 20,
     });
+
+    if (!mayChangeTwofa(user.role, user.totpEnabled)) {
+      return res.status(400).json({ success: false, error: 'Two-factor sign-in is required for your role and is already set up.' });
+    }
+
+    if (!mayChangeTwofa(user.role, user.totpEnabled)) {
+      return res.status(400).json({ success: false, error: 'Two-factor sign-in is required for your role and is already set up.' });
+    }
 
     // Store the base32 secret. Keep totp_enabled false until verified.
     await userRepo.update(req.user.id, req.user.role, { totpSecret: secret.base32, totpEnabled: false });
@@ -74,7 +83,14 @@ exports.enable2FA = async (req, res) => {
 
     await userRepo.update(req.user.id, req.user.role, { totpEnabled: true });
 
-    return res.json({ success: true, data: { totp_enabled: true } });
+    // The session that was held back until now (see utils/twofaGate.js) gets fresh tokens that are not held back.
+    const fresh = { ...user, totpEnabled: true };
+    return res.json({
+      success: true,
+      data: { totp_enabled: true },
+      user: { id: fresh.id, name: fresh.name, email: fresh.email, role: fresh.role, permissions: resolvePermissions(fresh), must_change_password: fresh.mustChangePassword === true },
+      ...generateTokens(fresh),
+    });
   } catch (error) {
     console.error(error);
     return res.status(500).json({ success: false, error: 'Server Error' });
@@ -93,6 +109,9 @@ exports.disable2FA = async (req, res) => {
     const user = await userRepo.getById(req.user.id, req.user.role);
     if (!user || !user.totpSecret || !user.totpEnabled) {
       return res.status(400).json({ success: false, error: '2FA is not enabled' });
+    }
+    if (!mayChangeTwofa(user.role, user.totpEnabled)) {
+      return res.status(403).json({ success: false, error: 'Two-factor sign-in is required for your role, so it cannot be turned off.' });
     }
 
     const verified = speakeasy.totp.verify({

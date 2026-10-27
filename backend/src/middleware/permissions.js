@@ -29,6 +29,10 @@ const resolvePermissions = (user) => {
   if (user.role === 'admin') {
     return Object.fromEntries(ALL_PERMISSIONS.map(p => [p, true]));
   }
+  // The Training & Placement office has its own routes and none of the teaching permissions.
+  if (user.role === 'tnp') {
+    return Object.fromEntries(ALL_PERMISSIONS.map(p => [p, false]));
+  }
   if (!user.permissions || Object.keys(user.permissions).length === 0) {
     return { ...DEFAULT_FACULTY_PERMISSIONS };
   }

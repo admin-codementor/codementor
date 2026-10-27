@@ -17,8 +17,8 @@ async function scoped(req) {
   const dept = scopeDept(req);
   const [staffMap, studentsMap] = await Promise.all([userRepo.getMapByRole('faculty'), userRepo.getMapByRole('student')]);
   const inDept = (u) => dept === null || (u.department || null) === dept;
-  // The `faculty` collection also holds admins, who are not mentors.
-  const mentors = [...staffMap.values()].filter((u) => u.role !== 'admin' && inDept(u));
+  // The `faculty` collection also holds admins and the Training & Placement office, who are not mentors.
+  const mentors = [...staffMap.values()].filter((u) => u.role !== 'admin' && u.role !== 'tnp' && inDept(u));
   const students = activeStudents([...studentsMap.values()]).filter(inDept);
   return { dept, staffMap, studentsMap, mentors, students };
 }

@@ -13,8 +13,8 @@ const VERSION = 1;
 async function compute({ dept, kind, days }) {
   if (kind === 'faculty') {
     const staff = [...(await userRepo.getMapByRole('faculty')).values()]
-      // The `faculty` collection also holds admins; a department view lists teaching staff and the HOD only.
-      .filter((u) => u.role !== 'admin')
+      // The `faculty` collection also holds admins and T&P; a department view lists teaching staff and the HOD only.
+      .filter((u) => u.role !== 'admin' && u.role !== 'tnp')
       .filter((u) => dept === null || (u.department || null) === dept);
     return buildActivity({ people: staff, days, now: Date.now() });
   }

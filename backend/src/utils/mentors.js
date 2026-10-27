@@ -95,6 +95,7 @@ function buildMentorBoard({ mentors, students, submissions, period = 'overall', 
 function checkAssignment({ mentor, students, requesterRole, requesterDepartment }) {
   if (mentor) {
     if (mentor.role === 'admin') return 'An admin account cannot be a mentor.';
+    if (mentor.role === 'tnp') return 'A Training & Placement account cannot be a mentor.';
     if (requesterRole !== 'admin' && (mentor.department || null) !== requesterDepartment) {
       return 'That mentor is outside your department.';
     }

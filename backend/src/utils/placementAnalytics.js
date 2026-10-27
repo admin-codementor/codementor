@@ -2,8 +2,8 @@
 // section, per company, per round. Pure: plain arrays in, one object out.
 //
 // Definitions (kept explicit because every figure hangs off them):
-//   placed        a student with at least one application marked "selected"
-//   in process    not placed, with at least one application still applied/shortlisted
+//   placed        a student with at least one application marked "selected", or an outside offer recorded by the T&P office
+//   in process    not placed, with at least one application still applied/shortlisted (or an outside application not yet decided)
 //   not placed    everyone else (no applications, or only rejections)
 //   funnel        nested by construction: applied >= shortlisted >= selected, where
 //                 "shortlisted" includes the selected (they were shortlisted first)
@@ -17,8 +17,10 @@ const pct = (n, d) => (d ? Math.round((n / d) * 100) : 0);
  * @param {{id,name,rollNo?,section?,year?,department?}[]} a.students  the view (already department/section/year scoped)
  * @param {{id,company,role?,date?,ctc?,status?,department?,eligibleYears?,rounds?}[]} a.drives
  * @param {{driveId,studentId,status,roundResults?}[]} a.applications
+ * @param {{studentId,status}[]} [a.outside]  applications made outside the portal, recorded by T&P. They count towards placed and in process,
+ *   but not towards the funnel, the companies or the rounds, which describe drives on the portal.
  */
-function buildPlacementAnalytics({ students, drives, applications }) {
+function buildPlacementAnalytics({ students, drives, applications, outside = [] }) {
   const inView = new Map(students.map((s) => [s.id, s]));
   const driveIds = new Set(drives.map((d) => d.id));
   // Only applications for these drives by students in this view.
@@ -26,15 +28,18 @@ function buildPlacementAnalytics({ students, drives, applications }) {
 
   const byStudent = new Map(students.map((s) => [s.id, []]));
   for (const a of apps) byStudent.get(a.studentId).push(a);
+  const out = outside.filter((o) => inView.has(o.studentId));
+  const outOffer = new Set(out.filter((o) => o.status === 'selected').map((o) => o.studentId));
+  const outOpen = new Set(out.filter((o) => o.status === 'applied').map((o) => o.studentId));
 
   const students_ = students.map((s) => {
     const mine = byStudent.get(s.id);
     const count = (st) => mine.filter((a) => a.status === st).length;
-    const placed = count('selected') > 0;
-    const inProcess = !placed && mine.some((a) => a.status === 'applied' || a.status === 'shortlisted');
+    const placed = count('selected') > 0 || outOffer.has(s.id);
+    const inProcess = !placed && (mine.some((a) => a.status === 'applied' || a.status === 'shortlisted') || outOpen.has(s.id));
     return {
       id: s.id, name: s.name || 'Unknown', roll_no: s.rollNo || null, section: s.section || null, year: s.year ?? null,
-      applied: mine.length, shortlisted: count('shortlisted'), selected: count('selected'), rejected: count('rejected'),
+      applied: mine.length, outside: out.filter((o) => o.studentId === s.id).length, shortlisted: count('shortlisted'), selected: count('selected'), rejected: count('rejected'),
       placed, state: placed ? 'placed' : inProcess ? 'in_process' : 'not_placed',
     };
   }).sort((a, b) => ({ placed: 0, in_process: 1, not_placed: 2 }[a.state] - { placed: 0, in_process: 1, not_placed: 2 }[b.state]) || a.name.localeCompare(b.name));
@@ -100,6 +105,7 @@ function buildPlacementAnalytics({ students, drives, applications }) {
       conversion_pct: pct(selectedApps, apps.length),
       drives: drives.length,
     },
+    outside: { applications: out.length, offers: out.filter((o) => o.status === 'selected').length },
     funnel,
     by_year: group((s) => (s.year == null ? 'Unassigned' : String(s.year)), (k) => (k === 'Unassigned' ? 'No year' : `Year ${k}`)),
     by_section: group((s) => classLabel(s.year, s.section), (k) => k), // year + section: see utils/students.js

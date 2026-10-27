@@ -91,10 +91,10 @@ function applyViolation(attempt, exam, eventType, now = Date.now()) {
   return { counts: true, count: next, lock };
 }
 
-/** Who may reopen or unlock an attempt on this exam. */
+/** Who may reopen or unlock an attempt on this exam. The Training & Placement office may, for any exam: they are the ones on the phone when a student is cut off. */
 function canReopen({ actor, exam, ownerDepartment }) {
   if (!actor) return false;
-  if (actor.role === 'admin') return true;
+  if (actor.role === 'admin' || actor.role === 'tnp') return true;
   if (exam?.facultyId && actor.id === exam.facultyId) return true;
   return actor.role === 'hod' && actor.department != null && (ownerDepartment ?? null) === actor.department;
 }
