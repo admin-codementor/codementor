@@ -39,12 +39,20 @@ function createExamFakeDb({ violationLimit = 1, questionCount = 2, studentCount 
   const loadStudentIds = Array.from({ length: studentCount }, (_, i) => `ld${String(i + 1).padStart(4, '0')}`);
   for (const id of loadStudentIds) addStudent(id);
 
+  // A dotted update path ("questionState.q1") written into a nested object. Keys that reach the prototype are refused at every step.
+  const unsafeKey = (k) => k === '__proto__' || k === 'constructor' || k === 'prototype';
   const setPath = (obj, path, value) => {
     const parts = path.split('.');
-    if (parts.some((p) => p === '__proto__' || p === 'constructor' || p === 'prototype')) throw new Error(`refusing to write through "${path}"`);
     let cur = obj;
-    for (let i = 0; i < parts.length - 1; i += 1) { if (cur[parts[i]] == null || typeof cur[parts[i]] !== 'object') cur[parts[i]] = {}; cur = cur[parts[i]]; }
-    cur[parts[parts.length - 1]] = value;
+    for (let i = 0; i < parts.length - 1; i += 1) {
+      const k = parts[i];
+      if (unsafeKey(k)) throw new Error('refusing to write through "' + path + '"');
+      if (cur[k] == null || typeof cur[k] !== 'object') cur[k] = {};
+      cur = cur[k];
+    }
+    const last = parts[parts.length - 1];
+    if (unsafeKey(last)) throw new Error('refusing to write through "' + path + '"');
+    cur[last] = value;
   };
   const applyUpdate = (doc, update) => { for (const [k, v] of Object.entries(update)) { if (k.includes('.')) setPath(doc, k, structuredClone(v)); else doc[k] = structuredClone(v); } };
   const view = (userId) => { const d = db.attempts.get(userId); return d ? { userId, ...structuredClone(d) } : null; };
