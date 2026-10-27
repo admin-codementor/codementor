@@ -4,3 +4,6 @@ a8faf5977cd0a45d51f67ed0b82076b2f3a80e8c:backend/tests/suites/accounts.js:generi
 a8faf5977cd0a45d51f67ed0b82076b2f3a80e8c:backend/tests/suites/accounts.js:generic-api-key:44
 # Documentation example: the token in the command is the literal placeholder YOUR_TOKEN
 d005b66e38ff8a16bd8e7234faa25afa7b4d6d64:docs/DEPLOYMENT_GUIDE.md:curl-auth-header:181
+# Made-up fake JWT secrets in the update-script test, in an earlier version of the file (now built at run time)
+4211b0b7cf79477901ce5dce8cf8aa37a3ff30ce:deploy/tests/test-update.sh:generic-api-key:50
+4211b0b7cf79477901ce5dce8cf8aa37a3ff30ce:deploy/tests/test-update.sh:generic-api-key:51

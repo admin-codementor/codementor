@@ -46,13 +46,16 @@ echo one > "$SEED/app.txt"
 git -C "$SEED" add -A && git -C "$SEED" commit -q -m "first"
 git -C "$SEED" remote add origin "$ORIGIN" && git -C "$SEED" push -q origin main
 
-GOOD_ENV='NODE_ENV=production
-JWT_SECRET=0123456789abcdef0123456789abcdef0123
-JWT_REFRESH_SECRET=fedcba9876543210fedcba9876543210fedc
+# Made-up values, built here so no secret-looking literal sits in the file (and none is a real key).
+FAKE_A="$(printf 'a%.0s' $(seq 1 40))"
+FAKE_B="$(printf 'b%.0s' $(seq 1 40))"
+GOOD_ENV="NODE_ENV=production
+JWT_SECRET=$FAKE_A
+JWT_REFRESH_SECRET=$FAKE_B
 CORS_ORIGIN=https://exam.college.example
 TRUST_PROXY=2
-FIREBASE_SERVICE_ACCOUNT={"x":1}
-NEXT_PUBLIC_FIREBASE_API_KEY=abc'
+FIREBASE_SERVICE_ACCOUNT={\"x\":1}
+NEXT_PUBLIC_FIREBASE_API_KEY=abc"
 
 fresh_server() {
   rm -rf "$SERVER" "$CALLS" "$TMP/FAIL_HEALTH"; : > "$CALLS"
