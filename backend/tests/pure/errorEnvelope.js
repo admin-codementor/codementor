@@ -79,10 +79,10 @@ module.exports = async function (s) {
     const db = await get('/db-down');
     s.check('a database outage is a 503 that tells the person their work is safe', db.status === 503 && db.json.code === 'DATABASE_UNAVAILABLE' && /safe/.test(db.json.hint));
     s.check('the full technical error is logged together with the same reference the person was shown', logged.some((l) => l.includes(`[${t.json.requestId}]`) && l.includes('GET /throws') && l.includes('500')) && logged.some((l) => l.includes('Cannot read properties')));
-    // An address carrying a line break and format codes must not forge a second log line or be read as a format string.
+    // The log names the route pattern, never the address the client sent: a hostile address (line break, format codes) cannot reach the log.
     await get('/echo/a%0A%5Bforged%5D%20GET%20%2Fadmin%20-%3E%20200%20OK%20%25s%20%25d');
-    const hostile = logged.filter((l) => l.includes('/echo/a'));
-    s.check('a request address with a line break and format codes cannot forge a log line', hostile.length > 0 && hostile.every((l) => !/[\r\n]/.test(l.split('TypeError: boom')[0])) && hostile.some((l) => l.includes('%5Bforged%5D')));
+    const echoed = logged.filter((l) => l.includes('/echo/:x'));
+    s.check('the log line names the route pattern and nothing of a hostile request address', echoed.length > 0 && echoed.every((l) => !l.includes('forged') && !l.includes('a%0A')));
     // Real control characters, built from character codes so this file holds no invisible characters.
     const nl = String.fromCharCode(10), cr = String.fromCharCode(13), ls = String.fromCharCode(0x2028), nul = String.fromCharCode(0);
     const cleaned = logSafe('a' + nl + '[forged] %s' + cr + ls + nul + 'z');

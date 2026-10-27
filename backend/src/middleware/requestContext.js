@@ -25,11 +25,13 @@ function errorHandler(err, req, res, next) {
   if (res.headersSent) return next(err);
   const e = fromError(err);
   if (e.log !== 'none') {
-    // The address and user id come from the client: strip line breaks and control characters (so a request cannot forge a log line),
-    // cap the length, and pass them as arguments to a fixed format string (so a "%" in an address is never read as a format code).
+    // Values that come from the client (user id, request reference, error text) have line breaks and control characters removed (so a
+    // request cannot forge a log line), are capped in length, and are passed as arguments to a fixed format string (so a "%" in them is
+    // never read as a format code).
     const who = req.user?.id ? ' user=' + logSafe(req.user.id) : '';
     const ref = logSafe(req.id);                                  // from the X-Request-Id header when the client sent one
-    const where = logSafe(String(req.originalUrl).split('?')[0]);
+    // The route pattern (/api/exams/:id/submit), not the address the client sent: it is written by us, so nothing from the client can reach the log through it.
+    const where = (req.baseUrl || '') + (typeof req.route?.path === 'string' ? req.route.path : '(no route)');
     const method = logSafe(req.method);
     const code = logSafe(e.code);
     // The error's own text can quote what the client sent (a JSON parse error shows part of the body), so it is cleaned like the rest.

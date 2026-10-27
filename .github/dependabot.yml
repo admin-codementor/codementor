@@ -18,6 +18,11 @@ updates:
         applies-to: version-updates
         update-types: [minor, patch]
         patterns: ['*']
+    ignore:
+      # uuid 12 and later are ESM-only. The backend loads it with require(), which then depends on a Node feature that only exists from
+      # 22.12. We only use v4(), so there is nothing to gain; crypto.randomUUID() is the way out when this is worth doing.
+      - dependency-name: uuid
+        update-types: ['version-update:semver-major']
   - package-ecosystem: npm
     directory: /frontend-next
     schedule:
@@ -32,6 +37,9 @@ updates:
         update-types: [minor, patch]
         patterns: ['*']
     ignore:
+      # @types/node must describe the Node we run (22, see "engines"). Version 26 describes Node 26 and lets code use APIs that do not exist.
+      - dependency-name: '@types/node'
+        update-types: ['version-update:semver-major']
       # typescript-eslint does not support TypeScript 7 yet ("typescript-eslint does not support TS 7.0"), so the build fails.
       - dependency-name: typescript
         update-types: ['version-update:semver-major']
