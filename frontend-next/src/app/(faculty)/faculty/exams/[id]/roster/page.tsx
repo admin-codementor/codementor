@@ -33,6 +33,7 @@ import { EmptyState } from "@/components/ui/States";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { ChevronRightIcon, GroupsOutlinedIcon, RefreshIcon } from "@/components/ui/icons";
 import { mmss } from "@/hooks/useExamTimer";
+import { getRole } from "@/lib/auth";
 
 type RosterState = "in_progress" | "locked" | "expired" | "submitted" | "auto_submitted";
 interface RosterRow {
@@ -78,6 +79,9 @@ export default function ExamRosterPage() {
   const [reason, setReason] = React.useState("");
   const [extra, setExtra] = React.useState(0);
   const [saving, setSaving] = React.useState(false);
+  // The Training & Placement office reaches this screen from its own menu, and may resume students but not read the integrity report.
+  const tnp = getRole() === "tnp";
+  const examsHome = tnp ? "/tnp/exams" : "/faculty/exams";
 
   // Refreshes every 10 seconds; the server holds the answer for 10 seconds, so any number of open staff screens cost one read.
   const query = useQuery<RosterData>({
@@ -119,7 +123,7 @@ export default function ExamRosterPage() {
   return (
     <Stack>
       <Breadcrumbs separator={<ChevronRightIcon fontSize="small" sx={{ color: "text.disabled" }} />} sx={{ mb: 1.5 }}>
-        <Link component={NextLink} href="/faculty/exams" underline="hover" color="text.secondary">Exams</Link>
+        <Link component={NextLink} href={examsHome} underline="hover" color="text.secondary">Exams</Link>
         <Typography variant="body2" color="text.primary" fontWeight={600}>Live roster</Typography>
       </Breadcrumbs>
 
@@ -128,7 +132,7 @@ export default function ExamRosterPage() {
         subtitle={d ? `${d.counts.total} started · refreshes every 10 seconds · pauses after ${d.exam.violation_limit === 0 ? "never" : `${d.exam.violation_limit} violations`}` : undefined}
         actions={(
           <Stack direction="row" spacing={1}>
-            <Button component={NextLink} href={`/faculty/exams/${id}/integrity`}>Integrity report</Button>
+            {!tnp && <Button component={NextLink} href={`/faculty/exams/${id}/integrity`}>Integrity report</Button>}
             <Button startIcon={<RefreshIcon />} onClick={() => query.refetch()} disabled={query.isFetching}>Refresh</Button>
           </Stack>
         )}

@@ -12,7 +12,8 @@ import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import { ShieldOutlinedIcon, GppGoodOutlinedIcon, ContentCopyIcon, CheckIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
-import { getUser } from "@/lib/auth";
+import { getUser, setSession } from "@/lib/auth";
+import type { AuthSuccess } from "@/lib/types";
 
 type Msg = { text: string; ok: boolean } | null;
 
@@ -55,7 +56,7 @@ function OtpField({
   );
 }
 
-export function TwoFactorSetup() {
+export function TwoFactorSetup({ onEnabled }: { onEnabled?: () => void } = {}) {
   const cachedUser = getUser() as (ReturnType<typeof getUser> & { totp_enabled?: boolean }) | null;
   const [enabled, setEnabled] = React.useState<boolean>(!!cachedUser?.totp_enabled);
 
@@ -123,8 +124,11 @@ export function TwoFactorSetup() {
     setActionLoading(true);
     setMsg(null);
     try {
-      await api.post("/api/2fa/enable", { token: code });
+      const res = await api.post<Partial<AuthSuccess>>("/api/2fa/enable", { token: code });
+      // The server returns fresh tokens: a session held back until two-factor was set up (Training & Placement) is let through by them.
+      if (res.data?.accessToken && res.data?.refreshToken && res.data?.user) setSession({ accessToken: res.data.accessToken, refreshToken: res.data.refreshToken, user: res.data.user });
       syncEnabled(true);
+      onEnabled?.();
       setQr(null);
       setSecret(null);
       setCode("");

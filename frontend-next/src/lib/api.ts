@@ -49,6 +49,11 @@ api.interceptors.response.use(
       if (!window.location.pathname.startsWith("/change-password")) window.location.href = "/change-password";
       return Promise.reject(error);
     }
+    // A Training & Placement account must set up two-factor sign-in before it can use anything else.
+    if (error.response?.status === 403 && body?.code === "TWOFA_REQUIRED" && typeof window !== "undefined") {
+      if (!window.location.pathname.startsWith("/setup-2fa")) window.location.href = "/setup-2fa";
+      return Promise.reject(error);
+    }
     if (!original || error.response?.status !== 401 || original._retry) {
       return Promise.reject(error);
     }

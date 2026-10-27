@@ -96,7 +96,7 @@ async function getDrive(actor, id) {
     .filter((s) => inScope(actor, s) && (P.driveDepartments(drive).includes(s.department ?? null) || byStudent.has(s.id)))
     .map((s) => {
       const a = byStudent.get(s.id);
-      const e = P.evaluate({ student: s, record: records.get(s.id), drive, hasOffer: offers.has(s.id), now });
+      const e = P.evaluate({ student: s, record: records.get(s.id), drive, hasOffer: offers.has(s.id), now, audience: 'staff' });
       return {
         id: s.id, name: s.name || 'Unknown', roll_no: s.rollNo || null, department: s.department || null, section: s.section || null, year: s.year ?? null,
         ...shapeRecord(records.get(s.id)), has_offer: offers.has(s.id),
@@ -178,7 +178,7 @@ async function saveApplications(actor, id, updates) {
     let override = had?.overrideReason ? { overrideReason: had.overrideReason, overriddenBy: had.overriddenBy } : {};
     if (!had) {
       // A new application added by staff: the same rules as a student's own, unless a reason is written down.
-      const check = P.checkApply({ student, record: records.get(student.id), drive, hasOffer: offersElsewhere.has(student.id), now, existing: null });
+      const check = P.checkApply({ student, record: records.get(student.id), drive, hasOffer: offersElsewhere.has(student.id), now, existing: null, audience: 'staff' });
       if (!check.ok) {
         if (!check.overridable) fail(400, check.code, `${who}: ${check.error}`);
         const o = P.validateOverride({ reason: u.override_reason });
@@ -249,7 +249,7 @@ async function studentView(user) {
       const e = P.evaluate({ student, record: records, drive: d, hasOffer, now });
       const w = a ? P.canWithdraw({ application: a, drive: d, now }) : { ok: false };
       return {
-        ...s, applied: !!a, status: a?.status ?? null, round_results: a?.roundResults ?? {},
+        ...s, applied: !!a, application_status: a?.status ?? null, round_results: a?.roundResults ?? {},
         can_apply: !a && e.eligible, reasons: a ? [] : e.reasons.map((r) => r.message), can_withdraw: !!a && w.ok,
       };
     })

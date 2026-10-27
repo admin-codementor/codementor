@@ -49,6 +49,13 @@ module.exports = function (s) {
   s.check('a closed drive is not open to apply', codes(P.evaluate({ student: stu, record: null, drive: drive({ status: 'closed' }), hasOffer: false, now: NOW })).includes('CLOSED'));
   s.check('every reason is listed, not only the first', codes(P.evaluate({ student: { ...stu, year: 2 }, record: { cgpa: 5, backlogs: 4 }, drive: drive({ min_cgpa: 7, max_backlogs: 0 }), hasOffer: false, now: NOW })).length === 3);
 
+  s.check('for staff the reasons are about the student, for the student they are addressed to them', (() => {
+    const args = { student: { ...stu, year: 2 }, record: { cgpa: 5, backlogs: 3 }, drive: drive({ min_cgpa: 7, max_backlogs: 0 }), hasOffer: true, now: NOW };
+    const mine = P.evaluate(args).reasons.map((r) => r.message).join(' ');
+    const staff = P.evaluate({ ...args, audience: 'staff' }).reasons.map((r) => r.message).join(' ');
+    return /Yours is 5/.test(mine) && /You have 3/.test(mine) && /You already have an offer/.test(mine) && !/\b(Your|Yours|You)\b/.test(staff) && /Theirs is 5/.test(staff) && /They have 3/.test(staff);
+  })());
+
   // ── dream tier ──
   s.check('a student with an offer cannot apply to a normal drive', codes(P.evaluate({ student: stu, record: null, drive: drive(), hasOffer: true, now: NOW })).join() === 'HAS_OFFER');
   s.check('a student with an offer can apply to a dream drive', P.evaluate({ student: stu, record: null, drive: drive({ tier: 'dream' }), hasOffer: true, now: NOW }).eligible);

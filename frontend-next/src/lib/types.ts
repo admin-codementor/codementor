@@ -3,7 +3,7 @@
  * existing Express controllers; they document the contract the UI consumes.
  */
 
-export type Role = "student" | "faculty" | "hod" | "admin";
+export type Role = "student" | "faculty" | "hod" | "admin" | "tnp";
 
 export interface User {
   id: string | number;

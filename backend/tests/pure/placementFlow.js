@@ -74,7 +74,7 @@ module.exports = async function (s) {
     s.check('the consent time is kept', typeof db.apps.get(`${D1}_s1`).consentAtMs === 'number');
     s.check('applying twice is refused', (await call('POST', `/api/placement/me/drives/${D1}/apply`, 's1', { consent: true })).code === 'ALREADY_APPLIED');
     const afterApply = driveFor(await mine('s1'), D1);
-    s.check('the student then sees the application, and can withdraw', afterApply.applied && afterApply.status === 'applied' && afterApply.can_withdraw === true);
+    s.check('the student then sees the application, and can withdraw', afterApply.applied && afterApply.application_status === 'applied' && afterApply.status === 'open' && afterApply.can_withdraw === true);
     s.check('a student can withdraw', (await call('DELETE', `/api/placement/me/drives/${D1}/apply`, 's1')).status === 200 && !db.apps.has(`${D1}_s1`));
     s.check('withdrawing with nothing to withdraw is refused', (await call('DELETE', `/api/placement/me/drives/${D1}/apply`, 's1')).status === 409);
     await call('POST', `/api/placement/me/drives/${D1}/apply`, 's1', { consent: true });

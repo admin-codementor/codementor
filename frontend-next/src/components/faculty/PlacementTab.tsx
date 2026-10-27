@@ -7,6 +7,10 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Card from "@mui/material/Card";
 import Chip from "@mui/material/Chip";
+import Dialog from "@mui/material/Dialog";
+import DialogActions from "@mui/material/DialogActions";
+import DialogContent from "@mui/material/DialogContent";
+import DialogTitle from "@mui/material/DialogTitle";
 import Skeleton from "@mui/material/Skeleton";
 import Stack from "@mui/material/Stack";
 import Table from "@mui/material/Table";
@@ -19,15 +23,17 @@ import Typography from "@mui/material/Typography";
 import { useQuery } from "@tanstack/react-query";
 import api from "@/lib/api";
 import { apiErrorMessage } from "@/lib/apiError";
+import { getRole } from "@/lib/auth";
 import { ExportButton, KpiRow, KpiTile, toCsv } from "@/components/analytics";
 import { EmptyState } from "@/components/ui/States";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
-import { AddIcon, CheckCircleOutlineIcon, GroupsOutlinedIcon, InboxIcon, InsightsOutlinedIcon, TrackChangesOutlinedIcon } from "@/components/ui/icons";
+import { CheckCircleOutlineIcon, GroupsOutlinedIcon, InboxIcon, InsightsOutlinedIcon, TrackChangesOutlinedIcon } from "@/components/ui/icons";
 import { radius, typeScale } from "@/theme/tokens";
 import { Head, Pager, bodyRow, headRow, useTable } from "./DepartmentTables";
 import { PlacementReadiness } from "./PlacementReadiness";
-import { DriveFormDialog, DriveResultsDialog, type Drive } from "./PlacementDialogs";
+import { DrivesList } from "@/components/tnp/DrivesList";
+import { DriveDetail } from "@/components/tnp/DriveDetail";
 
 interface Analytics {
   overview: {
@@ -39,10 +45,9 @@ interface Analytics {
   companies: { id: string; company: string; role: string; date: string | null; ctc: string; status: string; eligible: number; applied: number; shortlisted: number; selected: number }[];
   rounds: { round: string; attempted: number; passed: number; failed: number; pass_rate: number }[];
   students: { id: string; name: string; roll_no: string | null; section: string | null; year: number | null; applied: number; shortlisted: number; selected: number; rejected: number; state: "placed" | "in_process" | "not_placed" }[];
+  outside: { applications: number; offers: number };
 }
 interface Group { key: string; label: string; students: number; placed: number; applied_students: number; rate: number }
-interface DriveRow extends Drive { eligible: number; applied: number; shortlisted: number; selected: number; rejected: number }
-
 type View = "analytics" | "readiness" | "drives";
 const VIEWS = [{ value: "analytics" as const, label: "Analytics" }, { value: "readiness" as const, label: "Readiness" }, { value: "drives" as const, label: "Drives" }];
 type State = "all" | "placed" | "in_process" | "not_placed";
@@ -63,6 +68,7 @@ type SortKey = keyof typeof SORT;
 const searchText = (r: Student) => `${r.name} ${r.roll_no ?? ""} ${r.section ?? ""}`;
 
 const fmtDate = (iso: string | null) => (iso ? new Date(`${iso}T00:00:00`).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" }) : "—");
+const DRIVE_HOME = "/api/placement";
 
 function GroupTable({ title, rows }: { title: string; rows: Group[] }) {
   return (
@@ -94,12 +100,15 @@ function GroupTable({ title, rows }: { title: string; rows: Group[] }) {
   );
 }
 
-function AnalyticsView({ section, year, openDrive }: { section: string; year: string; openDrive: (id: string) => void }) {
+export function AnalyticsView({ section, year, department = "", openDrive }: { section: string; year: string; department?: string; openDrive: (id: string) => void }) {
   const router = useRouter();
+  // The Training & Placement office has no access to the faculty student pages, so its rows are not links. Its files leave through the
+  // Export page instead, which writes every export to the audit log.
+  const canOpen = getRole() !== "tnp";
   const [state, setState] = React.useState<State>("all");
   const query = useQuery<Analytics>({
-    queryKey: ["faculty", "placement", "analytics", section, year],
-    queryFn: async () => (await api.get("/api/faculty/placement/analytics", { params: { ...(section ? { section } : {}), ...(year ? { year } : {}) } })).data.data,
+    queryKey: ["placement", "analytics", section, year, department],
+    queryFn: async () => (await api.get(`${DRIVE_HOME}/analytics`, { params: { ...(section ? { section } : {}), ...(year ? { year } : {}), ...(department ? { department } : {}) } })).data.data,
     staleTime: 30_000,
   });
   const d = query.data;
@@ -124,8 +133,8 @@ function AnalyticsView({ section, year, openDrive }: { section: string; year: st
   return (
     <Stack spacing={3}>
       <Typography variant="body2" color="text.secondary">
-        Placed means selected in at least one drive. In process means applied or shortlisted somewhere and not yet selected.
-        These figures come from the drives and results you record on the Drives view.
+        Placed means selected in at least one drive, or an offer recorded as made outside the portal. In process means applied or shortlisted somewhere and not yet selected.
+        These figures come from the drives and results recorded on the Drives view.
       </Typography>
 
       <KpiRow min={170}>
@@ -133,6 +142,7 @@ function AnalyticsView({ section, year, openDrive }: { section: string; year: st
         <KpiTile icon={<CheckCircleOutlineIcon />} accent="success" label="Placed" value={o.placed} total={o.pool} help={`${o.placement_rate}% of the students in this view`} />
         <KpiTile icon={<InsightsOutlinedIcon />} accent="tertiary" label="In process" value={o.in_process} total={o.pool} />
         <KpiTile icon={<InboxIcon />} accent="warning" label="Not placed" value={o.not_placed} total={o.pool} />
+        {d.outside.applications > 0 && <KpiTile icon={<TrackChangesOutlinedIcon />} accent="secondary" label="Outside the portal" value={d.outside.offers} help={`${d.outside.offers} offers from ${d.outside.applications} applications made outside drives, counted as placed above`} />}
         <KpiTile icon={<TrackChangesOutlinedIcon />} accent="secondary" label="Engagement" value={o.engagement_pct} suffix="%" help={`${o.applied_students} of ${o.pool} students have applied to at least one drive`} />
         <KpiTile icon={<InsightsOutlinedIcon />} accent="secondary" label="Applications each" value={o.avg_applications} help={`Conversion: ${o.conversion_pct}% of applications ended in an offer`} />
       </KpiRow>
@@ -228,7 +238,7 @@ function AnalyticsView({ section, year, openDrive }: { section: string; year: st
           <SearchField value={t.q} onChange={t.setQ} placeholder="Name, roll no or section" label="Search students" sx={{ maxWidth: 320 }} />
           <SegmentedButtons<State> value={state} onChange={setState} segments={STATES} ariaLabel="Placement status" />
           <Box sx={{ flex: 1 }} />
-          <ExportButton filename="placement-students.csv" csv={csv} disabled={t.all.length === 0} />
+          {canOpen && <ExportButton filename="placement-students.csv" csv={csv} disabled={t.all.length === 0} />}
         </Stack>
         <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
           {t.all.length === 0 ? (
@@ -247,7 +257,7 @@ function AnalyticsView({ section, year, openDrive }: { section: string; year: st
                   </TableHead>
                   <TableBody>
                     {t.visible.map((s) => (
-                      <TableRow key={s.id} hover onClick={() => router.push(`/faculty/students/${s.id}`)} sx={bodyRow}>
+                      <TableRow key={s.id} hover={canOpen} onClick={canOpen ? () => router.push(`/faculty/students/${s.id}`) : undefined} sx={canOpen ? bodyRow : { ...bodyRow, cursor: "default" }}>
                         <TableCell>
                           <Typography variant="body2" fontWeight={500}>{s.name}</Typography>
                           <Typography variant="caption" color="text.secondary">{[s.roll_no, s.section && `Sec ${s.section}`, s.year && `Year ${s.year}`].filter(Boolean).join(" · ")}</Typography>
@@ -271,86 +281,24 @@ function AnalyticsView({ section, year, openDrive }: { section: string; year: st
   );
 }
 
-function DrivesView({ openDrive, newDrive, editDrive }: { openDrive: (id: string) => void; newDrive: () => void; editDrive: (d: Drive) => void }) {
-  const query = useQuery<DriveRow[]>({
-    queryKey: ["faculty", "placement", "drives"],
-    queryFn: async () => (await api.get("/api/faculty/placement/drives")).data.data,
-    staleTime: 30_000,
-  });
-  if (query.isError) {
-    return <Alert severity="error" action={<Button color="inherit" size="small" onClick={() => query.refetch()}>Retry</Button>}>{apiErrorMessage(query.error, "Could not load drives.")}</Alert>;
-  }
-  if (query.isLoading || !query.data) return <Skeleton variant="rounded" height={260} />;
-  const drives = query.data;
-
-  return (
-    <Box>
-      <Stack direction="row" alignItems="center" spacing={2} sx={{ mb: 2 }}>
-        <Typography variant="body2" color="text.secondary" sx={{ flex: 1 }}>
-          A drive is one company visit. Open it to record who applied and how each student did in each round.
-        </Typography>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={newDrive}>New drive</Button>
-      </Stack>
-      <Card variant="outlined" sx={{ borderColor: "outlineVariant", overflow: "hidden" }}>
-        {drives.length === 0 ? (
-          <EmptyState
-            icon={<InboxIcon />} title="No placement drives yet"
-            description="Create a drive for each company that visits, then record results to see placement analytics."
-            action={<Button variant="contained" startIcon={<AddIcon />} onClick={newDrive}>Create the first drive</Button>}
-          />
-        ) : (
-          <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" aria-label="Placement drives" sx={{ minWidth: 760 }}>
-              <TableHead>
-                <TableRow sx={headRow}>
-                  <TableCell>Company</TableCell><TableCell>Date</TableCell><TableCell>Status</TableCell>
-                  <TableCell align="right">Eligible</TableCell><TableCell align="right">Applied</TableCell>
-                  <TableCell align="right">Shortlisted</TableCell><TableCell align="right">Selected</TableCell><TableCell />
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {drives.map((d) => (
-                  <TableRow key={d.id} hover onClick={() => openDrive(d.id)} sx={bodyRow}>
-                    <TableCell>
-                      <Typography variant="body2" fontWeight={500}>{d.company}</Typography>
-                      <Typography variant="caption" color="text.secondary">{[d.role, d.ctc].filter(Boolean).join(" · ")}</Typography>
-                    </TableCell>
-                    <TableCell>{fmtDate(d.date)}</TableCell>
-                    <TableCell>
-                      <Chip size="small" label={d.status === "open" ? "Open" : "Closed"} sx={{ height: 22, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600, bgcolor: d.status === "open" ? "successContainer" : "surfaceContainerHigh", color: d.status === "open" ? "onSuccessContainer" : "onSurfaceVariant" }} />
-                    </TableCell>
-                    <TableCell align="right">{d.eligible}</TableCell><TableCell align="right">{d.applied}</TableCell>
-                    <TableCell align="right">{d.shortlisted}</TableCell><TableCell align="right">{d.selected}</TableCell>
-                    <TableCell align="right">
-                      <Button size="small" onClick={(e) => { e.stopPropagation(); editDrive(d); }}>Edit</Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
-        )}
-      </Card>
-    </Box>
-  );
-}
-
-/** Placement for the HOD: analytics from the drives and results they record. */
+/** Placement analytics and drives. An HOD reads their department's; the Training & Placement office has the same analytics on its own page. */
 export function PlacementTab({ section, year }: { section: string; year: string }) {
   const [view, setView] = React.useState<View>("analytics");
-  const [resultsFor, setResultsFor] = React.useState<string | null>(null);
-  const [form, setForm] = React.useState<{ drive: Drive | null } | null>(null);
+  const [openId, setOpenId] = React.useState<string | null>(null);
 
   return (
     <Box>
       <SegmentedButtons<View> value={view} onChange={setView} segments={VIEWS} ariaLabel="Placement view" />
       <Box sx={{ mt: 3 }}>
-        {view === "analytics" && <AnalyticsView section={section} year={year} openDrive={setResultsFor} />}
+        {view === "analytics" && <AnalyticsView section={section} year={year} openDrive={setOpenId} />}
         {view === "readiness" && <PlacementReadiness section={section} year={year} />}
-        {view === "drives" && <DrivesView openDrive={setResultsFor} newDrive={() => setForm({ drive: null })} editDrive={(d) => setForm({ drive: d })} />}
+        {view === "drives" && <DrivesList canManage={false} onOpen={setOpenId} />}
       </Box>
-      <DriveResultsDialog driveId={resultsFor} onClose={() => setResultsFor(null)} />
-      <DriveFormDialog open={!!form} onClose={() => setForm(null)} drive={form?.drive ?? null} />
+      <Dialog open={!!openId} onClose={() => setOpenId(null)} fullWidth maxWidth="lg" aria-labelledby="hod-drive-title">
+        <DialogTitle id="hod-drive-title">Drive</DialogTitle>
+        <DialogContent dividers>{openId && <DriveDetail driveId={openId} canManage={false} />}</DialogContent>
+        <DialogActions><Button onClick={() => setOpenId(null)}>Close</Button></DialogActions>
+      </Dialog>
     </Box>
   );
 }

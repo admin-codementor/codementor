@@ -134,10 +134,12 @@ const NOT_OVERRIDABLE = new Set(['NOT_PUBLISHED', 'CLOSED']);
 
 /**
  * One student against one drive. Every reason is listed, so the student learns everything that stands in the way at once.
- * @param {{student: {department?, year?}, record: {cgpa?, backlogs?}|null, drive: object, hasOffer: boolean, now: number}} a
+ * @param {{student: {department?, year?}, record: {cgpa?, backlogs?}|null, drive: object, hasOffer: boolean, now: number, audience?: 'student'|'staff'}} a
+ *   audience: the words are written to the student ("Your CGPA") by default, or about the student ("Their CGPA") for staff.
  * @returns {{eligible: boolean, reasons: {code: string, message: string}[], overridable: boolean}}
  */
-function evaluate({ student, record, drive, hasOffer, now }) {
+function evaluate({ student, record, drive, hasOffer, now, audience = 'student' }) {
+  const me = audience === 'student';
   const reasons = [];
   const add = (code, message) => reasons.push({ code, message });
   const d = shapeDrive(drive);
@@ -151,23 +153,23 @@ function evaluate({ student, record, drive, hasOffer, now }) {
   if (d.eligible_years.length && !d.eligible_years.includes(Number(student?.year))) add('YEAR', `This drive is for year ${d.eligible_years.join(', ')} students.`);
 
   if (d.min_cgpa != null) {
-    if (record?.cgpa == null) add('CGPA_UNKNOWN', 'Your CGPA has not been added yet. Ask the Training & Placement office.');
-    else if (record.cgpa < d.min_cgpa) add('CGPA_LOW', `This drive needs a CGPA of ${d.min_cgpa} or more. Yours is ${record.cgpa}.`);
+    if (record?.cgpa == null) add('CGPA_UNKNOWN', me ? 'Your CGPA has not been added yet. Ask the Training & Placement office.' : 'No CGPA is on record for this student.');
+    else if (record.cgpa < d.min_cgpa) add('CGPA_LOW', `This drive needs a CGPA of ${d.min_cgpa} or more. ${me ? 'Yours' : 'Theirs'} is ${record.cgpa}.`);
   }
   if (d.max_backlogs != null) {
-    if (record?.backlogs == null) add('BACKLOGS_UNKNOWN', 'Your backlog count has not been added yet. Ask the Training & Placement office.');
-    else if (record.backlogs > d.max_backlogs) add('BACKLOGS', `This drive allows at most ${d.max_backlogs} backlog${d.max_backlogs === 1 ? '' : 's'}. You have ${record.backlogs}.`);
+    if (record?.backlogs == null) add('BACKLOGS_UNKNOWN', me ? 'Your backlog count has not been added yet. Ask the Training & Placement office.' : 'No backlog count is on record for this student.');
+    else if (record.backlogs > d.max_backlogs) add('BACKLOGS', `This drive allows at most ${d.max_backlogs} backlog${d.max_backlogs === 1 ? '' : 's'}. ${me ? 'You have' : 'They have'} ${record.backlogs}.`);
   }
 
-  if (hasOffer && d.tier !== 'dream') add('HAS_OFFER', 'You already have an offer, so you can apply only to dream drives.');
+  if (hasOffer && d.tier !== 'dream') add('HAS_OFFER', me ? 'You already have an offer, so you can apply only to dream drives.' : 'The student already has an offer, and this is not a dream drive.');
 
   return { eligible: reasons.length === 0, reasons, overridable: reasons.every((r) => !NOT_OVERRIDABLE.has(r.code)) };
 }
 
 /** Why a student's apply, or a staff member's add-with-override, is refused or allowed. */
-function checkApply({ student, record, drive, hasOffer, now, existing }) {
-  if (existing) return { ok: false, code: 'ALREADY_APPLIED', error: 'You have already applied to this drive.', reasons: [] };
-  const e = evaluate({ student, record, drive, hasOffer, now });
+function checkApply({ student, record, drive, hasOffer, now, existing, audience = 'student' }) {
+  if (existing) return { ok: false, code: 'ALREADY_APPLIED', error: audience === 'student' ? 'You have already applied to this drive.' : 'The student has already applied to this drive.', reasons: [] };
+  const e = evaluate({ student, record, drive, hasOffer, now, audience });
   if (!e.eligible) return { ok: false, code: e.reasons[0].code, error: e.reasons.map((r) => r.message).join(' '), reasons: e.reasons, overridable: e.overridable };
   return { ok: true, reasons: [] };
 }

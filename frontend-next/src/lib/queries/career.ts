@@ -56,11 +56,11 @@ export interface StaffReadiness {
   bands: { key: ReadinessBand; label: string }[]; rule: { resume: number; interview: number; practice: number };
 }
 
-/** GET /api/faculty/placement/readiness: every student in the viewer's scope, banded. */
+/** GET /api/placement/readiness: every student in the viewer's scope, banded. */
 export function useStaffReadinessQuery(year: string, section: string) {
   return useQuery<StaffReadiness>({
-    queryKey: ["faculty", "placement", "readiness", year, section],
-    queryFn: async () => (await api.get<{ success: boolean; data: StaffReadiness }>("/api/faculty/placement/readiness", { params: { ...(year ? { year } : {}), ...(section ? { section } : {}) } })).data.data,
+    queryKey: ["placement", "readiness", year, section],
+    queryFn: async () => (await api.get<{ success: boolean; data: StaffReadiness }>("/api/placement/readiness", { params: { ...(year ? { year } : {}), ...(section ? { section } : {}) } })).data.data,
     staleTime: 60_000,
   });
 }
