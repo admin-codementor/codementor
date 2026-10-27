@@ -23,6 +23,7 @@ const EXPECTED_PUBLIC = [
   'POST /api/auth/firebase',
   'POST /api/2fa/verify',
   'GET /health',
+  'GET /api/system-status',
   'GET /api/problems',
   'GET /api/problems/:id',
   'GET /api/problems/:id/adjacent',

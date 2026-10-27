@@ -92,6 +92,7 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | `/api/public/profile/*` | GET | a student's published profile |
 | `/api/public/csp-report` | POST | browser security reports |
 | `/health` | GET | liveness probe |
+| `/api/system-status` | GET | platform status for uptime monitors (api, database, judge: reachable or not, nothing else) |
 
 ## Invariants (true however the rules are edited)
 

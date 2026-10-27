@@ -125,3 +125,6 @@ backend/backups/
 
 # Roster CSVs, generated passwords and account-creation logs (personal data; never commit)
 docs/private-credentials/
+
+# Server update log (written by deploy/update.sh)
+deploy/deploy.log

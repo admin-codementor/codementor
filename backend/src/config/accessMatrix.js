@@ -112,6 +112,7 @@ const publicRoutes = [
   { methods: ['GET'], path: '/api/public/profile/*', note: 'a student\'s published profile' },
   { methods: ['POST'], path: '/api/public/csp-report', note: 'browser security reports' },
   { methods: ['GET'], path: '/health', note: 'liveness probe' },
+  { methods: ['GET'], path: '/api/system-status', note: 'platform status for uptime monitors (api, database, judge: reachable or not, nothing else)' },
 ];
 
 // Invariants: true however the rules above are edited. Each is checked against the REAL routes.

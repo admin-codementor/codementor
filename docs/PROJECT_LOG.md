@@ -5,6 +5,14 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), Server update script, status endpoint, exam-day playbook
+**Why:** the project already runs with Docker on the college computer, and `deploy/update.sh` still built the old Vite `frontend`, so it could not be used.
+**Did:** rewrote `deploy/update.sh` for the current compose file: refuses a dirty or diverged checkout, checks `.env` (JWT secrets, `TRUST_PROXY`, CORS), asks, fast-forwards to `main`, rebuilds the website and API only (never Judge0), waits for both to answer, and rolls back by itself if they do not; `--check` changes nothing; `rollback <commit>`. 18 checks in `deploy/tests/test-update.sh` against a throwaway repo with stand-ins for docker, curl and sleep (the test found a real bug: a missing `.env` key killed the script silently). `*.sh` files are forced to LF. New public `GET /api/system-status` (api, database, judge reachable; cached 30 s, one shared check; 503 only when the database is down; no details), listed in the access matrix, 13 checks. New `docs/SERVER_UPDATE.md` and `docs/EXAM_DAY_PLAYBOOK.md`.
+**Verified:** backend lint, 592 offline checks, route audit, the status route called live in the offline environment (503 and a safe body when the database is unreachable, cached on the second call). **Not verified:** the script against real Docker on the college computer (do a `--check` first); the status route against a reachable Firestore and Judge0.
+**Next:** uptime monitor and phone alerts on `/api/system-status`; randomised question order and the integrity report and email; 3-hour soak and rehearsal on the college server; then S3 class and mentor model.
+
+---
+
 ## 2026-10-27 (Tue), S1 reliable exams
 **Area:** Stream S1 of `docs/TNP_ADMIN_EXAMS_SECURITY_PLAN.md` (branch `feat/s1-reliable-exams`). One PR for the whole exam phase (backend and screens).
 **Backend:** the server owns the clock (`windowExpiresAt`) and one active session per attempt (header `X-Exam-Session`; a second device takes over and the first is told). Saves are ordered and repeat-safe (per-session sequence numbers). Too many violations (exam setting, default 5, 0 = never) pause the attempt; nothing in the browser ever submits an exam. Staff (Admin, the exam's owner, the owner's HOD) resume a student with a written reason and optional extra minutes; the reason, who, and the earlier state are kept and the student is notified. Submit is repeat-safe. Coding submissions are refused once time is up, submitted or paused, and judged by the time the server received them.
