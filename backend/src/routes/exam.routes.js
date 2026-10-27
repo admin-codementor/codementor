@@ -34,6 +34,8 @@ router.delete('/:id/sections/:sid', facultyStaff, c.deleteSection);
 router.put('/:id/sections/:sid/questions', facultyStaff, c.setSectionQuestions);
 router.put('/:id/sections/:sid/problems', facultyStaff, c.attachProblems);
 
+router.get('/:id/roster', facultyStaff, c.getRoster);
+router.post('/:id/attempts/:userId/reopen', facultyStaff, c.reopenAttempt);
 router.get('/:id/results', facultyStaff, c.getResults);
 router.get('/:id/results/:userId', facultyStaff, c.getAttemptDetail);
 

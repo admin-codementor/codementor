@@ -110,10 +110,17 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
         assignment_id: (isCustomRun || isSampleRun) ? null : (assignment_id || null),
         exam_id: (isCustomRun || isSampleRun) ? null : (exam_id || null),
         section_id: (isCustomRun || isSampleRun) ? null : (section_id || null),
+        // Which window holds the exam, and when this submission arrived: the exam's rules decide whether it is taken and counted.
+        exam_session: (isCustomRun || isSampleRun) ? null : (req.get('x-exam-session') || null),
+        exam_received_at: Date.now(),
       });
     } catch (startErr) {
       if (startErr.code === 'EXAM_PROBLEM_OUT_OF_SCOPE') {
         return res.status(403).json({ success: false, code: startErr.code, error: startErr.message });
+      }
+      if (startErr.code === 'EXAM_ATTEMPT_CLOSED') {
+        const g = startErr.guard;
+        return res.status(g.status).json({ success: false, code: g.code, error: g.error, hint: g.hint });
       }
       if (startErr.code === 'LANGUAGE_NOT_ALLOWED') {
         return res.status(400).json({ success: false, code: startErr.code, error: startErr.message });

@@ -3,6 +3,7 @@ const { isFlagEvent } = require('../utils/proctorEvents');
 const userRepo = require('../repositories/userRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
 const proctorEventRepo = require('../repositories/proctorEventRepository');
+const examLive = require('../services/examLiveService');
 
 const ALLOWED_EVENTS = new Set([
   'tab_switch', 'fullscreen_exit', 'fullscreen_enter', 'paste', 'copy',
@@ -20,7 +21,13 @@ exports.recordEvent = async (req, res) => {
       userId: req.user.id, assignmentId: assignment_id || null, examId: exam_id || null, problemId: problem_id || null,
       eventType: event_type, detail: typeof detail === 'string' ? detail.slice(0, 300) : null,
     });
-    res.json({ success: true });
+    // An event during an exam also counts toward the exam's limit (leaving fullscreen, switching tab, devtools, paste). Past the limit the
+    // attempt is paused for staff to decide; the answer tells the page at once so it can show the paused screen.
+    let live = null;
+    if (typeof exam_id === 'string' && exam_id) {
+      live = await examLive.recordViolation({ examId: exam_id, userId: req.user.id, eventType: event_type });
+    }
+    res.json({ success: true, data: live ? { locked: live.locked, violation_count: live.count, violation_limit: live.limit } : null });
   } catch (e) {
     console.error('Proctor event error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });

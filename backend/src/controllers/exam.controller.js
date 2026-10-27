@@ -10,6 +10,10 @@ const examReport = require('../utils/examReport');
 const examScoring = require('../utils/examScoring');
 const problemRepo = require('../repositories/problemRepository');
 const examRepo = require('../repositories/examRepository');
+const nudgeRepo = require('../repositories/nudgeRepository');
+const examAttempt = require('../utils/examAttempt');
+const examLive = require('../services/examLiveService');
+const { cached } = require('../utils/cache');
 
 const SECTION_TYPES = ['mcq', 'coding'];
 const MAX_SECTION_PROBLEMS = 20;
@@ -53,6 +57,14 @@ function validateWindow(window_start, window_end) {
   if (Number.isNaN(end.getTime())) return { error: 'A valid window_end is required.' };
   if (end.getTime() <= start.getTime()) return { error: 'window_end must be after window_start.' };
   return { windowStart: start, windowEnd: end };
+}
+
+// How many times a student may leave fullscreen or switch tab before the attempt is paused for staff to decide. 0 means never pause.
+function validateViolationLimit(input) {
+  if (input === undefined || input === null || input === '') return { value: examAttempt.DEFAULT_VIOLATION_LIMIT };
+  const n = Number(input);
+  if (!Number.isInteger(n) || n < 0 || n > 50) return { error: 'The violation limit must be a whole number from 0 (never pause) to 50.' };
+  return { value: n };
 }
 
 function validateCidrList(allowed_cidrs) {
@@ -139,11 +151,13 @@ async function visibleExamsFor(userId) {
 exports.createExam = async (req, res) => {
   try {
     const { title, description, window_start, window_end, duration_minutes,
-      general_instructions, allowed_cidrs, classroom_ids, group_ids, negative_marking_default } = req.body;
+      general_instructions, allowed_cidrs, classroom_ids, group_ids, negative_marking_default, violation_limit } = req.body;
 
     if (typeof title !== 'string' || !title.trim() || title.length > 200) {
       return res.status(400).json({ success: false, error: 'Title is required and must be ≤ 200 characters.' });
     }
+    const limitRes = validateViolationLimit(violation_limit);
+    if (limitRes.error) return res.status(400).json({ success: false, error: limitRes.error });
     const win = validateWindow(window_start, window_end);
     if (win.error) return res.status(400).json({ success: false, error: win.error });
 
@@ -175,6 +189,7 @@ exports.createExam = async (req, res) => {
       classroomIds: classRes.classroomIds,
       groupIds: groupRes.groupIds,
       negativeMarkingDefault: negDefault,
+      violationLimit: limitRes.value,
       isPublished: false,
     });
     logAction(req, 'exam.create', `exam "${title.trim()}"`);
@@ -191,8 +206,14 @@ exports.updateExam = async (req, res) => {
     if (!(await writableExam(req, id))) return res.status(404).json({ success: false, error: 'Exam not found' });
 
     const { title, description, window_start, window_end, duration_minutes,
-      general_instructions, allowed_cidrs, classroom_ids, group_ids, negative_marking_default } = req.body;
+      general_instructions, allowed_cidrs, classroom_ids, group_ids, negative_marking_default, violation_limit } = req.body;
     const partial = {};
+
+    if (violation_limit !== undefined) {
+      const limitRes = validateViolationLimit(violation_limit);
+      if (limitRes.error) return res.status(400).json({ success: false, error: limitRes.error });
+      partial.violationLimit = limitRes.value;
+    }
 
     if (title !== undefined) {
       if (typeof title !== 'string' || !title.trim() || title.length > 200) {
@@ -325,6 +346,7 @@ exports.getExamFaculty = async (req, res) => {
           general_instructions: exam.generalInstructions || null, allowed_cidrs: exam.allowedCidrs || [],
           classroom_ids: exam.classroomIds || [], group_ids: exam.groupIds || [],
           negative_marking_default: exam.negativeMarkingDefault || 0,
+          violation_limit: Number.isInteger(exam.violationLimit) ? exam.violationLimit : examAttempt.DEFAULT_VIOLATION_LIMIT,
           is_published: !!exam.isPublished, created_at: toISO(exam.createdAt),
         },
         sections: sectionsOut,
@@ -833,9 +855,26 @@ async function buildAttemptView(examId, exam, attempt) {
     submitted,
     score: attempt.score ?? null,
     total: attempt.total ?? null,
+    // Whether the attempt is paused for staff to decide (too many violations), and how close the student is to that.
+    locked: attempt.locked ? { reason: attempt.locked.reason || 'violations', count: attempt.locked.count ?? null } : null,
+    violation_count: attempt.violationCount || 0,
+    violation_limit: Number.isInteger(exam.violationLimit) ? exam.violationLimit : examAttempt.DEFAULT_VIOLATION_LIMIT,
+    reopen_count: Array.isArray(attempt.reopens) ? attempt.reopens.length : 0,
+    // The server's clock, so the page can show a correct countdown even when the device clock is wrong.
+    server_time: new Date().toISOString(),
   };
 }
 
+// The browser sends the session it was given by startAttempt with every change it makes (header X-Exam-Session).
+const sessionOf = (req) => {
+  const s = req.get('x-exam-session');
+  return examAttempt.validSessionId(s) ? s : null;
+};
+
+const refuse = (res, g) => res.status(g.status).json({ success: false, code: g.code, error: g.error, hint: g.hint });
+
+// Starting or resuming an exam makes THIS window the active one (a second device or tab takes over; the first is told on its next
+// save). A repeated start from the same window just claims again. The attempt keeps its original clock either way.
 exports.startAttempt = async (req, res) => {
   try {
     const { id } = req.params;
@@ -848,26 +887,39 @@ exports.startAttempt = async (req, res) => {
     const now = Date.now();
     const windowStartMs = toMillis(exam.windowStart);
     const windowEndMs = toMillis(exam.windowEnd);
-    if (windowStartMs != null && now < windowStartMs) {
-      return res.status(403).json({ success: false, error: 'This exam has not opened yet.' });
-    }
-    if (windowEndMs != null && now > windowEndMs) {
-      return res.status(403).json({ success: false, error: 'This exam window has closed.' });
-    }
-
     const existing = await examRepo.getAttempt(id, req.user.id);
     if (existing?.submittedAt) {
-      return res.status(409).json({ success: false, error: 'You have already submitted this exam.' });
+      return res.status(409).json({ success: false, code: 'ALREADY_SUBMITTED', error: 'You have already submitted this exam.', hint: 'Your answers are saved.' });
+    }
+    // A student who already has an attempt may come back to it (their own clock is what counts, and staff may have reopened it
+    // after the window closed). A NEW attempt can only start inside the window.
+    if (!existing) {
+      if (windowStartMs != null && now < windowStartMs) return res.status(403).json({ success: false, error: 'This exam has not opened yet.' });
+      if (windowEndMs != null && now > windowEndMs) return res.status(403).json({ success: false, error: 'This exam window has closed.' });
     }
 
     // Clamp to the exam's own window close, then let examRepo.startAttempt's own
     // exists-check make this idempotent — a resumed attempt keeps its original clock.
     const proposedExpiry = now + exam.durationMinutes * 60 * 1000;
     const windowExpiresAt = new Date(windowEndMs != null ? Math.min(proposedExpiry, windowEndMs) : proposedExpiry);
+    await examRepo.startAttempt(id, req.user.id, windowExpiresAt);
 
-    const attempt = await examRepo.startAttempt(id, req.user.id, windowExpiresAt);
+    const sessionId = examAttempt.newSessionId();
+    const claim = await examRepo.mutateAttempt(id, req.user.id, (a) => {
+      if (!a) return { outcome: { missing: true } };
+      if (a.submittedAt) return { outcome: { submitted: true } };
+      return { outcome: { previous: a.session?.id || null }, update: { session: { id: sessionId, claimedAt: now } } };
+    });
+    if (claim?.submitted) return res.status(409).json({ success: false, code: 'ALREADY_SUBMITTED', error: 'You have already submitted this exam.', hint: 'Your answers are saved.' });
+    if (claim?.previous) {
+      // Another window held the exam: this one took over. Kept as a soft signal for the report, and in the audit trail.
+      logAction(req, 'exam.takeover', `exam ${id}: a new window took over the attempt`);
+      proctorEventRepo.create({ userId: req.user.id, assignmentId: null, examId: id, problemId: null, eventType: 'session_takeover', detail: 'the exam was opened in another window or device' })
+        .catch((e) => console.error('takeover event failed:', e.message));
+    }
     logAction(req, 'exam.start', `exam ${id}`);
-    res.json({ success: true, data: await buildAttemptView(id, exam, attempt) });
+    const attempt = await examRepo.getAttempt(id, req.user.id);
+    res.json({ success: true, data: { ...(await buildAttemptView(id, exam, attempt)), session_id: sessionId } });
   } catch (e) {
     console.error('Exam startAttempt error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -901,42 +953,42 @@ exports.getAttemptState = async (req, res) => {
   }
 };
 
-// Shared guard for every attempt-mutating student endpoint: must have started,
-// not already submitted, and still be inside the per-attempt time window.
-async function requireLiveAttempt(req, res, examId) {
-  const attempt = await examRepo.getAttempt(examId, req.user.id);
-  if (!attempt) { res.status(404).json({ success: false, error: 'Start the exam first.' }); return null; }
-  if (attempt.submittedAt) { res.status(409).json({ success: false, error: 'This exam is already submitted.' }); return null; }
-  const expiresAt = toMillis(attempt.windowExpiresAt);
-  if (expiresAt != null && Date.now() > expiresAt) {
-    res.status(409).json({ success: false, error: 'Time is up for this exam.' });
-    return null;
-  }
-  return attempt;
-}
-
+// Saving one MCQ answer. The write goes through the attempt's rules in one transaction: right session, not submitted, not locked, not
+// past the deadline, and not older than what is already stored (a delayed retry loses quietly instead of overwriting a newer answer).
 exports.answerQuestion = async (req, res) => {
   try {
     const { id, qid } = req.params;
-    const { section_id, selected_index, marked } = req.body;
-    if (!(await requireLiveAttempt(req, res, id))) return;
+    const { section_id, selected_index, marked, seq } = req.body;
 
-    const section = await examRepo.getSection(id, section_id);
-    if (!section || section.type !== 'mcq') return res.status(404).json({ success: false, error: 'Section not found' });
+    const known = await examLive.sectionIds(id, section_id);
+    if (!known || known.type !== 'mcq') return res.status(404).json({ success: false, error: 'Section not found' });
+    if (!known.ids.has(qid)) return res.status(404).json({ success: false, error: 'Question not found' });
 
-    const question = await examRepo.getSectionQuestions(id, section_id).then((qs) => qs.find((q) => q.id === qid));
-    if (!question) return res.status(404).json({ success: false, error: 'Question not found' });
-
-    const hasSelection = Number.isInteger(selected_index);
+    const hasSelection = selected_index !== undefined && selected_index !== null;
+    if (hasSelection && !(Number.isInteger(selected_index) && selected_index >= 0 && selected_index < 26)) {
+      return res.status(400).json({ success: false, error: 'That option does not exist.' });
+    }
     const isMarked = marked === true;
     const status = hasSelection
       ? (isMarked ? 'answered_marked' : 'answered')
       : (isMarked ? 'marked' : 'visited');
 
-    await examRepo.patchQuestionState(id, req.user.id, qid, {
-      status, selectedIndex: hasSelection ? selected_index : null, sectionId: section_id,
+    const sessionId = sessionOf(req);
+    const out = await examRepo.mutateAttempt(id, req.user.id, (attempt) => {
+      const g = examAttempt.guardLive(attempt, { sessionId, now: Date.now() });
+      if (!g.ok) return { outcome: { refused: g } };
+      const d = examAttempt.decideSave(attempt.questionState?.[qid], seq);
+      if (!d.apply) return { outcome: { stale: true, status: attempt.questionState?.[qid]?.status ?? status } };
+      return {
+        outcome: { status, seq: d.seq },
+        update: {
+          [`questionState.${qid}`]: { status, selectedIndex: hasSelection ? selected_index : null, sectionId: section_id, ...(d.seq != null ? { seq: d.seq } : {}) },
+          lastSaveAt: new Date(),
+        },
+      };
     });
-    res.json({ success: true, data: { status } });
+    if (out.refused) return refuse(res, out.refused);
+    res.json({ success: true, data: out.stale ? { status: out.status, stale: true } : { status: out.status, seq: out.seq ?? null } });
   } catch (e) {
     console.error('Exam answerQuestion error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -947,20 +999,22 @@ exports.markVisited = async (req, res) => {
   try {
     const { id, qid: problemId } = req.params;
     const { section_id } = req.body;
-    const attempt = await requireLiveAttempt(req, res, id);
-    if (!attempt) return;
 
-    const section = await examRepo.getSection(id, section_id);
-    if (!section || section.type !== 'coding' || !(section.problemIds || []).includes(problemId)) {
+    const known = await examLive.sectionIds(id, section_id);
+    if (!known || known.type !== 'coding' || !known.ids.has(problemId)) {
       return res.status(404).json({ success: false, error: 'Problem not found in this section' });
     }
 
-    // Never downgrade an already-answered problem back to merely "visited".
-    const current = attempt.codingState?.[problemId];
-    if (current?.status === 'answered') return res.json({ success: true, data: { status: 'answered' } });
-
-    await examRepo.recordCodingAnswer(id, req.user.id, problemId, { status: 'visited', sectionId: section_id });
-    res.json({ success: true, data: { status: 'visited' } });
+    const sessionId = sessionOf(req);
+    const out = await examRepo.mutateAttempt(id, req.user.id, (attempt) => {
+      const g = examAttempt.guardLive(attempt, { sessionId, now: Date.now() });
+      if (!g.ok) return { outcome: { refused: g } };
+      // Never downgrade an already-answered problem back to merely "visited".
+      if (attempt.codingState?.[problemId]?.status === 'answered') return { outcome: { status: 'answered' } };
+      return { outcome: { status: 'visited' }, update: { [`codingState.${problemId}`]: { status: 'visited', sectionId: section_id }, lastSaveAt: new Date() } };
+    });
+    if (out.refused) return refuse(res, out.refused);
+    res.json({ success: true, data: { status: out.status } });
   } catch (e) {
     console.error('Exam markVisited error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -999,19 +1053,135 @@ async function finalizeExpiredAttempts(examId, exam) {
   return expired.length;
 }
 
+// Submitting is idempotent: pressing Finish twice, or retrying after a lost response, returns the same result instead of an error.
+// The attempt is scored inside the transaction from its CURRENT state, so an answer saved a moment before Finish is not missed.
 exports.submitExam = async (req, res) => {
   try {
     const { id } = req.params;
-    const attempt = await requireLiveAttempt(req, res, id);
-    if (!attempt) return;
-
     const exam = await examRepo.getById(id);
-    const { score, total, sections: sectionResults } = await scoreExamAttempt(id, attempt, exam);
-    await examRepo.finishAttempt(id, req.user.id, { score, total });
-    logAction(req, 'exam.submit', `exam ${id} score ${score}/${total}`);
-    res.json({ success: true, data: { score, total, sections: sectionResults } });
+    if (!exam) return res.status(404).json({ success: false, code: 'NOT_FOUND', error: 'Exam not found' });
+
+    // Static data, loaded before the transaction so the decision inside it stays synchronous.
+    const sections = await examRepo.getSections(id);
+    const questionsBySection = new Map();
+    for (const s of sections) {
+      if (s.type === 'mcq') questionsBySection.set(s.id, await examRepo.getSectionQuestions(id, s.id));
+    }
+
+    const sessionId = sessionOf(req);
+    const out = await examRepo.mutateAttempt(id, req.user.id, (attempt) => {
+      if (!attempt) return { outcome: { refused: examAttempt.guardLive(null) } };
+      if (attempt.submittedAt) return { outcome: { already: true, attempt } };
+      const g = examAttempt.guardLive(attempt, { sessionId, now: Date.now() });
+      if (!g.ok) return { outcome: { refused: g } };
+      const result = examScoring.scoreAttempt({ sections, questionsBySection, attempt, exam });
+      return { outcome: { result }, update: { submittedAt: new Date(), score: result.score, total: result.total } };
+    });
+    if (out.refused) return refuse(res, out.refused);
+
+    if (out.already) {
+      const result = examScoring.scoreAttempt({ sections, questionsBySection, attempt: out.attempt, exam });
+      return res.json({ success: true, data: { score: out.attempt.score ?? result.score, total: out.attempt.total ?? result.total, sections: result.sections, already_submitted: true } });
+    }
+    logAction(req, 'exam.submit', `exam ${id} score ${out.result.score}/${out.result.total}`);
+    res.json({ success: true, data: { score: out.result.score, total: out.result.total, sections: out.result.sections } });
   } catch (e) {
     console.error('Exam submitExam error:', e.message);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// Staff: the live roster, and resuming a cut-off or paused student
+// ══════════════════════════════════════════════════════════════
+
+async function ownerDepartmentOf(exam) {
+  if (!exam?.facultyId) return null;
+  return (await userRepo.getById(exam.facultyId))?.department ?? null;
+}
+
+const actorOf = (req) => ({ id: req.user.id, role: req.user.role, department: req.user.department ?? null });
+
+// @route GET /api/exams/:id/roster
+// Everyone who has started: state, time left, how much they have answered, flags, and whether they were reopened. Staff use it during
+// an exam to see who dropped out and to resume them. Held for 10 seconds so a screen refreshing every few seconds costs one read.
+exports.getRoster = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const exam = await readableExam(req, id);
+    if (!exam) return res.status(404).json({ success: false, error: 'Exam not found' });
+
+    const now = Date.now();
+    const base = await cached(`exam-roster:v1:${id}`, 10, async () => {
+      const [attempts, users] = await Promise.all([examRepo.listAttempts(id), userRepo.getAllUsersMap()]);
+      const rows = attempts.map((a) => {
+        const u = users.get(a.userId) || {};
+        const answered = Object.values(a.questionState || {}).filter((q) => Number.isInteger(q?.selectedIndex)).length
+          + Object.values(a.codingState || {}).filter((c) => c?.status === 'answered').length;
+        const lastSave = toMillis(a.lastSaveAt) ?? toMillis(a.startedAt);
+        return {
+          userId: a.userId, name: u.name || 'Unknown', rollNo: u.rollNo || null, section: u.section || null,
+          startedAt: toISO(a.startedAt), lastSaveAt: lastSave ? new Date(lastSave).toISOString() : null,
+          expiresAtMs: toMillis(a.windowExpiresAt), submittedAtMs: toMillis(a.submittedAt),
+          submitted: !!a.submittedAt, autoSubmitted: !!a.autoSubmitted, locked: a.locked ? { reason: a.locked.reason, count: a.locked.count } : null,
+          answered, violationCount: a.violationCount || 0, reopenCount: Array.isArray(a.reopens) ? a.reopens.length : 0,
+          score: a.score ?? null, total: a.total ?? null,
+          _a: { submittedAt: a.submittedAt, autoSubmitted: a.autoSubmitted, locked: a.locked, windowExpiresAt: a.windowExpiresAt },
+        };
+      });
+      return rows;
+    });
+
+    const rows = base.map(({ _a, expiresAtMs, ...r }) => {
+      const state = examAttempt.rosterState(_a, now);
+      return { ...r, state, secondsLeft: state === 'in_progress' || state === 'locked' ? Math.max(0, Math.floor(((expiresAtMs ?? now) - now) / 1000)) : null };
+    }).sort((a, b) => a.name.localeCompare(b.name));
+    const count = (st) => rows.filter((r) => r.state === st).length;
+    const canResume = examAttempt.canReopen({ actor: actorOf(req), exam, ownerDepartment: await ownerDepartmentOf(exam) });
+
+    res.json({
+      success: true,
+      data: {
+        exam: { id: exam.id, title: exam.title, window_end: toISO(exam.windowEnd), duration_minutes: exam.durationMinutes, violation_limit: Number.isInteger(exam.violationLimit) ? exam.violationLimit : examAttempt.DEFAULT_VIOLATION_LIMIT },
+        counts: { total: rows.length, in_progress: count('in_progress'), locked: count('locked'), expired: count('expired'), submitted: count('submitted'), auto_submitted: count('auto_submitted') },
+        rows, can_resume: canResume, server_time: new Date(now).toISOString(),
+      },
+    });
+  } catch (e) {
+    console.error('Exam getRoster error:', e.message);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+};
+
+// @route POST /api/exams/:id/attempts/:userId/reopen   body { reason, extra_minutes }
+// Resume a student whose attempt was cut off (submitted early by a failure, timed out, or paused after too many violations). The
+// reason is required and kept on the attempt with who did it and what the attempt looked like before; the student is told.
+exports.reopenAttempt = async (req, res) => {
+  try {
+    const { id, userId } = req.params;
+    const exam = await examRepo.getById(id);
+    if (!exam) return res.status(404).json({ success: false, code: 'NOT_FOUND', error: 'Exam not found' });
+    const actor = actorOf(req);
+    if (!examAttempt.canReopen({ actor, exam, ownerDepartment: await ownerDepartmentOf(exam) })) {
+      return res.status(403).json({ success: false, code: 'FORBIDDEN', error: 'Only an Admin, the exam\'s owner or the owner\'s HOD can resume a student.' });
+    }
+
+    const out = await examRepo.mutateAttempt(id, userId, (attempt) => {
+      const plan = examAttempt.planReopen({ attempt, exam, actor, input: { reason: req.body?.reason, extraMinutes: req.body?.extra_minutes }, now: Date.now() });
+      return plan.error ? { outcome: { plan } } : { outcome: { plan }, update: plan.patch };
+    });
+    if (out.plan.error) return res.status(out.plan.status).json({ success: false, code: out.plan.code, error: out.plan.error });
+
+    const { entry, newExpiry } = out.plan;
+    logAction(req, 'exam.reopen', `exam ${id} student ${userId} +${entry.extraMinutes} min: ${entry.reason}`);
+    const sender = await userRepo.getById(actor.id);
+    nudgeRepo.addMany([{
+      studentId: userId, fromId: actor.id, fromName: sender?.name || 'Your faculty', createdAtMs: Date.now(), readAtMs: null,
+      message: `Your exam "${String(exam.title).slice(0, 80)}" was reopened. Open it again to continue; it ends at ${new Date(newExpiry).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}.`,
+    }]).catch((e) => console.error('reopen notice failed:', e.message));
+    res.json({ success: true, data: { expires_at: new Date(newExpiry).toISOString(), reopen_count: (out.plan.patch.reopens || []).length } });
+  } catch (e) {
+    console.error('Exam reopenAttempt error:', e.message);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 };
