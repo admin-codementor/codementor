@@ -3,6 +3,7 @@
 // health check, signal handlers — runs in a context that doesn't want them.
 const app = require('./app');
 const { checkJudge0Health } = require('./config/judge0Health');
+const { applyServerTimeouts } = require('./utils/serverTimeouts');
 
 const PORT = process.env.PORT || 3001;
 
@@ -10,6 +11,7 @@ const server = app.listen(PORT, async () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   await checkJudge0Health();
 });
+applyServerTimeouts(server);
 
 // ── Graceful shutdown ────────────────────────────────────────────────────────
 // Render (and any container host) sends SIGTERM on redeploy and restart. Without

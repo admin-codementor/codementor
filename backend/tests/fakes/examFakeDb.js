@@ -14,10 +14,12 @@ const SEC_MCQ = 'secMcq';
 const SEC_CODE = 'secCode';
 const PROBLEM = '22222222-2222-4222-8222-222222222222';
 
-function createExamFakeDb({ violationLimit = 1, questionCount = 2 } = {}) {
+// Options: violationLimit; questionCount; studentCount (extra students ld0001..ldNNNN, for load tests); durationMinutes (time once started);
+// latencyMs (a pause before every database call, with jitter, standing in for Firestore round trips; 0 = instant).
+function createExamFakeDb({ violationLimit = 1, questionCount = 2, studentCount = 0, durationMinutes = 60, latencyMs = 0 } = {}) {
   const now0 = Date.now();
   const db = { attempts: new Map(), nudges: [], events: [] };
-  const exam = { id: EXAM_ID, title: 'Mock Test', isPublished: true, facultyId: 'owner1', durationMinutes: 60, windowStart: new Date(now0 - 3600000), windowEnd: new Date(now0 + 7200000), violationLimit, classroomIds: [], groupIds: [], generalInstructions: 'Read each question carefully. Do not switch tabs.' };
+  const exam = { id: EXAM_ID, title: 'Mock Test', isPublished: true, facultyId: 'owner1', durationMinutes, windowStart: new Date(now0 - 3600000), windowEnd: new Date(now0 + Math.max(7200000, (durationMinutes + 60) * 60000)), violationLimit, classroomIds: [], groupIds: [], generalInstructions: 'Read each question carefully. Do not switch tabs.' };
   const sections = [
     { id: SEC_MCQ, type: 'mcq', order: 0, title: 'Aptitude', marksPerQuestion: 1, negativeMarking: 0 },
     { id: SEC_CODE, type: 'coding', order: 1, title: 'Coding', marksPerQuestion: 10, problemIds: [PROBLEM] },
@@ -34,6 +36,8 @@ function createExamFakeDb({ violationLimit = 1, questionCount = 2 } = {}) {
   ]);
   const addStudent = (id, extra = {}) => users.set(id, { id, name: `Student ${id}`, role: 'student', rollNo: `R-${id}`, section: 'A', ...extra });
   for (const id of ['stu1', 'stu2', 'stu3', 'stuLate', 'stuDone', 'stuLock', 'stuSess']) addStudent(id);
+  const loadStudentIds = Array.from({ length: studentCount }, (_, i) => `ld${String(i + 1).padStart(4, '0')}`);
+  for (const id of loadStudentIds) addStudent(id);
 
   const setPath = (obj, path, value) => {
     const parts = path.split('.');
@@ -72,9 +76,15 @@ function createExamFakeDb({ violationLimit = 1, questionCount = 2 } = {}) {
     proctorEventRepo.create = async (e) => { db.events.push(e); };
     auditLogRepo.create = async () => {};
     problemRepo.getMapByIds = async (ids) => new Map((ids || []).map((id) => [id, { title: 'Two Sum', difficulty: 'easy' }]));
+    if (latencyMs > 0) {
+      // The wait comes BEFORE each call, so a call still reads and writes in one step (this does not model write contention).
+      const slow = (fn) => async (...a) => { await new Promise((r) => setTimeout(r, latencyMs * (0.5 + Math.random()))); return fn(...a); };
+      for (const repo of [examRepo, userRepo]) for (const k of Object.keys(repo)) if (typeof repo[k] === 'function') repo[k] = slow(repo[k]);
+      for (const [repo, k] of [[nudgeRepo, 'addMany'], [proctorEventRepo, 'create'], [problemRepo, 'getMapByIds']]) repo[k] = slow(repo[k]);
+    }
   }
 
-  return { db, exam, sections, questions, users, addStudent, install, ids: { EXAM_ID, SEC_MCQ, SEC_CODE, PROBLEM } };
+  return { db, exam, sections, questions, users, addStudent, install, loadStudentIds, ids: { EXAM_ID, SEC_MCQ, SEC_CODE, PROBLEM } };
 }
 
 module.exports = { createExamFakeDb, EXAM_ID, SEC_MCQ, SEC_CODE, PROBLEM };

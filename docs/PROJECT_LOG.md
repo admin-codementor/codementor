@@ -12,7 +12,16 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 **Also fixed:** a failed token refresh on a network error used to sign a student out mid-exam; it no longer does.
 **Verified:** backend 568 offline checks, route audit, lint, website `tsc`, eslint (0 errors) and production build. In a browser against an in-memory sandbox (`backend/scripts/exam-sandbox.js`): instructions → start → answer and save → second device takes over → paused after 3 violations → staff resume with reason → student continues with saved answers → finish → result review.
 **Not verified:** the code editor page inside an exam (the sandbox has no problems, only API and types checked); real Firestore (transactions run against a fake); signed-in use with real accounts; load; phone layout. Deploy not during a live exam: the session header is strict, so open tabs would be asked to take the exam over again.
-**Next:** load-test harness, exam-day playbook, monitoring; randomised question order and integrity email (S1.5/S1.6 remainder).
+**Next:** exam-day playbook, monitoring; randomised question order and integrity email (S1.5/S1.6 remainder).
+
+### Load-test harness (same branch)
+**What:** `loadtest/` holds five k6 scenarios (start burst, sustained, last-minutes surge, reconnect storm, capacity ramp) and `run-local.cjs`, which starts the exam sandbox, runs one scenario and prints the server's CPU, memory and event-loop delay. The sandbox now takes `SANDBOX_STUDENTS`, `SANDBOX_LATENCY_MS` (stand-in for Firestore round trips), `SANDBOX_DURATION_MIN`, `SANDBOX_TOKENS`, `SANDBOX_STATS`. Every student reads back all accepted answers at the end (`lost_answers` must be 0). k6 2.2.0 was installed with winget for this.
+**Found and fixed by it:**
+- Node's default 5 s keep-alive closed idle connections while students paused between answers; 15 of 30,000 saves failed with "connection reset". The server now holds idle connections 65 s (`utils/serverTimeouts.js`, `KEEP_ALIVE_TIMEOUT_MS`, 9 checks). Same run afterwards: 0 failures.
+- The sandbox had no Redis and the client waited 100 ms per request for it, hiding the real cost. `REDIS_RETRIES` is now configurable (default unchanged, 1).
+- My own harness counted a dropped connection as a success; it now counts as an error.
+**Measured on this PC (1000 students, 30 ms simulated database, one API process, client on the same machine):** start burst of 1000 in 20 s: start p95 317 ms, 0 errors. Reconnect storm: 1000 of 1000 old windows refused, 0 lost. Capacity: **500 saves/s with p95 under 60 ms**, 600/s p95 680 ms, errors from 800/s (a real exam is about 25/s, about 125/s at a 5x rush). 10 minutes at the real exam rate: 0 errors, 0 lost, p95 54 ms, memory +4 MB, 6% of one core. Overload makes memory grow fast (about 1 GB at 1000/s).
+**Not measured:** real Firestore, Judge0 and coding scenarios, the college network, real Redis, several API copies, the sign-in herd, a 3-hour soak. Numbers on the college server will differ; these only show the exam code holds up and where one process breaks.
 
 ---
 
