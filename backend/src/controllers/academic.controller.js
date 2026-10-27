@@ -37,6 +37,9 @@ exports.assignTeacher = handle(async (req, actor) => { const r = await academic.
 exports.reallocate = handle(async (req, actor) => { const r = await academic.reallocate(actor, { assignmentId: req.params.assignmentId, newFacultyId: req.body?.new_faculty_id, effectiveFrom: req.body?.effective_from }); audit(req, 'assignment.reallocate'); return r; });
 exports.endAssignment = handle(async (req, actor) => { const r = await academic.endAssignment(actor, req.params.assignmentId, req.body?.to); audit(req, 'assignment.end'); return r; });
 
+exports.listStaff = handle((req, actor) => academic.listStaff(actor, { department: req.query.department }));
+exports.classDirectory = handle((req, actor) => academic.classDirectory(actor));
+
 exports.myClass = handle((req) => academic.myClass(req.user.id));
 exports.myClasses = handle(async (req) => { const s = await academicScope.facultyScope(req.user.id); return { term: s.term, classes: s.classes }; });
 

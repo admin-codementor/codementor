@@ -35,6 +35,8 @@ const rules = [
   { path: '/api/academic/terms/**', roles: ['hod', 'admin'], note: 'classes, placements, electives, consistency: a HOD for their department (checked inside), the Admin for all' },
   { path: '/api/academic/classes/**', roles: ['hod', 'admin'], note: 'roster, class teacher, sub-mentors, assignments' },
   { path: '/api/academic/assignments/**', roles: ['hod', 'admin'], note: 'reallocate or end a teaching assignment' },
+  { methods: ['GET'], path: '/api/academic/staff', roles: ['hod', 'admin'], note: 'department staff to pick a class teacher or mentor from' },
+  { methods: ['GET'], path: '/api/academic/class-directory', roles: ['faculty', 'hod'], note: 'class names and sizes of the own department of the caller, to ask for access' },
   { methods: ['GET'], path: '/api/academic/me', roles: ['student'], note: 'a student\'s own class, class teacher and sub-mentor' },
   { methods: ['GET'], path: '/api/academic/my-classes', roles: ['faculty', 'hod'], note: 'a faculty member\'s own classes this term' },
   { methods: ['POST'], path: '/api/academic/requests', roles: ['faculty'], note: 'a faculty member asks for access to another class' },

@@ -284,10 +284,15 @@ async function requestAccess(actor, { classId, reason }) {
 
 async function listRequests(actor, { status } = {}) {
   if (!actor) fail(401, 'UNAUTHORIZED', 'Sign in first.');
-  if (actor.role === 'faculty') return academicRepo.listRequests({ facultyId: actor.id });
-  if (actor.role === 'admin') return academicRepo.listRequests(status ? { status } : {});
-  if (actor.role === 'hod') return academicRepo.listRequests({ department: actor.department, ...(status ? { status } : {}) });
-  fail(403, 'FORBIDDEN', 'Not allowed.');
+  let rows;
+  if (actor.role === 'faculty') rows = await academicRepo.listRequests({ facultyId: actor.id });
+  else if (actor.role === 'admin') rows = await academicRepo.listRequests(status ? { status } : {});
+  else if (actor.role === 'hod') rows = await academicRepo.listRequests({ department: actor.department, ...(status ? { status } : {}) });
+  else fail(403, 'FORBIDDEN', 'Not allowed.');
+  // The name is looked up now, not trusted from when the request was made (the sign-in token carries no name).
+  const names = new Map();
+  for (const id of new Set(rows.map((r) => r.facultyId))) names.set(id, (await userRepo.getById(id, 'faculty'))?.name || null);
+  return rows.map((r) => ({ ...r, facultyName: names.get(r.facultyId) ?? r.facultyName ?? null }));
 }
 
 /** Approve or decline. An approval can carry an expiry (at most 180 days); without one it lasts until the term is closed. */
@@ -326,6 +331,28 @@ async function myClass(studentId) {
   const electives = [];
   for (const e of mine.filter((x) => !x.primary)) { const c = await academicRepo.getClass(e.classId); if (c) electives.push({ id: c.id, name: c.name }); }
   return { term: { id: term.id, label: term.label }, class: { id: cls.id, label: academic.classLabel(cls), department: cls.department, year: cls.year, section: cls.section }, classTeacher, subMentor, position, electives };
+}
+
+/** Staff a HOD can name for their department (an Admin: any department, or all). Faculty and HODs only, never other roles. */
+async function listStaff(actor, { department } = {}) {
+  if (actor?.role !== 'admin' && actor?.role !== 'hod') fail(403, 'FORBIDDEN', 'Only an Admin or a HOD can see this.');
+  const dept = actor.role === 'admin' ? (department || null) : actor.department;
+  const all = await userRepo.listByRole('admin');   // the staff collection: faculty, HODs and admins together
+  return all.filter((u) => (u.role === 'faculty' || u.role === 'hod') && (!dept || u.department === dept))
+    .map((u) => ({ id: u.id, name: u.name || null, role: u.role, department: u.department || null }))
+    .sort((a, b) => String(a.name).localeCompare(String(b.name)));
+}
+
+/** The classes of the active term in the caller's own department, for a faculty member who wants to ask for access to one. Names and sizes only. */
+async function classDirectory(actor) {
+  if (!actor || !['faculty', 'hod'].includes(actor.role)) fail(403, 'FORBIDDEN', 'Only faculty can see this.');
+  const term = await academicRepo.getActiveTerm();
+  if (!term) return { term: null, classes: [] };
+  const classes = await academicRepo.listClasses(term.id, { department: actor.department });
+  const enrollments = await academicRepo.listEnrollmentsForTerm(term.id);
+  const size = new Map();
+  for (const e of enrollments) size.set(e.classId, (size.get(e.classId) || 0) + 1);
+  return { term: { id: term.id, label: term.label }, classes: classes.map((c) => ({ id: c.id, label: academic.classLabel(c), kind: c.kind, students: size.get(c.id) || 0 })).sort((a, b) => a.label.localeCompare(b.label)) };
 }
 
 async function listTerms(actor) { if (!actor) fail(401, 'UNAUTHORIZED', 'Sign in first.'); return academicRepo.listTerms(); }
@@ -377,5 +404,5 @@ async function consistencyReport(actor, { termId, department }) {
 
 module.exports = {
   AcademicError, createTerm, activateTerm, generateClasses, importPlacements, moveStudent, createElective, setClassTeacher, setSubMentors,
-  classRoster, assignTeacher, reallocate, endAssignment, requestAccess, listRequests, decideRequest, myClass, listTerms, listClassesView, consistencyReport, syncClass,
+  listStaff, classDirectory, classRoster, assignTeacher, reallocate, endAssignment, requestAccess, listRequests, decideRequest, myClass, listTerms, listClassesView, consistencyReport, syncClass,
 };

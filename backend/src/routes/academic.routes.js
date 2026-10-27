@@ -28,6 +28,10 @@ router.post('/classes/:classId/assignments', hodAdmin, c.assignTeacher);
 router.post('/assignments/:assignmentId/reallocate', hodAdmin, c.reallocate);
 router.post('/assignments/:assignmentId/end', hodAdmin, c.endAssignment);
 
+// People and classes to pick from.
+router.get('/staff', hodAdmin, c.listStaff);
+router.get('/class-directory', authorize('faculty', 'hod'), c.classDirectory);
+
 // A student's own class, and a faculty member's own classes.
 router.get('/me', authorize('student'), c.myClass);
 router.get('/my-classes', authorize('faculty', 'hod'), c.myClasses);
