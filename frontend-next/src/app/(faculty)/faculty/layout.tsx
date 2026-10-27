@@ -31,7 +31,11 @@ const BASE_NAV: NavItem[] = [
 // roles whose scope actually spans the department.
 const DEPARTMENT_NAV: NavItem[] = [
   { label: "Department", href: "/faculty/department", icon: <BusinessOutlinedIcon />, section: "Overview" },
+  { label: "Academic structure", href: "/faculty/academic", icon: <ListAltOutlinedIcon />, section: "Overview" },
 ];
+
+// A faculty member's own classes this term (the endpoint is for faculty and HODs; an Admin has no classes of their own).
+const MY_CLASSES_NAV: NavItem = { label: "My classes", href: "/faculty/my-classes", icon: <SchoolOutlinedIcon />, section: "Overview" };
 
 // Admin-only navigation. Both call routes gated on authorize('admin'), so
 // showing them to faculty or an HOD only produces a 403 page.
@@ -51,7 +55,8 @@ export default function FacultyLayout({ children }: { children: React.ReactNode 
     const withDept = role === "hod" || role === "admin"
       ? [...BASE_NAV.slice(0, 2), ...DEPARTMENT_NAV, ...BASE_NAV.slice(2)]
       : BASE_NAV;
-    setNavItems(role === "admin" ? [...withDept, ...ADMIN_NAV] : withDept);
+    const withMine = role === "admin" ? withDept : [withDept[0], MY_CLASSES_NAV, ...withDept.slice(1)];
+    setNavItems(role === "admin" ? [...withMine, ...ADMIN_NAV] : withMine);
   }, []);
 
   // Typing an admin-only URL as faculty/HOD would render a page of 403 errors; send them home instead.

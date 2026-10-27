@@ -16,6 +16,19 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | `/api/faculty/audit-logs` | all | admin | the audit trail |
 | `/api/faculty/faculty-list` | all | admin | all staff accounts |
 | `/api/faculty/analytics` | all | admin | college-wide class analytics |
+| `/api/academic/terms` | POST | admin | only the Admin creates a term |
+| `/api/academic/terms/*/activate` | POST | admin | only the Admin makes a term the active one |
+| `/api/academic/terms` | GET | faculty, hod, admin |  |
+| `/api/academic/terms/**` | all | hod, admin | classes, placements, electives, consistency: a HOD for their department (checked inside), the Admin for all |
+| `/api/academic/classes/**` | all | hod, admin | roster, class teacher, sub-mentors, assignments |
+| `/api/academic/assignments/**` | all | hod, admin | reallocate or end a teaching assignment |
+| `/api/academic/staff` | GET | hod, admin | department staff to pick a class teacher or mentor from |
+| `/api/academic/class-directory` | GET | faculty, hod | class names and sizes of the own department of the caller, to ask for access |
+| `/api/academic/me` | GET | student | a student's own class, class teacher and sub-mentor |
+| `/api/academic/my-classes` | GET | faculty, hod | a faculty member's own classes this term |
+| `/api/academic/requests` | POST | faculty | a faculty member asks for access to another class |
+| `/api/academic/requests` | GET | faculty, hod, admin | own requests (faculty), the department's (HOD), all (Admin) |
+| `/api/academic/requests/*/decide` | POST | hod, admin | approve or decline, for the class's department (checked inside) |
 | `/api/messages/reported` | all | hod, admin | reviewing reported conversations |
 | `/api/messages/reported/**` | all | hod, admin | reviewing reported conversations |
 | `/api/faculty/alumni` | all | hod, admin |  |

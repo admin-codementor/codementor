@@ -2,7 +2,6 @@ const { logAction } = require('../middleware/audit');
 const { canManageOwnedBy, canManageResource } = require('../middleware/role.middleware');
 const { validateCIDR } = require('../middleware/cidrCheck');
 const userRepo = require('../repositories/userRepository');
-const classroomRepo = require('../repositories/classroomRepository');
 const groupRepo = require('../repositories/studentGroupRepository');
 const proctorEventRepo = require('../repositories/proctorEventRepository');
 const plagiarismResultRepo = require('../repositories/plagiarismResultRepository');
@@ -13,6 +12,7 @@ const examRepo = require('../repositories/examRepository');
 const nudgeRepo = require('../repositories/nudgeRepository');
 const examAttempt = require('../utils/examAttempt');
 const examLive = require('../services/examLiveService');
+const classTargets = require('../services/classTargets');
 const examLayout = require('../utils/examLayout');
 const examIntegrity = require('../utils/examIntegrity');
 const integrity = require('../services/integrityService');
@@ -85,11 +85,7 @@ async function validateClassroomIds(classroom_ids, req) {
   let classroomIds = [];
   if (Array.isArray(classroom_ids) && classroom_ids.length) {
     classroomIds = [...new Set(classroom_ids.map(String))].slice(0, 50);
-    const unknown = [];
-    for (const cid of classroomIds) {
-      const c = await classroomRepo.getById(cid);
-      if (!c || !(await canManageOwnedBy(req, c.facultyId))) unknown.push(cid);
-    }
+    const { unknown } = await classTargets.validateTargets(classroomIds, req);
     if (unknown.length) return { error: `Unknown or inaccessible class id(s): ${unknown.slice(0, 3).join(', ')}` };
   }
   return { classroomIds };
@@ -137,7 +133,7 @@ async function visibleExamsFor(userId) {
   const needsClasses = all.some((e) => (e.classroomIds || []).length > 0);
   const needsGroups = all.some((e) => (e.groupIds || []).length > 0);
   const [myClassIds, myGroupIds] = await Promise.all([
-    needsClasses ? classroomRepo.listByStudentId(userId).then((cs) => new Set(cs.map((c) => c.id))) : new Set(),
+    needsClasses ? classTargets.studentClassIds(userId) : new Set(),
     needsGroups ? groupRepo.listByStudentId(userId).then((gs) => new Set(gs.map((g) => g.id))) : new Set(),
   ]);
   return all.filter((e) => {

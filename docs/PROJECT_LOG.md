@@ -5,6 +5,21 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-27 (Tue), S3 academic structure: terms, classes, class teacher, sub-mentors, assignments, access requests
+**Asked and decided:** sub-mentors by position in the roll-sorted class list; classes built automatically from each student's department, year and section, with a CSV for exceptions; a teaching assignment is a class plus a subject the HOD types.
+**Did (backend):**
+- `utils/academic.js` (pure rules, 39 checks): natural roll order and positions, range coverage (gap, overlap, beyond the class), effective dates, what each kind of faculty may see, consistency problems.
+- Storage `academicRepository.js` (terms, classes, enrollments, teachingAssignments, accessRequests; ended assignments are kept, never deleted), `academicService.js` (every action checks Admin or the HOD of that department), `academicScope.js` (what a faculty member sees this term), `classTargets.js` (which classes work may be aimed at, and which classes a student is in), routes under `/api/academic`, all in the access matrix.
+- A student's `mentorId` is now derived from the class teacher and the sub-mentor ranges (kept in step on every change), so the existing mentor board, leaderboards and messaging keep working.
+- Faculty analytics, course and problem statistics (through the shared scope) and the messaging checks now include the structure, in addition to a faculty member's own classrooms. Exams and assignments can be aimed at academic classes; students see them through their section class and electives.
+- A bug the tests caught: dates stored as ISO text were not parsed, so an assignment starting in the future counted as active already. Fixed and covered.
+**Did (screens):** HOD/Admin `Faculty > Academic structure` (term, build classes, class teacher, sub-mentor editor with live coverage check, assignments with reallocate and end, students list with move, CSV upload, elective groups, Checks tab, Access requests tab); faculty `My classes` with ask for access; the student dashboard card "My class". Guide: `docs/ACADEMIC_STRUCTURE.md`.
+**Verified:** backend lint, **712 offline checks** (80 in a flow test through the real routes: terms, building and rebuilding, ranges refused with the position named, mentors following positions, upload with bad rows, reallocation, expiry of grants, who may aim work at which class), route audit, website `tsc`, eslint (0 errors) and build. In a browser against an in-memory sandbox (`backend/scripts/academic-sandbox.js`): HOD built 2 classes from 83 students (the one without a section named), set three sub-mentor ranges with the live "every position is covered once" check, set a class teacher; the student card showed the right teacher and sub-mentor; a faculty member asked for access and the HOD approved it.
+**Not verified:** real Firestore for the new collections (the rules file is deny-all and the server uses the Admin SDK); the student dashboard in a browser (the sandbox has no data for its other widgets, so the card was checked on its own); performance with the full 3000 students (building a department reads each student once).
+**Not built yet:** see the end of `docs/ACADEMIC_STRUCTURE.md` (content ownership on reallocation, courses by grant, notification on decision, rollover wizard, automatic repairs, dashboard class switcher).
+
+---
+
 ## 2026-10-27 (Tue), Exam integrity: per-student shuffle, evidence, report and mail
 **Asked and decided:** SMTP settings in `.env` (any provider); email only for server-proven tampering; shuffle question order AND options; exam integrity first, then the class and mentor model.
 **Did:**

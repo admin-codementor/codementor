@@ -2,7 +2,7 @@ const { computeStrengthsWeaknesses } = require('../utils/topicScores');
 const userRepo = require('../repositories/userRepository');
 const problemRepo = require('../repositories/problemRepository');
 const assignmentRepo = require('../repositories/assignmentRepository');
-const classroomRepo = require('../repositories/classroomRepository');
+const classTargets = require('../services/classTargets');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
 const { rankRows, sameClass } = require('../utils/ranking');
 const { isActive } = require('../utils/students');
@@ -27,7 +27,7 @@ async function visibleAssignmentsFor(userId) {
   const needsMembership = all.some(a => (a.classroomIds || []).length > 0);
   // Skip the membership scan entirely when nothing is targeted.
   const myClassIds = needsMembership
-    ? new Set((await classroomRepo.listByStudentId(userId)).map(c => c.id))
+    ? await classTargets.studentClassIds(userId)
     : new Set();
 
   return all.filter(a => {

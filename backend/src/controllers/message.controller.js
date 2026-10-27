@@ -2,6 +2,7 @@
 // talk to whom and how consent, blocking and reporting work.
 const userRepo = require('../repositories/userRepository');
 const classroomRepo = require('../repositories/classroomRepository');
+const academicScope = require('../services/academicScope');
 const messageRepo = require('../repositories/messageRepository');
 const { scopeDept } = require('../middleware/role.middleware');
 const { logAction } = require('../middleware/audit');
@@ -17,9 +18,10 @@ async function peopleFor(threads) {
   return new Map(users.filter(Boolean).map((u) => [u.id, u]));
 }
 
-// Does this faculty member teach or mentor the student?
+// Does this faculty member teach or mentor the student? (a classroom of theirs, the academic structure, or the mentor set on the student)
 async function teachesOrMentors(facultyId, student) {
   if (student.mentorId === facultyId) return true;
+  if ((await academicScope.facultyScope(facultyId)).studentIds.includes(student.id)) return true;
   const classes = await classroomRepo.listByFacultyId(facultyId);
   for (const c of classes) {
     if ((await classroomRepo.listMembers(c.id)).some((m) => m.userId === student.id)) return true;
@@ -143,6 +145,7 @@ exports.searchContacts = async (req, res) => {
     if (sender.role === 'faculty') {
       const classes = await classroomRepo.listByFacultyId(sender.id);
       const taught = new Set((await Promise.all(classes.map((c) => classroomRepo.listMembers(c.id)))).flat().map((m) => m.userId));
+      for (const id of (await academicScope.facultyScope(sender.id)).studentIds) taught.add(id);
       students = students.filter((s) => s.mentorId === sender.id || taught.has(s.id));
     }
     const rows = [
