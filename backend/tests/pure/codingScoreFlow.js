@@ -3,22 +3,22 @@
 require('../hermeticEnv');
 const jwt = require('jsonwebtoken');
 const { loadAppWithMounts } = require('../routeAudit');
-const { users, add, install } = require('../fakes/adminFakeDb');
+const { users, add, install, reset } = require('../fakes/adminFakeDb');
 const userRepo = require('../../src/repositories/userRepository');
 const codingProfileRepo = require('../../src/repositories/codingProfileRepository');
 const adminService = require('../../src/services/adminService');
 const accountGate = require('../../src/middleware/accountGate');
 
-add({ id: 'hodC', role: 'hod', name: 'HOD CSE', email: 'hodc@c.test', department: 'CSE' });
-add({ id: 'hodE', role: 'hod', name: 'HOD ECE', email: 'hode@c.test', department: 'ECE' });
-add({ id: 'stuA', role: 'student', name: 'Asha', email: 'asha@c.test', rollNo: '22CS001', department: 'CSE', year: 4 });
-add({ id: 'stuB', role: 'student', name: 'Ravi', email: 'ravi@c.test', rollNo: '22EC001', department: 'ECE', year: 3 });
-add({ id: 'stuC', role: 'student', name: 'Meena', email: 'meena@c.test', rollNo: '22CS002', department: 'CSE', admissionYear: 2022, year: 4 });
-
 const profiles = new Map();
 const clone = (v) => (v == null ? v : structuredClone(v));
 
 module.exports = async function (s) {
+  reset();
+  add({ id: 'hodC', role: 'hod', name: 'HOD CSE', email: 'hodc@c.test', department: 'CSE' });
+  add({ id: 'hodE', role: 'hod', name: 'HOD ECE', email: 'hode@c.test', department: 'ECE' });
+  add({ id: 'stuA', role: 'student', name: 'Asha', email: 'asha@c.test', rollNo: '22CS001', department: 'CSE', year: 4 });
+  add({ id: 'stuB', role: 'student', name: 'Ravi', email: 'ravi@c.test', rollNo: '22EC001', department: 'ECE', year: 3 });
+  add({ id: 'stuC', role: 'student', name: 'Meena', email: 'meena@c.test', rollNo: '22CS002', department: 'CSE', admissionYear: 2022, year: 4 });
   install();
   Object.assign(userRepo, { getMapByRole: async (role) => new Map([...users.values()].filter((u) => (role === 'student' ? u.role === 'student' : u.role !== 'student')).map((u) => [u.id, clone(u)])) });
   Object.assign(codingProfileRepo, {

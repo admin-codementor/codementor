@@ -6,9 +6,10 @@ const { loadAppWithMounts } = require('../routeAudit');
 const adminService = require('../../src/services/adminService');
 const accountGate = require('../../src/middleware/accountGate');
 
-const { users, state, install } = require('../fakes/adminFakeDb');
+const { users, state, install, reset } = require('../fakes/adminFakeDb');
 
 module.exports = async function (s) {
+  reset();
   install();
   accountGate.reset();
   adminService.clearPeople(); adminService.clearSettings();
