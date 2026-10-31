@@ -5,6 +5,24 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-31 (Sat), S6 Admin: people, college settings, audit and sign-in history, instant lockout, AI switch and limit
+**Asked and decided:** new accounts get an emailed link to choose their own password; a disabled account is locked out at once; the Admin can change the department and section lists and the AI switch and daily limit; audit and sign-in history are kept one year, Admin only.
+**Did (backend):**
+- `utils/adminRules.js` (pure, 48 checks): new-account rules (department for faculty and HOD, none for T&P and Admin, department must be on the college list once there is one), typed-email confirmation, the safety rules (the last active Admin cannot be disabled or demoted, an Admin cannot disable or demote themselves, roles move only among staff), settings validation, AI daily limit by the India day, people and audit search.
+- `/api/admin/*` (Admin only, matrix rule plus an invariant): people list and search, create (Firebase sign-in with a password nobody sees, then an emailed link; refused up front when email is not set up; the sign-in is removed again if the profile cannot be saved), emailed reset link, disable and enable, change role, change department (each ends the person's sessions), settings, audit list and CSV export, failed sign-ins, college overview.
+- Disabled accounts: `middleware/accountGate.js` keeps the few disabled ids in memory, reloaded every 30 seconds by two small queries (not one read per request), updated at once on the server that makes the change; `protect` answers `ACCOUNT_DISABLED`; sign-in and the two-factor step refuse them too.
+- `loginEvents`: successful sign-ins, wrong two-factor codes, blocked accounts, with address and browser.
+- AI: `middleware/aiAccess.js` in front of the tutor, error explainer, code review, mock interview and the HOD insights; off gives 503 in plain words, the daily limit uses one counter document per person per day in a transaction; a counter failure lets the request through.
+- Audit: the list stops at one page when no filter narrows it; entries older than a year and old sign-in history are pruned at most once a day.
+**Did (screens):** College overview, People (search, filters, add account, an account page with sign-ins, role, department, disable and enable, typed confirmations), Settings, Audit Log (search, filters, export, failed sign-ins), the Administration menu.
+**Verified:** backend lint and **1167 offline checks** (63 end to end through the real routes: who may enter, create and its failure path, reset, disable with the instant lockout, the safety rules, role and department, settings, the AI switch and limit, audit, export, retention, sign-in history, overview), route audit, `tsc`, frontend lint and build, and in a browser with the in-memory sandbox (`scripts/admin-sandbox.js`): the overview, disabling with the typed email, saving departments, creating an account, the audit log and failed sign-ins.
+**Not verified:** a real Firestore (the aiUsage transaction, `loginEvents` and audit ordering need no new index but were not run there), real email, the Firebase reset link, the HOD or faculty view after a role change, a phone-width check.
+**Not built:** roster import from the screen and moving students between year and section from the Admin area (the scripts and Academic structure remain), a cost and quota panel, alerts, feature switches, thresholds under Settings.
+**Next:** S7 errors and self-healing, then S8 HOD completion (`docs/HOD_CAMPUSTRACK_PLAN.md`). On the college computer: set `SMTP_HOST` and `MAIL_FROM`, list the departments in Settings, create the T&P account from People.
+**Branch:** `feat/s6-admin`
+
+---
+
 ## 2026-10-27 (Tue), HOD completion planned (S8, last in the list), from 11 more CampusTrack HOD screens
 **Did:** read the screens and wrote `docs/HOD_CAMPUSTRACK_PLAN.md`: what each page shows, seven defects in them not to copy (three different at-risk numbers for the same students, 255 of 255 flagged red, an AI page that shows a failure as a score and "performing well" together, a 197 versus 255 pool with no explanation), our feature against each page, the HOD feature list by question, eight rules, eight phases (S8.1 to S8.8) and five open questions. Added S8 as the last row of the stream table in `docs/TNP_ADMIN_EXAMS_SECURITY_PLAN.md`.
 **Not built:** nothing. Starts only after S5, S6 and S7.

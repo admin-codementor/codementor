@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { BusinessOutlinedIcon, GroupsOutlinedIcon, SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, AssignmentOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, ReceiptLongOutlinedIcon, LayersOutlinedIcon, MenuBookOutlinedIcon, MailOutlineIcon, CalendarMonthOutlinedIcon, ListAltOutlinedIcon } from "@/components/ui/icons";
+import { BusinessOutlinedIcon, GroupsOutlinedIcon, SpaceDashboardOutlinedIcon, InsightsOutlinedIcon, CodeOutlinedIcon, SchoolOutlinedIcon, QuizOutlinedIcon, AssignmentOutlinedIcon, PolicyOutlinedIcon, AdminPanelSettingsOutlinedIcon, MonitorHeartOutlinedIcon, WorkOutlineOutlinedIcon, SettingsOutlinedIcon, ReceiptLongOutlinedIcon, LayersOutlinedIcon, MenuBookOutlinedIcon, MailOutlineIcon, CalendarMonthOutlinedIcon, ListAltOutlinedIcon } from "@/components/ui/icons";
 import { AuthGuard } from "@/components/auth/AuthGuard";
 import { AppShell, type NavItem } from "@/components/shell/AppShell";
 import { getRole } from "@/lib/auth";
@@ -40,8 +40,12 @@ const MY_CLASSES_NAV: NavItem = { label: "My classes", href: "/faculty/my-classe
 // Admin-only navigation. Both call routes gated on authorize('admin'), so
 // showing them to faculty or an HOD only produces a 403 page.
 const ADMIN_NAV: NavItem[] = [
+  { label: "College overview", href: "/faculty/college", icon: <BusinessOutlinedIcon />, section: "Administration" },
+  { label: "People", href: "/faculty/people", icon: <GroupsOutlinedIcon />, section: "Administration" },
+  { label: "Settings", href: "/faculty/settings", icon: <SettingsOutlinedIcon />, section: "Administration" },
   { label: "Permissions", href: "/faculty/permissions", icon: <AdminPanelSettingsOutlinedIcon />, section: "Administration" },
   { label: "Audit Log", href: "/faculty/audit-logs", icon: <ReceiptLongOutlinedIcon />, section: "Administration" },
+  { label: "Placements", href: "/tnp/drives", icon: <WorkOutlineOutlinedIcon />, section: "Administration" },
 ];
 
 export default function FacultyLayout({ children }: { children: React.ReactNode }) {
