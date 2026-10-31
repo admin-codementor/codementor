@@ -503,7 +503,9 @@ async function handleStepError(jobId, doc, err) {
     await judgeJobRepo.update(jobId, { resumeAt: err.retryAtMs || Date.now() + 5000 });
     return { status: 'retrying', attempt: doc.attempts || 0, maxAttempts: MAX_ATTEMPTS, waiting_for_judge: true };
   }
-  console.error('judge step failed:', jobId, String(err?.code || err?.response?.status || err?.message || err).slice(0, 160));
+  // Client-influenced text has control characters removed and is passed as an argument to a fixed format string.
+  const clean = (v) => String(v ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, 160);
+  console.error('judge step failed: %s %s', clean(jobId), clean(err?.code || err?.response?.status || err?.message || err));
   const attempts = (doc.attempts || 0) + 1;
   if (attempts >= MAX_ATTEMPTS) {
     const failure = { success: false, state: 'failed', error: friendlyJudgeError(err), code: err?.code || err?.response?.status || null };
