@@ -7,7 +7,8 @@ import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { classifyApiError, type ClassifiedError } from "@/lib/apiError";
+import { apiErrorInfo, classifyApiError, type ClassifiedError } from "@/lib/apiError";
+import { ReportProblemButton } from "@/components/feedback/ReportProblem";
 import { radius } from "@/theme/tokens";
 import {
   CloudOffIcon,
@@ -169,7 +170,12 @@ export function ErrorState({
       compact={compact}
       icon={ERROR_ICON[classified.kind]}
       title={title ?? classified.title}
-      description={description ?? <ErrorBody classified={classified} />}
+      description={description ?? (
+        <>
+          <ErrorBody classified={classified} />
+          {classified.reference && <ReportProblemButton requestId={classified.reference} code={apiErrorInfo(error).code} status={apiErrorInfo(error).status} />}
+        </>
+      )}
       action={
         canRetry ? (
           <Button variant="outlined" onClick={onRetry} startIcon={<RefreshIcon fontSize="small" />}>

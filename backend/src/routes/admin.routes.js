@@ -42,4 +42,10 @@ router.get('/audit', heavy, c.listAudit);
 router.get('/audit/export', heavy, c.exportAudit);
 router.get('/logins', c.recentLogins);
 
+// Health: the judge connection, the self-check (running it is a heavy read, so it is held tight), and problem reports.
+router.get('/health', c.health);
+router.post('/health/self-check', heavy, c.runSelfCheck);
+router.get('/problem-reports', c.listReports);
+router.post('/problem-reports/:id/status', c.setReportStatus);
+
 module.exports = router;

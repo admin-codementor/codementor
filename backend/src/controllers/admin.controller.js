@@ -1,5 +1,6 @@
 // HTTP layer for the Admin (services/adminService.js does the work and checks every rule).
 const admin = require('../services/adminService');
+const { ReportError } = require('../services/problemReportService');
 const { logAction } = require('../middleware/audit');
 
 const actorOf = (req) => ({ id: req.user.id, role: req.user.role });
@@ -9,7 +10,7 @@ const handle = (fn, status = 200) => async (req, res) => {
   try {
     res.status(status).json({ success: true, data: await fn(req, actorOf(req)) });
   } catch (e) {
-    if (e instanceof admin.AdminError) return res.status(e.status).json({ success: false, code: e.code, error: e.message });
+    if (e instanceof admin.AdminError || e instanceof ReportError) return res.status(e.status).json({ success: false, code: e.code, error: e.message });
     console.error('admin error:', String(e?.message || e).slice(0, 200));
     res.status(500).json({ success: false, error: 'Something went wrong on our side. Please try again.' });
   }
@@ -48,6 +49,19 @@ exports.changeRole = handle(async (req, actor) => {
 exports.changeDepartment = handle(async (req, actor) => {
   const r = await admin.changeDepartment(actor, req.params.id, req.body);
   audit(req, 'account.department', `${r.email}: ${r.department}`);
+  return r;
+});
+
+exports.health = handle((req, actor) => admin.health(actor));
+exports.runSelfCheck = handle(async (req, actor) => {
+  const r = await admin.runSelfCheck(actor);
+  audit(req, 'selfcheck.run', `${r.status}; repaired ${r.results.reduce((n, x) => n + (x.repaired || 0), 0)}`);
+  return r;
+});
+exports.listReports = handle((req, actor) => admin.listReports(actor, req.query.status ? String(req.query.status).slice(0, 20) : undefined));
+exports.setReportStatus = handle(async (req, actor) => {
+  const r = await admin.setReportStatus(actor, req.params.id, req.body?.status);
+  audit(req, 'report.status', `${req.params.id}: ${r.status}`);
   return r;
 });
 

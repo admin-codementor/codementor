@@ -45,6 +45,7 @@ const ADMIN_NAV: NavItem[] = [
   { label: "Settings", href: "/faculty/settings", icon: <SettingsOutlinedIcon />, section: "Administration" },
   { label: "Permissions", href: "/faculty/permissions", icon: <AdminPanelSettingsOutlinedIcon />, section: "Administration" },
   { label: "Audit Log", href: "/faculty/audit-logs", icon: <ReceiptLongOutlinedIcon />, section: "Administration" },
+  { label: "System health", href: "/faculty/health", icon: <MonitorHeartOutlinedIcon />, section: "Administration" },
   { label: "Placements", href: "/tnp/drives", icon: <WorkOutlineOutlinedIcon />, section: "Administration" },
 ];
 

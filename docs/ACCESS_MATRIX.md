@@ -60,6 +60,7 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | `/api/student/portfolio` | all | student |  |
 | `/api/student/portfolio/**` | all | student |  |
 | `/api/student/**` | all | any signed-in role | student pages. Handlers act on the caller's own id. Staff reuse PUT /profile (their own name) and the problem pages (preview), so this is not restricted to students yet |
+| `/api/problem-reports` | POST | any signed-in role | a person sends "Report a problem" from an error screen; a few an hour |
 | `/api/2fa/**` | all | any signed-in role | each person manages their own two-factor sign-in |
 | `/api/ai/**` | all | any signed-in role | AI tutor, error explainer, code review; exam-locked inside |
 | `/api/auth/set-password` | all | any signed-in role | first-login password change |

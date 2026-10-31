@@ -20,11 +20,15 @@ function makeQueryClient() {
         // layer on top just delays surfacing a real error. A 4xx is the
         // server's considered answer, so retrying it only doubles the wait
         // before the student sees what went wrong.
+        // A failure on our side or on the network is tried again, twice, with a growing wait (1 s, then 2 s), because most of them pass in
+        // seconds (a server restarting, a signal dropping). A 429 is the exception among the 4xx: it means "a little too fast", so it waits too.
         retry: (failureCount, error) => {
           const status = (error as { response?: { status?: number } })?.response?.status;
+          if (status === 429) return failureCount < 2;
           if (status !== undefined && status >= 400 && status < 500) return false;
-          return failureCount < 1;
+          return failureCount < 2;
         },
+        retryDelay: (attempt) => Math.min(1000 * 2 ** attempt, 8000),
         // Without this, a query that fails while React Query believes the
         // browser is offline sits in `fetchStatus: "paused"` forever: no data,
         // no error, and a page that renders nothing at all. It is not reliable

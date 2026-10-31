@@ -5,12 +5,14 @@ const app = require('./app');
 const { checkJudge0Health } = require('./config/judge0Health');
 const { applyServerTimeouts } = require('./utils/serverTimeouts');
 const accountGate = require('./middleware/accountGate');
+const maintenance = require('./services/maintenance');
 
 const PORT = process.env.PORT || 3001;
 
 const server = app.listen(PORT, async () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
   accountGate.start(); // keeps the list of disabled accounts fresh
+  maintenance.start(); // the judge reaper, the daily self-check and clean-up
   await checkJudge0Health();
 });
 applyServerTimeouts(server);

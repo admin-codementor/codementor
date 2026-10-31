@@ -36,6 +36,25 @@ state.logins.push(
 );
 install();
 
+// Health and problem reports: the judge jobs, the self-check store and the reports are held in memory as well.
+const judgeJobRepo = require('../src/repositories/judgeJobRepository');
+const maintenanceRepo = require('../src/repositories/maintenanceRepository');
+const placementRepo = require('../src/repositories/placementRepository');
+const reportRepo = require('../src/repositories/problemReportRepository');
+const academic = require('../src/services/academicService');
+const dead = [{ jobId: 'job-1', atMs: now - 3600000, reason: 'open too long', ageMs: 900000, userId: 'a3', examId: 'exam-1' }];
+let saved = null;
+const reports = new Map([['r1', { id: 'r1', userId: 'a4', role: 'student', requestId: '4F2A9C1B', page: '/app/problems/two-sum', message: 'The Run button did nothing', code: 'SERVER_ERROR', httpStatus: 500, status: 'open', atMs: now - 7200000 }]]);
+Object.assign(judgeJobRepo, { listDeadLetters: async (since) => dead.filter((d) => d.atMs >= since) });
+Object.assign(maintenanceRepo, { saveSelfCheck: async (r) => { saved = r; }, getSelfCheck: async () => saved, takeLease: async () => ({ take: false, reason: 'held' }), releaseLease: async () => {} });
+Object.assign(placementRepo, { listAllApplications: async () => [{ driveId: 'gone', studentId: 'a1' }], listDrives: async () => [], removeApplication: async () => {} });
+Object.assign(reportRepo, {
+  create: async (d) => { const id = 'r' + (reports.size + 1); reports.set(id, { id, ...d, status: 'open', atMs: Date.now() }); return id; },
+  list: async (status) => [...reports.values()].filter((r) => !status || r.status === status).sort((a, b) => b.atMs - a.atMs),
+  get: async (id) => reports.get(id) || null, setStatus: async (id, s) => { reports.get(id).status = s; },
+});
+academic.syncActiveTerm = async () => ({ classes: 6, positions: 0, mentorsUpdated: 3 });
+
 const app = require('../src/app');
 const snippet = (id, target) => {
   const u = users.get(id);

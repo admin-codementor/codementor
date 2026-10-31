@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import InitColorSchemeScript from "@mui/material/InitColorSchemeScript";
 import ThemeRegistry from "@/theme/ThemeRegistry";
+import { OnlineBanner } from "@/components/feedback/OnlineBanner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -33,7 +34,7 @@ export default function RootLayout({
       <body suppressHydrationWarning>
         {/* Sets the color-scheme class before hydration to prevent a flash. */}
         <InitColorSchemeScript attribute="class" defaultMode="system" />
-        <ThemeRegistry>{children}</ThemeRegistry>
+        <ThemeRegistry>{children}<OnlineBanner /></ThemeRegistry>
       </body>
     </html>
   );
