@@ -1,6 +1,7 @@
 const express = require('express');
 const { protect } = require('../middleware/auth.middleware');
 const { authorize } = require('../middleware/role.middleware');
+const aiAccess = require('../middleware/aiAccess');
 const { blockDuringExam } = require('../middleware/examLock');
 const { createLimiter } = require('../middleware/rateLimiter');
 const career = require('../controllers/career.controller');
@@ -18,7 +19,7 @@ router.use(protect, authorize('student'));
 
 router.get('/me', career.getMine);
 router.post('/resume', career.checkResume);
-router.post('/interview/next', interviewLimiter, blockDuringExam, career.nextQuestion);
-router.post('/interview/finish', interviewLimiter, blockDuringExam, career.finishInterview);
+router.post('/interview/next', aiAccess, interviewLimiter, blockDuringExam, career.nextQuestion);
+router.post('/interview/finish', aiAccess, interviewLimiter, blockDuringExam, career.finishInterview);
 
 module.exports = router;

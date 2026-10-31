@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const { blockedByGate } = require('../utils/passwordGate');
 const { blockedByTwofaGate } = require('../utils/twofaGate');
+const accountGate = require('./accountGate');
 
 exports.protect = (req, res, next) => {
   let token;
@@ -16,6 +17,10 @@ exports.protect = (req, res, next) => {
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     req.user = decoded; // { id, role, permissions }
+    // An account an Admin has disabled stops working within seconds, not when its token runs out.
+    if (accountGate.isDisabled(decoded.id)) {
+      return res.status(403).json({ success: false, code: 'ACCOUNT_DISABLED', error: 'This account has been disabled. Contact your college administrator.' });
+    }
     // A first-login account must set its own password before it can use anything else.
     if (blockedByGate(decoded, req.originalUrl)) {
       return res.status(403).json({ success: false, code: 'PASSWORD_CHANGE_REQUIRED', error: 'Please set a new password before continuing.' });

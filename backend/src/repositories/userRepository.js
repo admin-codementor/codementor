@@ -58,6 +58,12 @@ async function bumpTokenVersion(id, role) {
   await db.collection(collectionFor(role)).doc(id).set({ tokenVersion: FieldValue.increment(1) }, { merge: true });
 }
 
+/** Ids of every account an Admin has disabled, from both collections. */
+async function listDisabledIds() {
+  const snaps = await Promise.all(ALL_COLLECTIONS.map((c) => db.collection(c).where('disabled', '==', true).get()));
+  return snaps.flatMap((s) => s.docs.map((d) => d.id));
+}
+
 async function listByRole(role) {
   const snap = await db.collection(collectionFor(role)).get();
   return snap.docs.map(toUser);
@@ -82,6 +88,7 @@ module.exports = {
   create,
   update,
   listByRole,
+  listDisabledIds,
   getMapByRole,
   bumpTokenVersion,
   getAllUsersMap,

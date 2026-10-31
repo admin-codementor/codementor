@@ -1,6 +1,7 @@
 const express = require('express');
 const { createLimiter } = require('../middleware/rateLimiter');
 const { protect } = require('../middleware/auth.middleware');
+const aiAccess = require('../middleware/aiAccess');
 const { authorize, facultyStaff } = require('../middleware/role.middleware');
 const { requirePermission, ALL_PERMISSIONS, resolvePermissions } = require('../middleware/permissions');
 const facultyController = require('../controllers/faculty.controller');
@@ -59,7 +60,7 @@ router.get('/alumni', authorize('hod', 'admin'), alumniController.getAlumni);
 router.put('/alumni/graduation', authorize('hod', 'admin'), alumniController.setGraduation);
 router.get('/mentors', authorize('hod', 'admin'), mentorController.listMentors);
 router.put('/mentors/assign', authorize('hod', 'admin'), mentorController.assignMentees);
-router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, facultyController.getDepartmentInsights);
+router.post('/department/insights', authorize('hod', 'admin'), aiAccess, insightsLimiter, facultyController.getDepartmentInsights);
 // Labs: the department's classes and assignment completion; read-only, HOD/admin, department from the token.
 router.get('/labs', authorize('hod', 'admin'), facultyController.getLabs);
 router.get('/department/activity', authorize('hod', 'admin'), facultyController.getDepartmentActivity);
