@@ -166,6 +166,8 @@ router.post('/nudges', require('../controllers/nudge.controller').send);
 router.get('/platform-scores', platformScoreController.getScores);
 router.put('/platform-thresholds', authorize('hod', 'admin'), platformScoreController.putThresholds);
 router.post('/platform-scores/refresh', authorize('hod', 'admin'), platformScoreController.refresh);
+router.get('/platform-unverified', authorize('hod', 'admin'), platformScoreController.listUnverified);
+router.post('/platform-verify', authorize('hod', 'admin'), platformScoreController.decide);
 router.get('/reports/daily', reportsController.getDaily);
 router.get('/reports/late/assignments', reportsController.listLateCandidates);
 router.get('/reports/late', reportsController.getLate);

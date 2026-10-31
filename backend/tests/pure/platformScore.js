@@ -1,5 +1,6 @@
 // The coding score: per-platform points, the overall average, flags and thresholds.
-const { platformPoints, flagFor, validateThresholds, buildScore, describeFormula, CAP, DEFAULT_THRESHOLDS, SCORED } = require('../../src/utils/platformScore');
+const { platformPoints, flagFor, validateThresholds, buildScore, describeFormula, CAP, DEFAULT_THRESHOLDS, SCORED, BEST_OF, UNVERIFIED_WEIGHT } = require('../../src/utils/platformScore');
+const { validateTypedValue, LIVE_PLATFORMS, TYPED_PLATFORMS, ALL_PLATFORMS } = require('../../src/utils/codingPlatforms');
 
 module.exports = function (s) {
   // ── per platform ──
@@ -27,7 +28,7 @@ module.exports = function (s) {
   s.check('everything at the top is 100 and green', full.overall === 100 && full.flag === 'green' && full.linked.join() === 'leetcode,codeforces,github');
 
   const mixed = buildScore({ profiles: { leetcode: { solved: 100 } }, codementorSolved: 150 });
-  s.check('the overall is the plain average of the four (here (100 + 50 + 0 + 0) / 4)', mixed.overall === 37.5 && mixed.flag === 'orange' && mixed.points.codementor === 100 && mixed.points.leetcode === 50);
+  s.check('the overall is the average of the best four (here (100 + 50 + 0 + 0) / 4)', mixed.overall === 37.5 && mixed.flag === 'orange' && mixed.points.codementor === 100 && mixed.points.leetcode === 50);
 
   const star = buildScore({ profiles: { codeforces: { rating: 3500, solved: 4000 } }, codementorSolved: 0 });
   s.check('one outside rating alone cannot make a student green: it is capped at 100 of four', star.overall === 25 && star.flag === 'orange');
@@ -38,5 +39,21 @@ module.exports = function (s) {
   // ── the formula text is built from the same constants ──
   const f = describeFormula();
   s.check('the formula lists every scored platform and quotes the real caps', f.platforms.length === SCORED.length && f.platforms.find((x) => x.platform === 'codementor').text.includes(String(CAP.codementorSolved)) && f.platforms.find((x) => x.platform === 'codeforces').text.includes(String(CAP.cfRatingTop)));
-  s.check('the formula says which platforms are not scored', /HackerRank/.test(f.notScored) && DEFAULT_THRESHOLDS.red < DEFAULT_THRESHOLDS.green);
+  s.check('the formula explains the typed platforms and the best-four rule, and the thresholds are ordered', /CodeChef/.test(f.platformsTyped.text) && f.platformsTyped.labels.length === 4 && /best 4/.test(f.overall) && /50%/.test(f.platformsTyped.text) && DEFAULT_THRESHOLDS.red < DEFAULT_THRESHOLDS.green);
+
+  // ── the four typed platforms ──
+  s.check('typed: an unverified number counts at half weight, a verified one in full, both capped', platformPoints('codechef', { typedValue: 150 }) === 50 && platformPoints('codechef', { typedValue: 150, scoreVerified: true }) === 100 && platformPoints('codechef', { typedValue: 99999, scoreVerified: true }) === 100 && platformPoints('hackerrank', { typedValue: 50, scoreVerified: true }) === 50 && platformPoints('gfg', { typedValue: 125, scoreVerified: true }) === 50 && platformPoints('interviewbit', { typedValue: 1000, scoreVerified: true }) === 50);
+  s.check('typed: a missing, negative or garbage number scores 0 and never NaN', platformPoints('codechef', {}) === 0 && platformPoints('codechef', { typedValue: -5, scoreVerified: true }) === 0 && platformPoints('hackerrank', { typedValue: 'abc', scoreVerified: true }) === 0 && platformPoints('gfg', undefined) === 0);
+  s.check('typed: only scoreVerified === true counts as verified, not a truthy look-alike', platformPoints('codechef', { typedValue: 150, scoreVerified: 'yes' }) === 50 && platformPoints('codechef', { typedValue: 150, scoreVerified: 1 }) === 50);
+  const all8 = buildScore({ profiles: { leetcode: { solved: 200 }, codeforces: { rating: 2000, solved: 100 }, github: { extra: { repos: 10, stars: 50 } }, codechef: { typedValue: 150, scoreVerified: true }, hackerrank: { typedValue: 100, scoreVerified: true }, gfg: { typedValue: 250, scoreVerified: true }, interviewbit: { typedValue: 2000, scoreVerified: true } }, codementorSolved: 150 });
+  s.check('all eight at the top is still 100 (the best four of eight), and every platform is listed as linked', all8.overall === 100 && all8.flag === 'green' && all8.linked.length === 7);
+  const base = buildScore({ profiles: { leetcode: { solved: 100 } }, codementorSolved: 150 });
+  const more = buildScore({ profiles: { leetcode: { solved: 100 }, codechef: { typedValue: 15 } }, codementorSolved: 150 });
+  s.check('linking another platform never lowers the overall score', more.overall >= base.overall && buildScore({ profiles: { leetcode: { solved: 100 }, github: { extra: { repos: 0, stars: 0 } }, gfg: { typedValue: 0 } }, codementorSolved: 150 }).overall === base.overall);
+  const five = buildScore({ profiles: { leetcode: { solved: 200 }, codeforces: { rating: 2000, solved: 100 }, codechef: { typedValue: 150, scoreVerified: true }, hackerrank: { typedValue: 100, scoreVerified: true } }, codementorSolved: 150 });
+  s.check('only the best four count: five strong platforms still give exactly 100, not more', five.overall === 100 && BEST_OF === 4 && UNVERIFIED_WEIGHT === 0.5);
+  s.check('the unverified half weight changes the score, verifying lifts it', buildScore({ profiles: { codechef: { typedValue: 150 } }, codementorSolved: 0 }).overall === 12.5 && buildScore({ profiles: { codechef: { typedValue: 150, scoreVerified: true } }, codementorSolved: 0 }).overall === 25);
+  // typed numbers as the student enters them
+  s.check('what a student types is checked: whole numbers from 0 to 100000, per platform', validateTypedValue('codechef', '120').value === 120 && validateTypedValue('gfg', 0).value === 0 && !!validateTypedValue('codechef', '1.5').error && !!validateTypedValue('codechef', '-1').error && !!validateTypedValue('codechef', '').error && !!validateTypedValue('codechef', 100001).error && !!validateTypedValue('leetcode', 5).error && !!validateTypedValue('codechef', 'abc').error && /problems solved/.test(validateTypedValue('hackerrank', 'x').error) && /score/.test(validateTypedValue('interviewbit', 'x').error));
+  s.check('the platform lists agree: three read by the server, four typed, seven in all', LIVE_PLATFORMS.length === 3 && TYPED_PLATFORMS.length === 4 && ALL_PLATFORMS.length === 7 && TYPED_PLATFORMS.every((x) => SCORED.includes(x)) && LIVE_PLATFORMS.every((x) => SCORED.includes(x)));
 };

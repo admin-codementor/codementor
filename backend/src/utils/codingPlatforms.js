@@ -6,8 +6,29 @@
 
 // Platforms we live-sync vs. store-only.
 const LIVE_PLATFORMS = ['codeforces', 'leetcode', 'github'];
-const LINK_PLATFORMS = ['hackerrank', 'codechef', 'gfg'];
-const ALL_PLATFORMS = [...LIVE_PLATFORMS, ...LINK_PLATFORMS];
+// These four have no public way for our server to read a student's numbers, so the STUDENT types them. A typed number counts at half weight
+// until a HOD or Admin has checked it against the student's profile and marked it verified (utils/platformScore.js).
+const TYPED_PLATFORMS = ['codechef', 'hackerrank', 'interviewbit', 'gfg'];
+const LINK_PLATFORMS = TYPED_PLATFORMS;
+const ALL_PLATFORMS = [...LIVE_PLATFORMS, ...TYPED_PLATFORMS];
+
+/** What a student types for each typed platform, and the largest number we accept. */
+const TYPED_META = {
+  codechef: { label: 'CodeChef', unit: 'problems solved' },
+  hackerrank: { label: 'HackerRank', unit: 'problems solved' },
+  interviewbit: { label: 'InterviewBit', unit: 'score' },
+  gfg: { label: 'GeeksforGeeks', unit: 'problems solved' },
+};
+const MAX_TYPED = 100000;
+
+/** A typed number: a whole number from 0 to 100000. @returns {{error: string} | {value: number}} */
+function validateTypedValue(platform, input) {
+  const meta = TYPED_META[platform];
+  if (!meta) return { error: 'This platform is read automatically; there is nothing to type.' };
+  const n = typeof input === 'string' ? Number(input.trim()) : Number(input);
+  if (input === '' || input == null || !Number.isInteger(n) || n < 0 || n > MAX_TYPED) return { error: `Type your ${meta.unit} on ${meta.label} as a whole number from 0 to ${MAX_TYPED}.` };
+  return { value: n };
+}
 
 // fetch with a hard timeout so a slow/unreachable platform never hangs a sync.
 async function fetchJSON(url, opts = {}, timeoutMs = 9000) {
@@ -128,4 +149,4 @@ async function fetchPlatform(platform, handle) {
   throw new Error('Platform is link-only (no live sync)');
 }
 
-module.exports = { LIVE_PLATFORMS, LINK_PLATFORMS, ALL_PLATFORMS, fetchPlatform, fetchProfileText, VERIFY_FIELD };
+module.exports = { LIVE_PLATFORMS, LINK_PLATFORMS, TYPED_PLATFORMS, TYPED_META, ALL_PLATFORMS, validateTypedValue, fetchPlatform, fetchProfileText, VERIFY_FIELD };

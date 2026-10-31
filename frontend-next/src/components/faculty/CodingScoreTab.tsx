@@ -32,9 +32,10 @@ import { EmptyState, ErrorState } from "@/components/ui/States";
 import { SearchField } from "@/components/ui/SearchField";
 import { GroupsOutlinedIcon, FlagOutlinedIcon, RefreshOutlinedIcon } from "@/components/ui/icons";
 import { Head, Pager, bodyRow, headRow, useTable } from "./DepartmentTables";
+import { TypedNumbersDialog, useUnverifiedCount } from "./TypedNumbersDialog";
 
 export type Flag = "red" | "orange" | "green";
-export interface ScoreFormula { overall: string; platforms: { platform: string; label: string; text: string }[]; notScored: string; why: string }
+export interface ScoreFormula { overall: string; platforms: { platform: string; label: string; text: string }[]; platformsTyped: { text: string; labels: string[] }; why: string }
 export interface Thresholds { red: number; green: number }
 interface Row {
   id: string; name: string; rollNo: string | null; section: string | null; year: number | null; classLabel: string;
@@ -72,7 +73,7 @@ export function FormulaDialog({ open, onClose, formula }: { open: boolean; onClo
             </Box>
           ))}
           <Alert severity="info">{formula.why}</Alert>
-          <Typography variant="caption" color="text.secondary">{formula.notScored}</Typography>
+          <Typography variant="caption" color="text.secondary">{formula.platformsTyped.text}</Typography>
         </Stack>
       </DialogContent>
       <DialogActions><Button onClick={onClose}>Close</Button></DialogActions>
@@ -150,6 +151,8 @@ export function CodingScoreTab({ section, year }: { section: string; year: strin
   const canEdit = getRole() === "hod" || getRole() === "admin";
   const [formulaOpen, setFormulaOpen] = React.useState(false);
   const [thrOpen, setThrOpen] = React.useState(false);
+  const [typedOpen, setTypedOpen] = React.useState(false);
+  const pending = useUnverifiedCount();
   const [flagFilter, setFlagFilter] = React.useState<Flag | "all">("all");
   const [refreshing, setRefreshing] = React.useState(false);
 
@@ -175,7 +178,7 @@ export function CodingScoreTab({ section, year }: { section: string; year: strin
 
   const csv = () => toCsv(t.all.map((r) => ({
     name: r.name, roll_no: r.rollNo ?? "", class: r.classLabel, overall_score: r.overall, flag: r.flag,
-    codementor: r.points.codementor, leetcode: r.points.leetcode, codeforces: r.points.codeforces, github: r.points.github,
+    ...Object.fromEntries((d?.platforms ?? []).map((pl) => [pl.key, r.points[pl.key] ?? 0])),
     linked_platforms: r.linked.join(" "),
   })));
 
@@ -192,12 +195,13 @@ export function CodingScoreTab({ section, year }: { section: string; year: strin
         <KpiTile icon={<FlagOutlinedIcon />} label="Red" value={d.totals.red} total={d.totals.students} accent="error" onClick={() => setFlagFilter(flagFilter === "red" ? "all" : "red")} />
       </Box>
       <Typography variant="caption" color="text.secondary">
-        {d.totals.withAnyLink} of {d.totals.students} students have linked LeetCode, Codeforces or GitHub. A student who has linked nothing scores only from CodeMentor.
+        {d.totals.withAnyLink} of {d.totals.students} students have linked at least one outside platform. The score is the average of a student's best four platforms, so nobody is marked down for a site they do not use.
       </Typography>
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>
         <Button size="small" variant="outlined" onClick={() => setFormulaOpen(true)}>Formula</Button>
         <Button size="small" variant="outlined" onClick={() => setThrOpen(true)}>Thresholds</Button>
+        {canEdit && <Button size="small" variant="outlined" onClick={() => setTypedOpen(true)}>Numbers to check{pending.data && pending.data.length > 0 ? ` (${pending.data.length})` : ""}</Button>}
         {canEdit && <Button size="small" variant="outlined" startIcon={<RefreshOutlinedIcon />} onClick={refresh} disabled={refreshing}>{refreshing ? "Reading…" : "Refresh profiles"}</Button>}
         {flagFilter !== "all" && <Chip label={`Showing ${FLAG_STYLE[flagFilter].label.toLowerCase()} only`} onDelete={() => setFlagFilter("all")} />}
         <Box sx={{ flex: 1 }} />
@@ -211,17 +215,16 @@ export function CodingScoreTab({ section, year }: { section: string; year: strin
         ) : (
           <>
             <TableContainer sx={{ overflowX: "auto" }}>
-              <Table size="small" aria-label="Coding score per student" sx={{ minWidth: 820 }}>
+              <Table size="small" aria-label="Coding score per student" sx={{ minWidth: 1100 }}>
                 <TableHead>
                   <TableRow sx={headRow}>
                     <Head<SortKey> id="name" label="Student" sort={t.sort} toggle={t.toggle} />
                     <Head<SortKey> id="cls" label="Class" sort={t.sort} toggle={t.toggle} />
                     <Head<SortKey> id="overall" label="Score" sort={t.sort} toggle={t.toggle} align="right" />
                     <TableCell>Flag</TableCell>
-                    <Head<SortKey> id="codementor" label="CodeMentor" sort={t.sort} toggle={t.toggle} align="right" />
-                    <Head<SortKey> id="leetcode" label="LeetCode" sort={t.sort} toggle={t.toggle} align="right" />
-                    <Head<SortKey> id="codeforces" label="Codeforces" sort={t.sort} toggle={t.toggle} align="right" />
-                    <Head<SortKey> id="github" label="GitHub" sort={t.sort} toggle={t.toggle} align="right" />
+                    {d.platforms.map((pl) => (pl.key in SORT
+                      ? <Head<SortKey> key={pl.key} id={pl.key as SortKey} label={pl.label} sort={t.sort} toggle={t.toggle} align="right" />
+                      : <TableCell key={pl.key} align="right">{pl.label}</TableCell>))}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -231,7 +234,7 @@ export function CodingScoreTab({ section, year }: { section: string; year: strin
                       <TableCell>{r.classLabel}</TableCell>
                       <TableCell align="right" sx={{ fontWeight: 700 }}>{r.overall}</TableCell>
                       <TableCell><FlagChip flag={r.flag} /></TableCell>
-                      {(["codementor", "leetcode", "codeforces", "github"] as const).map((p) => (
+                      {d.platforms.map(({ key: p }) => (
                         <TableCell key={p} align="right">
                           {p !== "codementor" && !r.linked.includes(p) ? <Typography variant="caption" color="text.disabled">not linked</Typography> : (
                             <Chip size="small" label={r.points[p]} sx={{ height: 20, minWidth: 44, bgcolor: FLAG_STYLE[r.flags[p]].bg, color: FLAG_STYLE[r.flags[p]].fg, fontWeight: 600 }} />
@@ -249,6 +252,7 @@ export function CodingScoreTab({ section, year }: { section: string; year: strin
       </Card>
 
       <FormulaDialog open={formulaOpen} onClose={() => setFormulaOpen(false)} formula={d.formula} />
+      {canEdit && <TypedNumbersDialog open={typedOpen} onClose={() => setTypedOpen(false)} />}
       <ThresholdsDialog open={thrOpen} onClose={() => setThrOpen(false)} data={d} canEdit={canEdit} />
     </Stack>
   );

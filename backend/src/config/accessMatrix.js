@@ -71,6 +71,8 @@ const rules = [
   { path: '/api/faculty/mentors', roles: ['hod', 'admin'] },
   { path: '/api/faculty/mentors/**', roles: ['hod', 'admin'] },
   { path: '/api/faculty/platform-scores/refresh', roles: ['hod', 'admin'], note: 're-reads linked coding profiles' },
+  { path: '/api/faculty/platform-unverified', roles: ['hod', 'admin'], note: 'typed platform numbers waiting to be checked' },
+  { path: '/api/faculty/platform-verify', roles: ['hod', 'admin'], note: 'verify or reject one typed number; a HOD only for their own department' },
   { path: '/api/faculty/platform-thresholds', roles: ['hod', 'admin'], note: 'college red/green thresholds' },
   { path: '/api/faculty/portfolio', roles: ['hod', 'admin'] },
 

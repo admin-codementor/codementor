@@ -21,6 +21,7 @@ import TableRow from "@mui/material/TableRow";
 import { RefreshOutlinedIcon, SaveOutlinedIcon, CheckCircleOutlineIcon, ErrorOutlineIcon, LinkOutlinedIcon, EmojiEventsOutlinedIcon } from "@/components/ui/icons";
 import api from "@/lib/api";
 import { getUser } from "@/lib/auth";
+import { apiErrorMessage } from "@/lib/apiError";
 import { useToast } from "@/components/feedback/ToastProvider";
 import { EmptyState } from "@/components/ui/States";
 import { CODING_PLATFORM_META as META, CODING_PLATFORM_ORDER as ORDER } from "@/lib/codingPlatforms";
@@ -35,6 +36,8 @@ interface Profile {
   extra: unknown;
   sync_status: string;
   last_synced: string | null;
+  typed_value?: number | null;
+  score_verified?: boolean;
 }
 interface LbRow {
   rank: number;
@@ -59,6 +62,7 @@ export function ProfileCodingProfiles() {
   const [me, setMe] = React.useState<ReturnType<typeof getUser>>(null);
   const [profiles, setProfiles] = React.useState<Record<string, Profile>>({});
   const [drafts, setDrafts] = React.useState<Record<string, string>>({});
+  const [numbers, setNumbers] = React.useState<Record<string, string>>({});
   const [loading, setLoading] = React.useState(true);
   const [syncing, setSyncing] = React.useState(false);
   const [savingP, setSavingP] = React.useState<string | null>(null);
@@ -80,12 +84,15 @@ export function ProfileCodingProfiles() {
         if (r.data?.success) {
           const map: Record<string, Profile> = {};
           const d: Record<string, string> = {};
+          const n: Record<string, string> = {};
           for (const p of r.data.data as Profile[]) {
             map[p.platform] = p;
             d[p.platform] = p.handle;
+            if (p.typed_value != null) n[p.platform] = String(p.typed_value);
           }
           setProfiles(map);
           setDrafts(d);
+          setNumbers(n);
         }
       })
       .catch(() => {})
@@ -114,11 +121,11 @@ export function ProfileCodingProfiles() {
   const saveHandle = async (platform: string) => {
     setSavingP(platform);
     try {
-      await api.put("/api/profiles/me", { platform, handle: drafts[platform] || "" });
+      await api.put("/api/profiles/me", { platform, handle: drafts[platform] || "", ...(META[platform]?.unit && (numbers[platform] ?? "") !== "" ? { value: numbers[platform] } : {}) });
       await loadMine();
       showToast((drafts[platform] || "").trim() ? "Saved" : "Removed");
-    } catch {
-      showToast("Save failed", { severity: "error" });
+    } catch (e) {
+      showToast(apiErrorMessage(e, "Save failed"), { severity: "error" });
     } finally {
       setSavingP(null);
     }
@@ -156,7 +163,7 @@ export function ProfileCodingProfiles() {
                 Your accounts
               </Typography>
               <Typography variant="caption" color="text.secondary">
-                Codeforces, LeetCode and GitHub sync live and count towards your score; others are stored as links.
+                LeetCode, Codeforces and GitHub are read automatically. For CodeChef, HackerRank, InterviewBit and GeeksforGeeks you type your number: it counts at half until your HOD or Admin checks it. Your best four platforms make your score.
               </Typography>
             </Box>
             <Button size="small" variant="contained" startIcon={<RefreshOutlinedIcon />} onClick={sync} disabled={syncing}>
@@ -182,7 +189,7 @@ export function ProfileCodingProfiles() {
                         {m.label}
                       </Typography>
                       <Typography variant="caption" sx={{ textTransform: "uppercase", letterSpacing: "0.04em", color: m.live ? "success.main" : "text.secondary" }}>
-                        {m.live ? "auto-sync" : "link only"}
+                        {m.live ? "auto-sync" : "you type it"}
                       </Typography>
                     </Box>
                     <TextField
@@ -193,7 +200,17 @@ export function ProfileCodingProfiles() {
                       sx={{ flex: 1 }}
                       slotProps={{ htmlInput: { "aria-label": `${m.label} handle` } }}
                     />
-                    <Tooltip title="Save handle">
+                    {m.unit && (
+                      <TextField
+                        value={numbers[pf] ?? ""}
+                        onChange={(e) => setNumbers((d) => ({ ...d, [pf]: e.target.value.replace(/\D/g, "").slice(0, 6) }))}
+                        placeholder={m.unit}
+                        size="small"
+                        sx={{ width: 150 }}
+                        slotProps={{ htmlInput: { inputMode: "numeric", "aria-label": `${m.label} ${m.unit}` } }}
+                      />
+                    )}
+                    <Tooltip title="Save">
                       <span>
                         <IconButton onClick={() => saveHandle(pf)} disabled={savingP === pf} aria-label={`Save ${m.label} handle`}>
                           <SaveOutlinedIcon fontSize="small" />
@@ -204,7 +221,11 @@ export function ProfileCodingProfiles() {
                       {p ? (
                         <Stack direction="row" spacing={0.75} alignItems="center" justifyContent="flex-end">
                           <StatusIcon status={p.sync_status} />
-                          {m.live && p.sync_status === "ok" ? (
+                          {m.unit ? (
+                            <Typography variant="caption" color={p.typed_value == null ? "text.secondary" : p.score_verified ? "success.main" : "warning.main"} fontWeight={600}>
+                              {p.typed_value == null ? "number needed" : p.score_verified ? "verified" : "not verified"}
+                            </Typography>
+                          ) : m.live && p.sync_status === "ok" ? (
                             <Typography variant="caption" sx={{ fontFamily: "ui-monospace, monospace" }}>
                               {p.solved} solved{p.rating ? ` · ${p.rating}` : ""}
                             </Typography>

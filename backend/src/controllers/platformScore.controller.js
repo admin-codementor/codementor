@@ -3,6 +3,7 @@ const service = require('../services/platformScoreService');
 const settingsRepo = require('../repositories/platformSettingsRepository');
 const { validateThresholds } = require('../utils/platformScore');
 const { bumpVersion } = require('../utils/cache');
+const { logAction } = require('../middleware/audit');
 
 // @route GET /api/faculty/platform-scores?year=&section=
 exports.getScores = async (req, res) => {
@@ -43,6 +44,30 @@ exports.refresh = async (req, res) => {
   } catch (error) {
     console.error('Platform refresh error:', error);
     res.status(500).json({ success: false, error: 'Refresh failed.' });
+  }
+};
+
+// @route GET /api/faculty/platform-unverified   (HOD / admin) typed numbers waiting to be checked
+exports.listUnverified = async (req, res) => {
+  try {
+    res.json({ success: true, data: await service.listUnverified(req) });
+  } catch (error) {
+    console.error('Unverified list error:', error);
+    res.status(500).json({ success: false, error: 'Failed to load the numbers to check.' });
+  }
+};
+
+// @route POST /api/faculty/platform-verify   { user_id, platform, action: 'verify' | 'reject' }   (HOD / admin)
+exports.decide = async (req, res) => {
+  try {
+    const r = await service.decideTyped(req, { userId: req.body?.user_id, platform: req.body?.platform, action: req.body?.action });
+    if (!r.ok) return res.status(r.status).json({ success: false, error: r.error });
+    await bumpVersion('platform');
+    logAction(req, `coding.${r.action}`, `${r.student.name}: ${r.label}`);
+    res.json({ success: true, data: { action: r.action } });
+  } catch (error) {
+    console.error('Verify error:', error);
+    res.status(500).json({ success: false, error: 'Could not save that.' });
   }
 };
 
