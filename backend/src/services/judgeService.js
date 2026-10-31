@@ -17,7 +17,7 @@
 // multipliers) are unchanged from the old worker — only the control flow
 // (blocking loop -> resumable state machine) is different.
 
-const axios = require('axios');
+const { judgePost, judgeGet, breaker } = require('./judgeBreaker');
 const { toB64, fromB64 } = require('../utils/judge0Encoding');
 const { submitCheckerBatch, pollCheckerBatch } = require('../utils/checkerRunner');
 const problemRepo = require('../repositories/problemRepository');
@@ -48,6 +48,7 @@ const judge0Headers = () => {
 // Translate a low-level error (axios / network / Judge0 HTTP status) into a
 // clear, user-facing explanation. Ported unchanged from the old worker.
 function friendlyJudgeError(err) {
+  if (err?.code === 'JUDGE_OPEN') return 'The code checker is busy right now. Your work is safe. It will be checked as soon as the checker answers.';
   const status = err?.response?.status;
   const code = err?.code || err?.cause?.code || '';
   const msg = err?.message || '';
@@ -56,24 +57,24 @@ function friendlyJudgeError(err) {
     return 'The judge is busy (submission queue is full). It will retry automatically — please wait a moment.';
   }
   if (code === 'ECONNREFUSED' || /ECONNREFUSED/.test(msg)) {
-    return 'The code-execution engine (Judge0) is offline or still starting up. Please make sure the judge service is running, then try again.';
+    return 'The code checker is not available right now. Your code is safe in the editor. Try again in a minute, and tell your faculty if it keeps happening.';
   }
   if (code === 'ENOTFOUND' || code === 'EAI_AGAIN' || /ENOTFOUND|getaddrinfo/.test(msg)) {
-    return 'Cannot reach the judge service (host not found). Check that Judge0 is running and JUDGE0_URL is correct.';
+    return 'The code checker cannot be reached right now. Your code is safe in the editor. Try again in a minute, and tell your faculty if it keeps happening.';
   }
   if (code === 'ECONNABORTED' || /timeout/i.test(msg)) {
     return 'The judge took too long to respond — it may be overloaded, or a program ran too long. Please try again.';
   }
   if (status === 422) {
-    return 'The judge rejected this submission (invalid execution limits). This is a server configuration issue — please report it to the administrator.';
+    return 'The code checker could not accept this submission. This is a setup problem on our side, not yours. Please tell your faculty.';
   }
   if (status === 401 || status === 403) {
-    return 'The judge rejected the request (authentication failed). Check the JUDGE0_AUTH_TOKEN setting.';
+    return 'The code checker could not be used right now. This is a setup problem on our side, not yours. Please tell your faculty.';
   }
   if (/No test cases/i.test(msg)) {
     return 'This problem has no test cases configured yet. Please contact the faculty/administrator.';
   }
-  return `Judging failed: ${msg || 'unknown error'}. Please try again or contact the administrator.`;
+  return 'Checking your code failed. Please try again, and tell your faculty if it keeps happening.';
 }
 
 // Per-language multipliers — slower runtimes get proportionally more time/memory.
@@ -131,7 +132,7 @@ const harnessOf = (problem) => (problem?.harness && typeof problem.harness === '
 
 async function submitSingleAsync(source_code, language_id, stdin) {
   const m = getLangMultiplier(language_id);
-  const res = await axios.post(
+  const res = await judgePost(
     `${JUDGE0_URL}/submissions?base64_encoded=true&wait=false`,
     {
       source_code: toB64(source_code), language_id, stdin: toB64(stdin),
@@ -144,7 +145,7 @@ async function submitSingleAsync(source_code, language_id, stdin) {
 }
 
 async function checkSingleStatus(token) {
-  const res = await axios.get(
+  const res = await judgeGet(
     `${JUDGE0_URL}/submissions/${token}?base64_encoded=true`,
     { headers: judge0Headers(), timeout: REQUEST_TIMEOUT_MS }
   );
@@ -159,7 +160,7 @@ async function checkSingleStatus(token) {
 
 async function submitTestBatch(testCases, language_id) {
   const m = getLangMultiplier(language_id);
-  const res = await axios.post(
+  const res = await judgePost(
     `${JUDGE0_URL}/submissions/batch?base64_encoded=true`,
     {
       submissions: testCases.map((tc) => ({
@@ -177,7 +178,7 @@ async function submitTestBatch(testCases, language_id) {
 }
 
 async function checkTestBatch(tokens) {
-  const res = await axios.get(
+  const res = await judgeGet(
     `${JUDGE0_URL}/submissions/batch?tokens=${tokens.join(',')}&base64_encoded=true`,
     { headers: judge0Headers(), timeout: REQUEST_TIMEOUT_MS }
   );
@@ -498,6 +499,13 @@ async function finalize(jobId, job, acc, testCasesLength) {
 // report 'retrying' without re-attempting anything. ─────────────────────────
 
 async function handleStepError(jobId, doc, err) {
+  if (err?.code === 'JUDGE_OPEN') {
+    await judgeJobRepo.update(jobId, { resumeAt: err.retryAtMs || Date.now() + 5000 });
+    return { status: 'retrying', attempt: doc.attempts || 0, maxAttempts: MAX_ATTEMPTS, waiting_for_judge: true };
+  }
+  // Client-influenced text has control characters removed and is passed as an argument to a fixed format string.
+  const clean = (v) => String(v ?? '').replace(/[^\x20-\x7e]/g, '?').slice(0, 160);
+  console.error('judge step failed: %s %s', clean(jobId), clean(err?.code || err?.response?.status || err?.message || err));
   const attempts = (doc.attempts || 0) + 1;
   if (attempts >= MAX_ATTEMPTS) {
     const failure = { success: false, state: 'failed', error: friendlyJudgeError(err), code: err?.code || err?.response?.status || null };
@@ -768,4 +776,4 @@ async function advanceAfterChunk(jobId, doc, acc, testCasesLength) {
   return { status: 'pending' };
 }
 
-module.exports = { startJudging, pollJudging };
+module.exports = { startJudging, pollJudging, friendlyJudgeError, breaker };

@@ -1225,7 +1225,10 @@ export default function ProblemSolvingPage() {
         if (examSectionId) body.section_id = examSectionId;
 
         // In an exam the request carries this tab's session, so the server can tell the active window from a replaced one.
-        const res = await api.post<{ success: boolean; jobId?: string; error?: string }>("/api/submit", body, examId ? { headers: examHeaders(examId) } : undefined);
+        const res = await api.post<{ success: boolean; jobId?: string; error?: string }>("/api/submit", body, {
+          // One key per press: a retry after an answer that got lost returns the first submission instead of starting a second.
+          headers: { ...(examId ? examHeaders(examId) : {}), "Idempotency-Key": crypto.randomUUID() },
+        });
         if (!res.data.success || !res.data.jobId) {
           setVerdict({ success: false, state: "failed", error: res.data.error ?? "Submission failed" });
           setOutputOpen(true);

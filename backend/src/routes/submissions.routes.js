@@ -1,6 +1,7 @@
 const express = require('express');
 const { v4: uuidv4 } = require('uuid');
 const judgeService = require('../services/judgeService');
+const judgeJobRepo = require('../repositories/judgeJobRepository');
 const jwt = require('jsonwebtoken');
 const { submitBurstLimiter, submitSustainedLimiter } = require('../middleware/rateLimiter');
 const { enforceExamIP } = require('../middleware/cidrCheck');
@@ -93,11 +94,18 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
     }
 
     const user_id = extractUserId(req);
+    // One key means one submission: a double click, or a retry after an answer that got lost, returns the first job instead of starting a second.
+    const idemKey = /^[A-Za-z0-9-]{16,64}$/.test(String(req.get('idempotency-key') || '')) ? String(req.get('idempotency-key')) : null;
     // Allow the client to supply its own job id (and join the socket room for
     // it) BEFORE submitting, so a very fast job (e.g. a trivial sandbox run)
     // can't complete and emit its verdict into a room the client hasn't
     // joined yet. Falls back to a server-generated id for older callers.
-    const jobId = job_id || uuidv4();
+    let jobId = job_id || uuidv4();
+    if (idemKey && user_id) {
+      const claim = await judgeJobRepo.claimSubmitKey(user_id, idemKey, jobId);
+      if (claim.duplicate) return res.json({ success: true, jobId: claim.jobId, duplicate: true, message: 'Submission already queued' });
+      jobId = claim.jobId;
+    }
 
     try {
       await judgeService.startJudging(jobId, {
@@ -125,6 +133,14 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
       if (startErr.code === 'LANGUAGE_NOT_ALLOWED') {
         return res.status(400).json({ success: false, code: startErr.code, error: startErr.message });
       }
+      // Starting failed, so nothing was queued: free the key so that a retry is a fresh attempt.
+      if (idemKey && user_id) await judgeJobRepo.releaseSubmitKey(user_id, idemKey);
+      if (startErr.code === 'JUDGE_OPEN') {
+        return res.status(503).json({
+          success: false, code: 'JUDGE_BUSY', retry_after_ms: Math.max(1000, (startErr.retryAtMs || Date.now() + 5000) - Date.now()),
+          error: 'The code checker is busy right now. Your code is still in the editor. Try again in a few seconds.',
+        });
+      }
       console.error('Failed to start judging:', startErr.message);
       // Distinguish "Judge0 is offline" from "Judge0's queue is full" so the
       // user gets an accurate message (retrying won't help if it's offline).
@@ -134,7 +150,7 @@ router.post('/submit', submitBurstLimiter, submitSustainedLimiter, enforceExamIP
         queue_full: queueFull,
         error: queueFull
           ? 'The judge is currently overloaded. Please try again in a moment.'
-          : 'The judging service is unreachable. Please ensure Judge0 is running and try again.',
+          : 'The code checker is not available right now. Your code is still in the editor. Try again in a minute, and tell your faculty if it keeps happening.',
       });
     }
 

@@ -81,6 +81,7 @@ const rules = [
 
   // ── Any signed-in role ────────────────────────────────────────────────────────
   { path: '/api/student/**', roles: ANY, note: 'student pages. Handlers act on the caller\'s own id. Staff reuse PUT /profile (their own name) and the problem pages (preview), so this is not restricted to students yet' },
+  { methods: ['POST'], path: '/api/problem-reports', roles: ANY, note: 'a person sends "Report a problem" from an error screen; a few an hour' },
   { path: '/api/2fa/**', roles: ANY, note: 'each person manages their own two-factor sign-in' },
   { path: '/api/ai/**', roles: ANY, note: 'AI tutor, error explainer, code review; exam-locked inside' },
   { path: '/api/auth/set-password', roles: ANY, note: 'first-login password change' },

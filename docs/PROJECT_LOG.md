@@ -5,6 +5,24 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-10-31 (Sat), S7 errors and self-healing: a breaker in front of the judge, a reaper for stuck work, a daily self-check, "Report a problem"
+**Asked and decided:** a background reaper finishes stalled submissions and gives up after 15 minutes (listed for the Admin); a circuit breaker opens after 5 failures in 30 seconds for 20 seconds; the daily self-check may repair mentors that drifted from the class structure and placement applications whose drive is gone; people can send "Report a problem", kept with the reference and listed for the Admin.
+**Did (backend):**
+- `utils/circuitBreaker.js` (pure, 18 checks) wired in front of every judge call (`services/judgeBreaker.js`). Open: new work is answered at once with `JUDGE_BUSY` and a plain message; a job already running waits for the judge without using up one of its three attempts. Student-facing judge errors no longer mention Judge0, its address or its token.
+- Reaper (`services/judgeReaper.js`): a job untouched for 90 seconds is pushed on, so a closed tab no longer loses a result; open for 15 minutes is marked failed and put in `judgeDeadLetters`. Judge jobs now carry `createdAtMs` and `touchedAtMs`.
+- Idempotency: the editor sends a key with every Submit; the first claim wins (one job per person and key), a start that failed frees the key.
+- `services/maintenance.js`: the reaper every minute, the self-check and clean-up daily, each behind a lease (`utils/maintenanceRules.js`, 18 checks) so several API servers never run a task twice.
+- `services/selfCheck.js`: repairs drifted mentors and orphan applications (logged), reports given-up jobs and an open breaker, one broken check never hides the others; result stored and shown to the Admin.
+- `POST /api/problem-reports` (6 an hour), and for the Admin `/api/admin/health`, `/health/self-check`, `/problem-reports` (list, mark seen or resolved).
+**Did (screens):** an error screen inside the menu for each area (student, faculty, T&P, editor) with Try again, Home and Report; "Report this problem" on error screens that have a reference; an offline and back-online banner; retry of page data twice with a growing wait; the editor's Idempotency-Key; **System health** (judge connection, self-check with Run now, jobs given up on, problem reports).
+**Verified:** backend lint and offline checks (37 new end to end: breaker, waiting job, JUDGE_BUSY, keys, reaper, lease, self-check and its repairs, health, reports and their rate limit), route audit, `tsc`, and in a browser with the sandbox: System health (run the check, repairs shown), problem reports (listed, resolved), the offline banner.
+**Not verified:** the Report dialog and the in-menu error screen in a browser (nothing in the sandbox fails in a way that shows them; the routes are tested), a real Firestore (lease transactions, the new collections, the `in` query for open jobs), a real judge outage, a second API server running at once, a replay of the same Idempotency-Key over HTTP (the ten-second submission limit answers first; the claim rule is tested).
+**Not built:** retrying a save automatically after a network drop, restarting or alerting on a failed health check, repairing exam attempts or marks automatically (reported only), breakers around AI and outside coding platforms. See `docs/RESILIENCE.md`.
+**Next:** S8 HOD completion (`docs/HOD_CAMPUSTRACK_PLAN.md`), after its five questions are answered.
+**Branch:** `feat/s7-errors` (includes the Admin work of PR 82 until it is merged)
+
+---
+
 ## 2026-10-31 (Sat), S6 Admin: people, college settings, audit and sign-in history, instant lockout, AI switch and limit
 **Asked and decided:** new accounts get an emailed link to choose their own password; a disabled account is locked out at once; the Admin can change the department and section lists and the AI switch and daily limit; audit and sign-in history are kept one year, Admin only.
 **Did (backend):**

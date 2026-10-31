@@ -9,6 +9,10 @@ const adminRepo = require('../repositories/adminRepository');
 const mailService = require('./mailService');
 const accountGate = require('../middleware/accountGate');
 const R = require('../utils/adminRules');
+const judgeJobRepo = require('../repositories/judgeJobRepository');
+const selfCheck = require('./selfCheck');
+const reports = require('./problemReportService');
+const { breaker } = require('./judgeBreaker');
 
 class AdminError extends Error {
   constructor(status, code, message) { super(message); this.status = status; this.code = code; }
@@ -312,7 +316,30 @@ async function overview(actor) {
   };
 }
 
+// ── health: the judge connection, the last self-check, jobs given up on, and problem reports ──
+async function health(actor) {
+  assertAdmin(actor);
+  const [dead, last, open] = await Promise.all([
+    judgeJobRepo.listDeadLetters(Date.now() - 86400000, 20).catch(() => []),
+    selfCheck.last().catch(() => null),
+    reports.list('open').catch(() => []),
+  ]);
+  return {
+    judge: breaker.snapshot(),
+    self_check: last,
+    given_up_24h: dead.map((d) => ({ job_id: d.jobId, at_ms: d.atMs, reason: d.reason, age_ms: d.ageMs, user_id: d.userId || null, problem_id: d.problemId || null, exam_id: d.examId || null })),
+    open_reports: open.length,
+  };
+}
+async function runSelfCheck(actor) {
+  assertAdmin(actor);
+  return selfCheck.runAll();
+}
+const listReports = (actor, status) => { assertAdmin(actor); return reports.list(status); };
+const setReportStatus = (actor, id, status) => { assertAdmin(actor); return reports.setStatus(actor.id, id, status); };
+
 module.exports = {
+  health, runSelfCheck, listReports, setReportStatus,
   AdminError, listPeople, getPerson, createAccount, sendResetLink, setDisabled, changeRole, changeDepartment,
   getSettings, saveSettings, clearSettings, clearPeople, listAudit, exportAudit, recentLogins, overview, maybePrune,
 };
