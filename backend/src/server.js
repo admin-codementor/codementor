@@ -4,11 +4,13 @@
 const app = require('./app');
 const { checkJudge0Health } = require('./config/judge0Health');
 const { applyServerTimeouts } = require('./utils/serverTimeouts');
+const accountGate = require('./middleware/accountGate');
 
 const PORT = process.env.PORT || 3001;
 
 const server = app.listen(PORT, async () => {
   console.log(`🚀 Backend server running on http://localhost:${PORT}`);
+  accountGate.start(); // keeps the list of disabled accounts fresh
   await checkJudge0Health();
 });
 applyServerTimeouts(server);
