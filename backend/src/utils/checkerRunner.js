@@ -41,7 +41,7 @@
 // the batch has a terminal status) — the caller is responsible for calling it
 // again on a later request/poll rather than looping here.
 
-const axios = require('axios');
+const { judgePost, judgeGet } = require('../services/judgeBreaker');
 const { toB64, fromB64 } = require('./judge0Encoding');
 
 const JUDGE0_URL = process.env.JUDGE0_URL || 'http://localhost:2358';
@@ -125,7 +125,7 @@ function interpretCheckerResult(r) {
  * @returns {Promise<string[]>} Judge0 tokens, in the same order as `items`.
  */
 exports.submitCheckerBatch = async function submitCheckerBatch(items) {
-  const res = await axios.post(
+  const res = await judgePost(
     `${JUDGE0_URL}/submissions/batch?base64_encoded=true`,
     {
       submissions: items.map(({ checkerCode, checkerLanguageId, input, expected, actual }) => ({
@@ -151,7 +151,7 @@ exports.submitCheckerBatch = async function submitCheckerBatch(items) {
  * @returns {Promise<null|Array<{accepted: boolean, message: string}>>}
  */
 exports.pollCheckerBatch = async function pollCheckerBatch(tokens) {
-  const res = await axios.get(
+  const res = await judgeGet(
     `${JUDGE0_URL}/submissions/batch?tokens=${tokens.join(',')}&base64_encoded=true`,
     { headers: judge0Headers(), timeout: REQUEST_TIMEOUT_MS }
   );

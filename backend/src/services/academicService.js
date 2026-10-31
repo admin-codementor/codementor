@@ -91,6 +91,20 @@ async function syncClass(classId, studentsById) {
   return { positions, mentorsUpdated };
 }
 
+/** Re-derives positions and mentors for every class of the active term. The daily self-check uses it to put right anything that drifted. */
+async function syncActiveTerm() {
+  const term = await academicRepo.getActiveTerm();
+  if (!term) return { classes: 0, positions: 0, mentorsUpdated: 0 };
+  const students = await loadStudents();
+  let positions = 0; let mentorsUpdated = 0;
+  const classes = await academicRepo.listClasses(term.id);
+  for (const c of classes) {
+    const r = await syncClass(c.id, students);
+    positions += r.positions; mentorsUpdated += r.mentorsUpdated;
+  }
+  return { classes: classes.length, positions, mentorsUpdated };
+}
+
 /**
  * Build the classes of one department for a term from each student's department, year and section, and enrol everyone who is not in
  * a class yet. Safe to run again: existing classes are not touched, and students already placed (by hand or by upload) stay where they are.
@@ -403,6 +417,7 @@ async function consistencyReport(actor, { termId, department }) {
 }
 
 module.exports = {
+  syncActiveTerm,
   AcademicError, createTerm, activateTerm, generateClasses, importPlacements, moveStudent, createElective, setClassTeacher, setSubMentors,
   listStaff, classDirectory, classRoster, assignTeacher, reallocate, endAssignment, requestAccess, listRequests, decideRequest, myClass, listTerms, listClassesView, consistencyReport, syncClass,
 };

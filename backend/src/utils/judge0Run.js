@@ -1,4 +1,4 @@
-const axios = require('axios');
+const { judgePost } = require('../services/judgeBreaker');
 const { toB64, fromB64 } = require('./judge0Encoding');
 
 const JUDGE0_URL = process.env.JUDGE0_URL || 'http://localhost:2358';
@@ -11,7 +11,7 @@ const headers = () => {
 // Run one program on Judge0 (synchronous wait). Returns { ok, stdout, stderr, message, statusId }.
 async function runOnJudge0({ source_code, language_id, stdin = '', cpu = 5, wall = 10 }) {
   try {
-    const res = await axios.post(
+    const res = await judgePost(
       `${JUDGE0_URL}/submissions?base64_encoded=true&wait=true`,
       {
         source_code: toB64(source_code), language_id, stdin: toB64(stdin),
