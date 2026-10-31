@@ -24,6 +24,7 @@ const ROLES = ['student', 'faculty', 'hod', 'admin', 'tnp'];
 const rules = [
   // ── Admin only ────────────────────────────────────────────────────────────────
   { path: '/api/faculty/permissions/**', roles: ['admin'], note: 'who holds which staff permission' },
+  { path: '/api/admin/**', roles: ['admin'], note: 'people, college settings, the audit log and login history, the college overview' },
   { path: '/api/faculty/audit-logs', roles: ['admin'], note: 'the audit trail' },
   { path: '/api/faculty/faculty-list', roles: ['admin'], note: 'all staff accounts' },
   { path: '/api/faculty/analytics', roles: ['admin'], note: 'college-wide class analytics' },
@@ -151,6 +152,8 @@ const publicRoutes = [
 
 // Invariants: true however the rules above are edited. Each is checked against the REAL routes.
 const invariants = [
+  { id: 'admin-area-is-admin-only', text: 'Everything under /api/admin, whatever the method, is callable by an Admin and nobody else.',
+    appliesTo: (r) => r.path.startsWith('/api/admin'), exactRoles: ['admin'] },
   { id: 'placement-data-never-open-to-faculty', text: 'Placement routes (CGPA, backlogs, offers) are never callable by a faculty member.',
     appliesTo: (r) => r.path.startsWith('/api/placement'), forbidRole: 'faculty' },
   { id: 'placement-office-routes-never-open-to-students', text: 'Only /api/placement/me is a student route; nothing else under /api/placement is callable by a student.',

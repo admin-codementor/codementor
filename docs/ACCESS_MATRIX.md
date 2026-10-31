@@ -13,6 +13,7 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | Path | Methods | Who may call it | Why |
 |---|---|---|---|
 | `/api/faculty/permissions/**` | all | admin | who holds which staff permission |
+| `/api/admin/**` | all | admin | people, college settings, the audit log and login history, the college overview |
 | `/api/faculty/audit-logs` | all | admin | the audit trail |
 | `/api/faculty/faculty-list` | all | admin | all staff accounts |
 | `/api/faculty/analytics` | all | admin | college-wide class analytics |
@@ -124,6 +125,7 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 
 ## Invariants (true however the rules are edited)
 
+- **admin-area-is-admin-only**: Everything under /api/admin, whatever the method, is callable by an Admin and nobody else.
 - **placement-data-never-open-to-faculty**: Placement routes (CGPA, backlogs, offers) are never callable by a faculty member.
 - **placement-office-routes-never-open-to-students**: Only /api/placement/me is a student route; nothing else under /api/placement is callable by a student.
 - **placement-changes-need-the-office**: Anything under /api/placement that changes data or exports, other than a student's own apply and withdraw, is only for T&P and the Admin.

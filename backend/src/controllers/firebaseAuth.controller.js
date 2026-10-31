@@ -6,6 +6,7 @@ const { resolvePermissions } = require('../middleware/permissions');
 
 // Token creation lives in utils/tokens.js (one place, one lifetime, tokenVersion).
 const { generateTokens } = require('../utils/tokens');
+const loginHistory = require('../services/loginHistory');
 
 // Faculty accounts are never self-service.
 //
@@ -119,6 +120,10 @@ exports.firebaseLogin = async (req, res) => {
 
     // Firebase already verified identity — 2FA gate and last-login bookkeeping
     // live entirely in Firestore now.
+    if (user.disabled === true) {
+      loginHistory.record(req, user, 'blocked_disabled');
+      return res.status(403).json({ success: false, code: 'ACCOUNT_DISABLED', error: 'This account has been disabled. Contact your college administrator.' });
+    }
     const totpEnabled = user.totpEnabled === true;
 
     await userRepo.update(user.id, user.role, { lastLoginAt: new Date() });
@@ -127,6 +132,7 @@ exports.firebaseLogin = async (req, res) => {
       return res.json({ success: true, twofa_required: true, user_id: user.id });
     }
 
+    loginHistory.record(req, user, 'login');
     const tokens = generateTokens(user);
 
     return res.json({
