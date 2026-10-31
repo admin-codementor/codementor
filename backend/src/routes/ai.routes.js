@@ -4,6 +4,7 @@ const router = express.Router();
 const authMiddleware = require('../middleware/auth.middleware');
 const { blockDuringExam } = require('../middleware/examLock');
 const aiController = require('../controllers/ai.controller');
+const aiAccess = require('../middleware/aiAccess');
 
 const aiLimiter = createLimiter({
   windowMs: 60 * 1000,
@@ -16,9 +17,9 @@ const aiLimiter = createLimiter({
 // Every AI endpoint is exam-locked (finding F26). The history route is included
 // deliberately: replaying an earlier conversation during an exam is the same leak
 // as starting a new one.
-router.post('/tutor', authMiddleware.protect, aiLimiter, blockDuringExam, aiController.askTutor);
+router.post('/tutor', authMiddleware.protect, aiLimiter, aiAccess, blockDuringExam, aiController.askTutor);
 router.get('/tutor/:problemId', authMiddleware.protect, blockDuringExam, aiController.getHistory);
-router.post('/explain-error', authMiddleware.protect, aiLimiter, blockDuringExam, aiController.explainError);
-router.post('/review-code', authMiddleware.protect, aiLimiter, blockDuringExam, aiController.reviewCode);
+router.post('/explain-error', authMiddleware.protect, aiLimiter, aiAccess, blockDuringExam, aiController.explainError);
+router.post('/review-code', authMiddleware.protect, aiLimiter, aiAccess, blockDuringExam, aiController.reviewCode);
 
 module.exports = router;

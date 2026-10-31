@@ -7,6 +7,7 @@ const { resolvePermissions } = require('../middleware/permissions');
 // Token creation lives in utils/tokens.js (one place, one lifetime, tokenVersion).
 const { generateTokens } = require('../utils/tokens');
 const { mayChangeTwofa } = require('../utils/twofaGate');
+const loginHistory = require('../services/loginHistory');
 
 const ISSUER = 'CodeMentor';
 
@@ -159,10 +160,16 @@ exports.verify2FA = async (req, res) => {
       window: 1,
     });
 
+    if (user.disabled === true) {
+      loginHistory.record(req, user, 'blocked_disabled');
+      return res.status(403).json({ success: false, code: 'ACCOUNT_DISABLED', error: 'This account has been disabled. Contact your college administrator.' });
+    }
     if (!verified) {
+      loginHistory.record(req, user, 'twofa_failed');
       return res.status(401).json({ success: false, error: 'Invalid verification code' });
     }
 
+    loginHistory.record(req, user, 'login');
     const tokens = generateTokens(user);
 
     return res.json({
