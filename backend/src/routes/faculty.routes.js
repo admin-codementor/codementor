@@ -60,10 +60,15 @@ router.get('/alumni', authorize('hod', 'admin'), alumniController.getAlumni);
 router.put('/alumni/graduation', authorize('hod', 'admin'), alumniController.setGraduation);
 router.get('/mentors', authorize('hod', 'admin'), mentorController.listMentors);
 router.put('/mentors/assign', authorize('hod', 'admin'), mentorController.assignMentees);
-router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, aiAccess, facultyController.getDepartmentInsights);
+router.post('/department/insights', authorize('hod', 'admin'), insightsLimiter, aiAccess.soft, facultyController.getDepartmentInsights);
 // Labs: the department's classes and assignment completion; read-only, HOD/admin, department from the token.
 router.get('/labs', authorize('hod', 'admin'), facultyController.getLabs);
 router.get('/department/activity', authorize('hod', 'admin'), facultyController.getDepartmentActivity);
+// The audited department export, and the batches (admission years) present, for HOD and Admin.
+const exportLimiter = createLimiter({ windowMs: 10 * 60 * 1000, max: 12, prefix: 'department-export', keyGenerator: (req) => `user:${req.user?.id || req.ip}`, message: 'Too many exports in a short time. Wait a few minutes.' });
+router.get('/department-export/fields', authorize('hod', 'admin'), require('../controllers/departmentExport.controller').fields);
+router.post('/department-export', authorize('hod', 'admin'), exportLimiter, require('../controllers/departmentExport.controller').exportCsv);
+router.get('/batches', authorize('hod', 'admin'), require('../controllers/departmentExport.controller').batches);
 router.get('/department-leaderboard', authorize('hod', 'admin'), facultyController.getDepartmentLeaderboard);
 // Department-wide comparisons: for a HOD or an Admin (a faculty member sees their own classes through /analytics/cohort and the dashboard).
 router.get('/cohort-topics', authorize('hod', 'admin'), facultyController.getCohortTopics);
@@ -88,6 +93,9 @@ router.post('/problems/:id/random-tests',
 );
 
 // ── Student data ─────────────────────────────────────────────────────────────
+// What every status word means (generated from the constants the code uses). Every staff role may read it.
+router.get('/definitions', (req, res) => res.json({ success: true, data: require('../utils/definitions').definitions() }));
+
 router.get('/students',
   requirePermission('manage_students'),
   facultyController.getStudents
@@ -166,6 +174,8 @@ router.post('/nudges', require('../controllers/nudge.controller').send);
 router.get('/platform-scores', platformScoreController.getScores);
 router.put('/platform-thresholds', authorize('hod', 'admin'), platformScoreController.putThresholds);
 router.post('/platform-scores/refresh', authorize('hod', 'admin'), platformScoreController.refresh);
+router.get('/platform-unverified', authorize('hod', 'admin'), platformScoreController.listUnverified);
+router.post('/platform-verify', authorize('hod', 'admin'), platformScoreController.decide);
 router.get('/reports/daily', reportsController.getDaily);
 router.get('/reports/late/assignments', reportsController.listLateCandidates);
 router.get('/reports/late', reportsController.getLate);

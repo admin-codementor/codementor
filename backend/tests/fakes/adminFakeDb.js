@@ -9,13 +9,16 @@ const { firebaseAuth } = require('../../src/config/firebaseAdmin');
 const clone = (v) => (v == null ? v : structuredClone(v));
 const users = new Map();
 const add = (u) => users.set(u.id, { tokenVersion: 0, ...u });
-add({ id: 'adm1', role: 'admin', name: 'Admin One', email: 'adm1@c.test', totpEnabled: true, lastLoginAt: new Date() });
-add({ id: 'adm2', role: 'admin', name: 'Admin Two', email: 'adm2@c.test', totpEnabled: true });
-add({ id: 'f1', role: 'faculty', name: 'Faculty One', email: 'f1@c.test', department: 'CSE', lastLoginAt: new Date() });
-add({ id: 'h1', role: 'hod', name: 'HOD CSE', email: 'h1@c.test', department: 'CSE' });
-add({ id: 'tp1', role: 'tnp', name: 'T&P One', email: 'tp1@c.test', totpEnabled: false });
-add({ id: 's1', role: 'student', name: 'Student One', email: 's1@c.test', rollNo: '22CS001', department: 'CSE', year: 4, lastLoginAt: new Date() });
-add({ id: 's2', role: 'student', name: 'Student Two', email: 's2@c.test', rollNo: '22EC001', department: 'ECE', year: 4 });
+const seed = () => {
+  add({ id: 'adm1', role: 'admin', name: 'Admin One', email: 'adm1@c.test', totpEnabled: true, lastLoginAt: new Date() });
+  add({ id: 'adm2', role: 'admin', name: 'Admin Two', email: 'adm2@c.test', totpEnabled: true });
+  add({ id: 'f1', role: 'faculty', name: 'Faculty One', email: 'f1@c.test', department: 'CSE', lastLoginAt: new Date() });
+  add({ id: 'h1', role: 'hod', name: 'HOD CSE', email: 'h1@c.test', department: 'CSE' });
+  add({ id: 'tp1', role: 'tnp', name: 'T&P One', email: 'tp1@c.test', totpEnabled: false });
+  add({ id: 's1', role: 'student', name: 'Student One', email: 's1@c.test', rollNo: '22CS001', department: 'CSE', year: 4, lastLoginAt: new Date() });
+  add({ id: 's2', role: 'student', name: 'Student Two', email: 's2@c.test', rollNo: '22EC001', department: 'ECE', year: 4 });
+};
+seed();
 
 const state = { audit: [], mails: [], mailOn: true, settings: null, aiUse: new Map(), logins: [], authUsers: new Map(), links: 0, created: [], deleted: [], failProfile: false };
 
@@ -59,4 +62,10 @@ function install() {
   });
 }
 
-module.exports = { users, add, state, install };
+/** Puts everything back as it was at the start: the seed people and empty storage. Each test file calls this first, because test files share this module. */
+function reset() {
+  users.clear(); seed();
+  Object.assign(state, { audit: [], mails: [], mailOn: true, settings: null, aiUse: new Map(), logins: [], authUsers: new Map(), links: 0, created: [], deleted: [], failProfile: false, prune: undefined });
+}
+
+module.exports = { users, add, state, install, reset };

@@ -20,7 +20,7 @@ import { PageHeader } from "@/components/ui/PageHeader";
 import { SectionCard } from "@/components/ui/SectionCard";
 import { EmptyState } from "@/components/ui/States";
 import {
-  ChartCard, ChartRow, ExportButton, KpiRow, KpiTile, Leaderboard, StackedBars, StudentFunnel, ThresholdsDialog, TrendLines, toCsv,
+  ChartCard, ChartRow, KpiRow, KpiTile, Leaderboard, StackedBars, StudentFunnel, ThresholdsDialog, TrendLines,
 } from "@/components/analytics";
 import type { FunnelBucket } from "@/components/analytics";
 import { RankingsTable, WeeklyProgressTable, type DeptStudent } from "@/components/faculty/DepartmentTables";
@@ -31,6 +31,9 @@ import { CodingScoreTab } from "@/components/faculty/CodingScoreTab";
 import { MentorsTab } from "@/components/faculty/MentorsTab";
 import { PortfolioTab } from "@/components/faculty/PortfolioTab";
 import { PlacementTab } from "@/components/faculty/PlacementTab";
+import { AttentionWidget, useInsights } from "@/components/faculty/dashboard/Widgets";
+import { RemindDialog } from "@/components/faculty/RemindDialog";
+import { DepartmentExportButton } from "@/components/faculty/DepartmentExportDialog";
 import { AlumniTab } from "@/components/faculty/AlumniTab";
 import { LabsTab } from "@/components/faculty/LabsTab";
 import { radius } from "@/theme/tokens";
@@ -64,6 +67,26 @@ const BASELINES: { value: Baseline; label: string }[] = [
 
 const SEVERITY: Record<string, "error" | "warning" | "info"> = { high: "error", medium: "warning", low: "info" };
 
+/** Who needs the HOD today: students who never started, went quiet or are stuck, with names and roll numbers, and one button to remind them. */
+function NeedsAttention() {
+  const insights = useInsights("all");
+  const [remind, setRemind] = React.useState(false);
+  const d = insights.data;
+  const ids = d ? [...new Set([...d.notStarted.items, ...d.quiet.items, ...d.stuck.items].map((p) => p.id))].slice(0, 100) : [];
+  return (
+    <SectionCard
+      title="Needs attention"
+      action={d && ids.length > 0 ? <Button size="small" variant="outlined" onClick={() => setRemind(true)}>Remind these {ids.length}</Button> : undefined}
+    >
+      <Typography variant="caption" color="text.secondary" sx={{ display: "block", mb: 1.5 }}>
+        The whole department. The words are explained on the Definitions page.
+      </Typography>
+      <AttentionWidget query={insights} />
+      <RemindDialog open={remind} onClose={() => setRemind(false)} studentIds={ids} defaultMessage="You have not been practising lately. Open CodeMentor and solve one problem today." what="students who need attention" />
+    </SectionCard>
+  );
+}
+
 export default function DepartmentDashboardPage() {
   const router = useRouter();
   const [section, setSection] = React.useState("");
@@ -81,22 +104,12 @@ export default function DepartmentDashboardPage() {
   });
   const d = query.data;
 
-  const csvRows = React.useMemo(
-    () => (d?.students ?? []).map((s) => ({
-      name: s.name, roll_no: s.roll_no ?? "", section: s.section ?? "", year: s.year ?? "",
-      state: s.state, flag: s.flag, badge: s.badge, solved: s.solved, submissions: s.subs,
-      accuracy_pct: s.ac_rate, active_days: s.active_days, last_active: s.last_active ?? "",
-      reasons: s.reasons.join("; "),
-    })),
-    [d],
-  );
-
   return (
     <Stack>
       <PageHeader
         title="Department dashboard"
         subtitle={d ? `${d.scope.department ?? "All departments"} · ${d.totals.students} students in this view` : undefined}
-        actions={d ? <ExportButton filename="department-students.csv" csv={() => toCsv(csvRows)} disabled={csvRows.length === 0} /> : undefined}
+        actions={d ? <DepartmentExportButton section={section} year={year} /> : undefined}
       />
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
@@ -190,6 +203,8 @@ export default function DepartmentDashboardPage() {
           </Stack>
 
           <Box sx={{ mb: 3 }}><DepartmentInsights section={section} year={year} /></Box>
+
+          <Box sx={{ mb: 3 }}><NeedsAttention /></Box>
 
           <StudentFunnel funnel={d.funnel} total={d.totals.students} />
 

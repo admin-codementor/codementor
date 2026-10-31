@@ -6,9 +6,10 @@ const { loadAppWithMounts } = require('../routeAudit');
 const adminService = require('../../src/services/adminService');
 const accountGate = require('../../src/middleware/accountGate');
 
-const { users, state, install } = require('../fakes/adminFakeDb');
+const { users, state, install, reset } = require('../fakes/adminFakeDb');
 
 module.exports = async function (s) {
+  reset();
   install();
   accountGate.reset();
   adminService.clearPeople(); adminService.clearSettings();
@@ -143,10 +144,13 @@ module.exports = async function (s) {
     await call('PUT', '/api/admin/settings', 'adm1', { ai: { enabled: false } });
     const off1 = await call('POST', '/api/ai/tutor', 's2', {});
     const offCareer = await call('POST', '/api/career/interview/next', 's1', {});
-    const offInsights = await call('POST', '/api/faculty/department/insights', 'f1', {});
     s.check('with AI switched off the tutor says so in plain words', off1.status === 503 && off1.code === 'AI_OFF' && /switched off/.test(off1.json.error), JSON.stringify(off1.json));
     s.check('and so does the mock interview', offCareer.code === 'AI_OFF', JSON.stringify(offCareer.json));
-    s.check('and so does the HOD department insight', offInsights.code === 'AI_OFF', JSON.stringify(offInsights.json));
+    // The HOD department summary does not refuse when AI is off: the soft gate records why and the summary is written by rules.
+    const soft = { user: { id: 'f1', role: 'hod' } };
+    let softNext = false;
+    await require('../../src/middleware/aiAccess').soft(soft, {}, () => { softNext = true; });
+    s.check('the soft gate never refuses: it records why AI is off and lets the request on', softNext === true && soft.aiRefusal?.code === 'AI_OFF' && /switched off/.test(soft.aiRefusal.error));
     await call('PUT', '/api/admin/settings', 'adm1', { ai: { enabled: true, dailyLimit: null } });
     s.check('switched back on, the student is let through again', (await gate('s1')).next === true);
 

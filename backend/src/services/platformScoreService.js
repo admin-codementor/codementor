@@ -9,7 +9,8 @@ const analytics = require('./analyticsService');
 const { scopedStudents } = require('./courseAnalyticsService');
 const { classLabel } = require('../utils/students');
 const { buildScore, describeFormula, DEFAULT_THRESHOLDS, SCORED, LABEL } = require('../utils/platformScore');
-const { LIVE_PLATFORMS, fetchPlatform } = require('../utils/codingPlatforms');
+const { LIVE_PLATFORMS, TYPED_PLATFORMS, TYPED_META, fetchPlatform } = require('../utils/codingPlatforms');
+const { scopeDept } = require('../middleware/role.middleware');
 
 const TTL = 120;
 const VERSION = 1;
@@ -77,6 +78,41 @@ exports.getScores = async (req, { year, section } = {}) => {
 
 /** Every student's score, for the Training & Placement export. Cached like the staff table. */
 exports.collegeScores = () => cached(`platform-scores:v${VERSION}:college`, TTL, () => compute({ scope: { ownClasses: false, dept: null, memberIds: null } }));
+
+/**
+ * Typed numbers waiting for a HOD or Admin to check them against the student's profile. A HOD sees only their own department's students.
+ */
+exports.listUnverified = async (req) => {
+  const dept = scopeDept(req);
+  const [studentsMap, profiles] = await Promise.all([userRepo.getMapByRole('student'), codingProfileRepo.listAll()]);
+  return profiles
+    .filter((p) => TYPED_PLATFORMS.includes(p.platform) && p.typedValue != null && p.scoreVerified !== true)
+    .map((p) => ({ p, s: studentsMap.get(p.userId) }))
+    .filter(({ s }) => s && s.graduated !== true && (dept === null || (s.department ?? null) === dept))
+    .map(({ p, s }) => ({
+      user_id: s.id, name: s.name || 'Unknown', roll_no: s.rollNo || null, department: s.department || null, section: s.section || null, year: s.year ?? null,
+      platform: p.platform, label: TYPED_META[p.platform].label, unit: TYPED_META[p.platform].unit, handle: p.handle || '', value: p.typedValue, typed_at_ms: p.typedAtMs || null,
+    }))
+    .sort((a, b) => (a.typed_at_ms || 0) - (b.typed_at_ms || 0));
+};
+
+/**
+ * A HOD or Admin checks one typed number. "verify" makes it count in full; "reject" removes the number so the student must type it again.
+ * @returns {{ok: true, action: string} | {ok: false, status: number, error: string}}
+ */
+exports.decideTyped = async (req, { userId, platform, action }) => {
+  if (!TYPED_PLATFORMS.includes(platform)) return { ok: false, status: 400, error: 'That platform has no typed number.' };
+  if (action !== 'verify' && action !== 'reject') return { ok: false, status: 400, error: 'Choose verify or reject.' };
+  const student = await userRepo.getById(String(userId || ''), 'student');
+  const dept = scopeDept(req);
+  // Out of scope looks exactly like missing, so a HOD cannot find out who is in another department.
+  if (!student || (dept !== null && (student.department ?? null) !== dept)) return { ok: false, status: 404, error: 'Student not found.' };
+  const profile = (await codingProfileRepo.listByUser(student.id)).find((x) => x.platform === platform);
+  if (!profile || profile.typedValue == null) return { ok: false, status: 409, error: 'This student has no typed number for that platform now. Reload the list.' };
+  if (action === 'verify') await codingProfileRepo.upsert(student.id, platform, { scoreVerified: true, scoreVerifiedBy: req.user.id, scoreVerifiedAtMs: Date.now() });
+  else await codingProfileRepo.upsert(student.id, platform, { typedValue: null, scoreVerified: false, scoreVerifiedBy: null });
+  return { ok: true, action, student: { id: student.id, name: student.name || 'Unknown' }, label: TYPED_META[platform].label };
+};
 
 /** One student's own score (for their profile page). */
 exports.getMine = async (userId) => {

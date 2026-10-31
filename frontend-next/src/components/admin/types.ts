@@ -11,6 +11,7 @@ export const NEEDS_DEPARTMENT: string[] = ["faculty", "hod"];
 export interface Person {
   id: string; name: string; email: string | null; role: string; department: string | null; rollNo: string | null; year: number | null; section: string | null;
   disabled: boolean; twofa: boolean; last_login_ms: number | null; test_account: boolean;
+  batch: string | null; batch_derived: boolean; admission_year: number | null;
 }
 export interface PeoplePage { total: number; page: number; pages: number; rows: Person[] }
 export interface LoginEvent { at_ms: number; kind: "login" | "twofa_failed" | "blocked_disabled"; ip: string | null; agent: string | null }

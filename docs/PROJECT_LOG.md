@@ -5,6 +5,23 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-11-01 (Sun), S8 HOD completion, part A: one set of words, honest AI summary, coding score for all seven platforms, batch, audited export
+**Asked and decided:** add a batch field; all seven platforms on the coding-profiles page count (the four the server cannot read are typed by the student, marked not verified, counted at half weight until a HOD or Admin verifies); names and roll numbers shown straight away on the needs-attention list; HOD and Admin may export; a rules-based summary whenever AI is off or failing.
+**Did (backend):**
+- Coding score (`utils/platformScore.js`): CodeMentor plus seven platforms (LeetCode, Codeforces and GitHub read by the server; CodeChef, HackerRank, InterviewBit, GeeksforGeeks typed). The overall is the average of a student's **best four** platform scores, so nobody is marked down for a site they do not use, linking more never lowers a score, and the scale is the one used before. A typed number counts at 50% until verified; typing a new number or changing the handle clears the verification; the leaderboard ignores unverified numbers. `GET /api/faculty/platform-unverified` and `POST /api/faculty/platform-verify` (HOD and Admin; a HOD only their own department, out of scope looks like "not found").
+- `utils/definitions.js` and `GET /api/faculty/definitions`: every status word defined from the constants the code uses; the Activity tab's "At risk" renamed "Not active".
+- `aiAccess.soft` and `departmentInsightsService`: when AI is off, over its daily limit or failing, the HOD gets the department's own "what to look at" list shaped like an AI answer, marked `source: rules` with the reason; the fallback is not cached.
+- `utils/batch.js`: batch from a stored admission year, else worked out from the year of study and the date (the academic year starts in June); Admin sets one, or fills the missing ones; the People list shows and filters it.
+- `POST /api/faculty/department-export` (HOD and Admin, fixed fields, audited, formula-safe) replaces the department page's unaudited client-side file.
+**Did (screens):** What the words mean; the HOD's Needs attention panel with a reminder button; the student's typed-number inputs with "not verified" or "verified"; a "Numbers to check" dialog in the Coding score tab; the coding score table for all platforms; a department Export dialog (fields, batch); People with Batch and "Fill missing batches".
+**Verified:** backend lint and offline checks (rules for the score, batch, export and definitions; 25 end to end for the typed numbers, verification scope, leaderboard, batch and the export field list), route audit, `tsc`, frontend lint on changed files, and in a browser with the sandbox: the definitions, People with batch, a student's batch editor, Fill missing batches.
+**Not verified:** the Coding score tab and the typed-number dialog and the student's profile form in a browser (they need data the sandbox does not have; the API is tested), the department export over HTTP (its parts are tested), the rules-written summary in the page, a real Firestore.
+**Not built (part B):** department practice analytics (heatmap, topic coverage, company readiness), course analytics by section, mentor load and response, the HOD placement views, "online now", the batch as a filter on every department tab, and a HOD People page with class and mentor.
+**Next:** S8 part B.
+**Branch:** `feat/s8-hod`
+
+---
+
 ## 2026-10-31 (Sat), S7 errors and self-healing: a breaker in front of the judge, a reaper for stuck work, a daily self-check, "Report a problem"
 **Asked and decided:** a background reaper finishes stalled submissions and gives up after 15 minutes (listed for the Admin); a circuit breaker opens after 5 failures in 30 seconds for 20 seconds; the daily self-check may repair mentors that drifted from the class structure and placement applications whose drive is gone; people can send "Report a problem", kept with the reference and listed for the Admin.
 **Did (backend):**

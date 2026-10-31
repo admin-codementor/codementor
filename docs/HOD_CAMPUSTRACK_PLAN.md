@@ -1,6 +1,14 @@
 # HOD completion plan (S8), from the CampusTrack HOD screens
 
-**Status: planned only, nothing built.** Written 2026-10-27 from 14 CampusTrack HOD screenshots shared by the owner. It is the **last item** in the work list: it starts only after S5 (T&P, in review), S6 (Admin) and S7 (errors and self-healing) are done.
+**Status (2026-11-01): part A built, part B not started.** Written 2026-10-27 from 14 CampusTrack HOD screenshots shared by the owner; it is the last stream, started after S5, S6 and S7 were merged. The owner answered the five questions on 2026-11-01 (section 7).
+
+| Phase | State |
+|---|---|
+| S8.1 Definitions and honesty | **Built**: the "What the words mean" page generated from the code's own constants; "At risk" on the Activity tab is now "Not active" (it meant something else from "needs attention"); the AI summary falls back to a rules-written one whenever AI is off, over its limit or failing, clearly marked, never a fake score. |
+| S8.2 Needs-attention and People | **Partly built**: the department Overview has the Needs attention list (names and roll numbers, one reminder button); the People page (Admin) has the batch. A HOD-facing People page with class and mentor is not built. |
+| S8.7 Coding score | **Built**: all seven platforms count (best four make the score; the four we cannot read are typed by the student, count at half until a HOD or Admin verifies); an audited department export for HOD and Admin. |
+| Batch (owner's answer 1) | **Built**: stored admission year, worked out from the year of study when not stored; shown and filterable in People and in the export; "Fill missing batches". It is **not yet a filter on every department tab**. |
+| S8.3 Practice analytics, S8.4 Course analytics by section, S8.5 Mentor load, S8.6 Placement views for the HOD, S8.8 Online now | **Not started (part B)**. |
 
 Read with `docs/CAMPUSTRACK_REVIEW.md` (the earlier walk-through of the same product, 2026-10-20) and `docs/FACULTY_HOD_PERSONA_PLAN.md` (the HOD work already built: H1 to H11). This file does not repeat them; it adds what these new screens, which have real data in them, show.
 
@@ -114,7 +122,9 @@ Grouped by the question the HOD is trying to answer. Each item says whether we h
 
 Not planned: copying the unscaled platform formulas, student rankings that put a name on every red flag by default, a messaging consent screen (ours exists in another form).
 
-## 7. Questions to answer before S8 starts
+## 7. Questions (answered 2026-11-01)
+
+**Owner's answers:** (1) yes, add a batch field; (2) all seven platforms on the coding-profiles page count, with the four we cannot read typed by the student, marked not verified, and counted at half until verified; (3) names and roll numbers straight away; (4) HOD and Admin may export; (5) a rules-based summary whenever AI is off or failing.
 
 1. **Batch:** add a batch (admission or graduation year, such as 2023 to 2027) to every student and filter by it, or keep year of study and section? CampusTrack uses batch everywhere.
 2. **Which outside platforms** must count in the coding score? Today: CodeMentor, LeetCode, Codeforces, GitHub. HackerRank, CodeChef and GfG cannot be read reliably.

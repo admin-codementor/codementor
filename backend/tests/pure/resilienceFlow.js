@@ -3,7 +3,7 @@
 require('../hermeticEnv');
 const jwt = require('jsonwebtoken');
 const { loadAppWithMounts } = require('../routeAudit');
-const { users, add, state, install } = require('../fakes/adminFakeDb');
+const { users, add, state, install, reset } = require('../fakes/adminFakeDb');
 const judgeJobRepo = require('../../src/repositories/judgeJobRepository');
 const maintenanceRepo = require('../../src/repositories/maintenanceRepository');
 const placementRepo = require('../../src/repositories/placementRepository');
@@ -18,12 +18,6 @@ const accountGate = require('../../src/middleware/accountGate');
 const { breaker } = require('../../src/services/judgeBreaker');
 
 const clone = (v) => (v == null ? v : structuredClone(v));
-add({ id: 'stu1', role: 'student', name: 'Student One', email: 'stu1@c.test' });
-add({ id: 'stu2', role: 'student', name: 'Student Two', email: 'stu2@c.test' });
-add({ id: 'stu3', role: 'student', name: 'Student Three', email: 'stu3@c.test' });
-add({ id: 'stu4', role: 'student', name: 'Student Four', email: 'stu4@c.test' });
-add({ id: 'stu5', role: 'student', name: 'Student Five', email: 'stu5@c.test' });
-
 const jobs = new Map(); const dead = []; const keys = new Map(); const reports = new Map(); const leases = new Map();
 const apps = new Map(); const drives = new Map([['d1', { id: 'd1' }]]);
 let selfCheckSaved = null; let syncResult = { classes: 3, positions: 0, mentorsUpdated: 0 };
@@ -64,6 +58,12 @@ const net = () => Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECON
 const trip = async () => { for (let i = 0; i < 5; i += 1) await breaker.exec(async () => { throw net(); }).catch(() => {}); };
 
 module.exports = async function (s) {
+  reset();
+  add({ id: 'stu1', role: 'student', name: 'Student One', email: 'stu1@c.test' });
+  add({ id: 'stu2', role: 'student', name: 'Student Two', email: 'stu2@c.test' });
+  add({ id: 'stu3', role: 'student', name: 'Student Three', email: 'stu3@c.test' });
+  add({ id: 'stu4', role: 'student', name: 'Student Four', email: 'stu4@c.test' });
+  add({ id: 'stu5', role: 'student', name: 'Student Five', email: 'stu5@c.test' });
   install(); installFakes();
   accountGate.reset(); adminService.clearPeople(); adminService.clearSettings(); breaker.reset();
   const { app } = loadAppWithMounts();

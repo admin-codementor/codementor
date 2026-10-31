@@ -43,7 +43,7 @@ type View = "all" | "active" | "at_risk";
 
 const KINDS = [{ value: "students" as const, label: "Students" }, { value: "faculty" as const, label: "Faculty" }];
 const RANGES = [{ value: "7" as const, label: "7 days" }, { value: "30" as const, label: "30 days" }, { value: "90" as const, label: "90 days" }];
-const VIEWS = [{ value: "all" as const, label: "Everyone" }, { value: "active" as const, label: "Active" }, { value: "at_risk" as const, label: "At risk" }];
+const VIEWS = [{ value: "all" as const, label: "Everyone" }, { value: "active" as const, label: "Active" }, { value: "at_risk" as const, label: "Not active" }];
 
 const SORT = {
   name: (r: ActivityRow) => r.name,
@@ -79,7 +79,7 @@ export function DepartmentActivity() {
 
   const csv = () => toCsv(t.all.map((r) => ({
     name: r.name, roll_no: r.roll_no ?? "", section: r.section ?? "", year: r.year ?? "",
-    status: r.status === "active" ? "active" : "at risk", last_seen: r.last_seen ?? "never", days_since_seen: r.days_since_seen ?? "",
+    status: r.status === "active" ? "active" : "not active", last_seen: r.last_seen ?? "never", days_since_seen: r.days_since_seen ?? "",
     days_with_submissions: r.active_days,
   })));
 
@@ -105,7 +105,7 @@ export function DepartmentActivity() {
           <KpiRow min={170}>
             <KpiTile icon={<GroupsOutlinedIcon />} label={kind === "students" ? "Students" : "Staff"} value={d.totals.people} />
             <KpiTile icon={<CheckCircleOutlineIcon />} accent="success" label={`Active (${d.days} days)`} value={d.totals.active} total={d.totals.people} />
-            <KpiTile icon={<WarningAmberIcon />} accent="error" label="At risk" value={d.totals.at_risk} total={d.totals.people} help={`No login or submission in the last ${d.days} days`} />
+            <KpiTile icon={<WarningAmberIcon />} accent="error" label="Not active" value={d.totals.at_risk} total={d.totals.people} help={`No login or submission in the last ${d.days} days`} />
           </KpiRow>
 
           <Stack direction={{ xs: "column", md: "row" }} spacing={2} alignItems={{ md: "center" }} sx={{ mb: 2 }}>
@@ -147,7 +147,7 @@ export function DepartmentActivity() {
                           {kind === "students" && <TableCell align="right">{r.active_days}</TableCell>}
                           <TableCell>
                             <Chip
-                              size="small" label={r.status === "active" ? "Active" : "At risk"}
+                              size="small" label={r.status === "active" ? "Active" : "Not active"}
                               sx={{
                                 height: 22, fontSize: typeScale.labelSmall.fontSize, fontWeight: 600,
                                 bgcolor: r.status === "active" ? "successContainer" : "errorContainer",

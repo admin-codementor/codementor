@@ -1,5 +1,5 @@
 const crypto = require('crypto');
-const { ALL_PLATFORMS, LIVE_PLATFORMS, fetchPlatform, fetchProfileText, VERIFY_FIELD } = require('../utils/codingPlatforms');
+const { ALL_PLATFORMS, LIVE_PLATFORMS, TYPED_PLATFORMS, TYPED_META, validateTypedValue, fetchPlatform, fetchProfileText, VERIFY_FIELD } = require('../utils/codingPlatforms');
 const userRepo = require('../repositories/userRepository');
 const codingProfileRepo = require('../repositories/codingProfileRepository');
 
@@ -16,11 +16,13 @@ exports.getMine = async (req, res) => {
       sync_status: p.syncStatus || 'pending', last_synced: p.lastSynced || null,
       verified: !!p.verified, verified_at: p.verifiedAt || null,
       verifiable: VERIFIABLE_PLATFORMS.includes(p.platform),
+      typed_value: TYPED_PLATFORMS.includes(p.platform) ? (p.typedValue ?? null) : undefined,
+      score_verified: TYPED_PLATFORMS.includes(p.platform) ? p.scoreVerified === true : undefined,
     }));
     res.json({
       success: true, data,
       livePlatforms: LIVE_PLATFORMS, allPlatforms: ALL_PLATFORMS,
-      verifiablePlatforms: VERIFIABLE_PLATFORMS,
+      verifiablePlatforms: VERIFIABLE_PLATFORMS, typedPlatforms: TYPED_META,
     });
   } catch (e) {
     console.error('Profiles getMine error:', e.message);
@@ -46,8 +48,21 @@ exports.setHandle = async (req, res) => {
     // A verification proves one account, not the student. Pointing the entry at
     // a different handle has to clear it, or somebody could verify an account
     // they own and then swap in one they do not.
+    // For the four platforms we cannot read, the student also types the number. A new handle or a new number clears any earlier
+    // verification, so a checked value cannot be swapped for a different one afterwards.
+    const typed = {};
+    if (TYPED_PLATFORMS.includes(platform)) {
+      if (req.body.value !== undefined && req.body.value !== '') {
+        const v = validateTypedValue(platform, req.body.value);
+        if (v.error) return res.status(400).json({ success: false, error: v.error });
+        typed.typedValue = v.value; typed.typedAtMs = Date.now(); typed.scoreVerified = false; typed.scoreVerifiedBy = null;
+      } else {
+        const existing = (await codingProfileRepo.listByUser(req.user.id)).find((x) => x.platform === platform);
+        if (!existing || existing.handle !== handle) { typed.scoreVerified = false; typed.scoreVerifiedBy = null; }
+      }
+    }
     await codingProfileRepo.upsert(req.user.id, platform, {
-      handle, syncStatus: 'pending', verified: false, verifiedAt: null, verifyCode: null,
+      handle, syncStatus: 'pending', verified: false, verifiedAt: null, verifyCode: null, ...typed,
     });
     res.json({ success: true, data: { platform, handle } });
   } catch (e) {
@@ -102,9 +117,11 @@ exports.getLeaderboard = async (req, res) => {
     for (const p of allProfiles) {
       if (!byUser.has(p.userId)) byUser.set(p.userId, { totalSolved: 0, cfRating: null, platforms: 0, byPlatform: {} });
       const agg = byUser.get(p.userId);
-      agg.totalSolved += p.solved || 0;
+      // A number the student typed counts here only once a HOD or Admin has verified it (and InterviewBit's score is not a solved count).
+      const solved = TYPED_PLATFORMS.includes(p.platform) ? (p.platform !== 'interviewbit' && p.scoreVerified === true ? p.typedValue || 0 : 0) : p.solved || 0;
+      agg.totalSolved += solved;
       agg.platforms += 1;
-      agg.byPlatform[p.platform] = p.solved || 0;
+      agg.byPlatform[p.platform] = solved;
       if (p.platform === 'codeforces') agg.cfRating = p.rating ?? null;
     }
 

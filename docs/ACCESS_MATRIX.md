@@ -54,6 +54,11 @@ Rules are read top to bottom and the first match wins. `*` is one path segment, 
 | `/api/faculty/mentors` | all | hod, admin |  |
 | `/api/faculty/mentors/**` | all | hod, admin |  |
 | `/api/faculty/platform-scores/refresh` | all | hod, admin | re-reads linked coding profiles |
+| `/api/faculty/department-export` | all | hod, admin | the audited department export; a HOD only their own department |
+| `/api/faculty/department-export/fields` | all | hod, admin |  |
+| `/api/faculty/batches` | all | hod, admin | the batches present in the department, for the pickers |
+| `/api/faculty/platform-unverified` | all | hod, admin | typed platform numbers waiting to be checked |
+| `/api/faculty/platform-verify` | all | hod, admin | verify or reject one typed number; a HOD only for their own department |
 | `/api/faculty/platform-thresholds` | all | hod, admin | college red/green thresholds |
 | `/api/faculty/portfolio` | all | hod, admin |  |
 | `/api/career/**` | all | student | resume check, mock interview, own readiness |
