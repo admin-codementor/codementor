@@ -9,6 +9,7 @@ const adminRepo = require('../repositories/adminRepository');
 const mailService = require('./mailService');
 const accountGate = require('../middleware/accountGate');
 const R = require('../utils/adminRules');
+const B = require('../utils/batch');
 const judgeJobRepo = require('../repositories/judgeJobRepository');
 const selfCheck = require('./selfCheck');
 const reports = require('./problemReportService');
@@ -40,6 +41,8 @@ const shapePerson = (u) => ({
   id: u.id, name: u.name || 'Unknown', email: u.email || null, role: u.role, department: u.department ?? null, rollNo: u.rollNo ?? null,
   year: u.year ?? null, section: u.section ?? null, disabled: u.disabled === true, twofa: u.totpEnabled === true,
   last_login_ms: toMs(u.lastLoginAt), test_account: u.isTestAccount === true,
+  batch: u.role === 'student' ? B.batchOf(u, Date.now()).label : null, batch_derived: u.role === 'student' ? B.batchOf(u, Date.now()).derived : false,
+  admission_year: u.role === 'student' && B.validAdmission(Number(u.admissionYear)) ? Number(u.admissionYear) : null,
 });
 
 // ── settings (also read by the AI gate on every AI request, so held for 30 seconds) ──
@@ -131,6 +134,34 @@ async function createAccount(actor, body) {
   clearPeople();
   const mail = await emailSetPasswordLink(v.value.email, v.value.name, 'Your CodeMentor account');
   return { id: uid, email: v.value.email, role: v.value.role, mail: mail.status, mail_error: mail.error || null };
+}
+
+/** Sets one student's admission year (the batch). The Admin only. */
+async function setAdmissionYear(actor, id, input) {
+  assertAdmin(actor);
+  const v = B.validateAdmissionYear(input);
+  if (v.error) fail(400, 'INVALID', v.error);
+  const target = (await loadPeople()).find((p) => p.id === id);
+  if (!target || target.role !== 'student') fail(404, 'NOT_FOUND', 'Student not found.');
+  await userRepo.update(id, 'student', { admissionYear: v.value });
+  clearPeople();
+  return { id, admission_year: v.value, batch: B.batchOf({ admissionYear: v.value }, Date.now()).label, name: target.name };
+}
+
+/** Stores the worked-out batch for every student who has none, so it stops moving as the academic year turns. Audited with how many. */
+async function fillBatches(actor) {
+  assertAdmin(actor);
+  const now = Date.now();
+  const todo = B.missingBatch((await loadPeople()).filter((p) => p.role === 'student' && p.graduated !== true));
+  let filled = 0;
+  for (const s of todo) {
+    const y = B.deriveAdmissionYear(s.year, now);
+    if (y == null) continue;
+    await userRepo.update(s.id, 'student', { admissionYear: y });
+    filled += 1;
+  }
+  clearPeople();
+  return { filled, skipped: todo.length - filled };
 }
 
 async function sendResetLink(actor, id) {
@@ -339,6 +370,7 @@ const listReports = (actor, status) => { assertAdmin(actor); return reports.list
 const setReportStatus = (actor, id, status) => { assertAdmin(actor); return reports.setStatus(actor.id, id, status); };
 
 module.exports = {
+  setAdmissionYear, fillBatches,
   health, runSelfCheck, listReports, setReportStatus,
   AdminError, listPeople, getPerson, createAccount, sendResetLink, setDisabled, changeRole, changeDepartment,
   getSettings, saveSettings, clearSettings, clearPeople, listAudit, exportAudit, recentLogins, overview, maybePrune,

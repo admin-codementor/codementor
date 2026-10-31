@@ -15,6 +15,7 @@ const BASE_NAV: NavItem[] = [
   { label: "Messages", href: "/faculty/messages", icon: <MailOutlineIcon />, section: "Overview", badge: "messages" },
   { label: "Reports", href: "/faculty/reports", icon: <ListAltOutlinedIcon />, section: "Overview" },
   { label: "Calendar", href: "/faculty/calendar", icon: <CalendarMonthOutlinedIcon />, section: "Overview" },
+  { label: "What the words mean", href: "/faculty/definitions", icon: <MenuBookOutlinedIcon />, section: "Overview" },
   { label: "Courses", href: "/faculty/courses", icon: <MenuBookOutlinedIcon />, section: "Content" },
   { label: "Problems", href: "/faculty/problems", icon: <CodeOutlinedIcon />, section: "Content" },
   { label: "Question Bank", href: "/faculty/bank", icon: <LayersOutlinedIcon />, section: "Content" },

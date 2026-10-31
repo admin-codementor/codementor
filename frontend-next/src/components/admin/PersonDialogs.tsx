@@ -150,7 +150,12 @@ export function PersonDialog({ id, onClose }: { id: string | null; onClose: () =
                 <Typography variant="body2" color="text.secondary">{p.email}{p.rollNo ? ` · ${p.rollNo}` : ""}</Typography>
                 <Typography variant="body2">Last signed in: {fmtWhen(p.last_login_ms)}</Typography>
 
-                {!isStaff && <Alert severity="info">This is a student. Their department manages them: roster, year and section, and the academic structure.</Alert>}
+                {!isStaff && (
+                  <Stack spacing={1.5}>
+                    <Alert severity="info">This is a student. Their department manages them: roster, year and section, and the academic structure. Here you can set their batch.</Alert>
+                    <BatchEditor person={p} onSaved={refresh} />
+                  </Stack>
+                )}
                 {isStaff && (
                   <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap>
                     <Button size="small" variant="outlined" disabled={p.disabled || act.isPending} onClick={() => act.mutate({ path: "reset-link" })}>Send a new set-password link</Button>
@@ -229,4 +234,35 @@ function RoleConfirm({ email, busy, error, disabled, onConfirm, onCancel }: { em
       </Stack>
     </>
   );
+}
+
+/** A student's batch (admission year). Shown as stored, or as worked out from their year of study when none is stored. */
+function BatchEditor({ person, onSaved }: { person: PersonDetail; onSaved: () => void }) {
+  const showToast = useToast();
+  const [year, setYear] = React.useState(person.admission_year != null ? String(person.admission_year) : "");
+  React.useEffect(() => { setYear(person.admission_year != null ? String(person.admission_year) : ""); }, [person.id, person.admission_year]);
+  const save = useMutation({
+    mutationFn: async () => (await api.post(`/api/admin/people/${person.id}/admission-year`, { admission_year: year })).data.data as { batch: string },
+    onSuccess: (r) => { showToast(`Batch set to ${r.batch}.`, { severity: "success" }); onSaved(); },
+    onError: (e) => showToast(apiErrorMessage(e, "Could not save the batch."), { severity: "error" }),
+  });
+  return (
+    <Stack direction="row" spacing={1.5} alignItems="flex-start">
+      <TextField size="small" label="Year they joined" value={year} onChange={(e) => setYear(e.target.value.replace(/\D/g, "").slice(0, 4))} sx={{ width: 180 }}
+        helperText={person.batch ? `Batch ${person.batch}${person.batch_derived ? " (worked out from their year of study)" : ""}` : "Their year of study is not set"} />
+      <Button size="small" variant="outlined" disabled={year.length !== 4 || save.isPending || String(person.admission_year ?? "") === year} onClick={() => save.mutate()}>Save</Button>
+    </Stack>
+  );
+}
+
+/** Stores the worked-out batch for every student who has none, so it stops changing as the academic year turns. */
+export function FillBatchesButton() {
+  const qc = useQueryClient();
+  const showToast = useToast();
+  const fill = useMutation({
+    mutationFn: async () => (await api.post("/api/admin/students/fill-batches")).data.data as { filled: number; skipped: number },
+    onSuccess: (r) => { showToast(`Stored the batch for ${r.filled} student${r.filled === 1 ? "" : "s"}.${r.skipped ? ` ${r.skipped} have no year of study, so they were left.` : ""}`, { severity: "success" }); void qc.invalidateQueries({ queryKey: ["admin"] }); void qc.invalidateQueries({ queryKey: ["faculty", "batches"] }); },
+    onError: (e) => showToast(apiErrorMessage(e, "Could not fill the batches."), { severity: "error" }),
+  });
+  return <Button variant="outlined" onClick={() => fill.mutate()} disabled={fill.isPending} title="Works out each student's batch from their year of study and stores it, for students who have none">{fill.isPending ? "Working…" : "Fill missing batches"}</Button>;
 }

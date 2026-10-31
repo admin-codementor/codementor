@@ -195,7 +195,7 @@ export function CodingScoreTab({ section, year }: { section: string; year: strin
         <KpiTile icon={<FlagOutlinedIcon />} label="Red" value={d.totals.red} total={d.totals.students} accent="error" onClick={() => setFlagFilter(flagFilter === "red" ? "all" : "red")} />
       </Box>
       <Typography variant="caption" color="text.secondary">
-        {d.totals.withAnyLink} of {d.totals.students} students have linked at least one outside platform. The score is the average of a student's best four platforms, so nobody is marked down for a site they do not use.
+        {d.totals.withAnyLink} of {d.totals.students} students have linked at least one outside platform. The score is the average of a student&apos;s best four platforms, so nobody is marked down for a site they do not use.
       </Typography>
 
       <Stack direction={{ xs: "column", md: "row" }} spacing={1.5} alignItems={{ md: "center" }}>

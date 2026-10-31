@@ -175,12 +175,13 @@ function aiAllowed(settings, role, used) {
 
 // ── people list and audit search ──
 /** Filter and page the people list. Search matches name, email and roll number. */
-function filterPeople(people, { role, department, status, q, page = 1, size = 50 } = {}) {
+function filterPeople(people, { role, department, status, batch, q, page = 1, size = 50 } = {}) {
   const needle = clean(q, 60).toLowerCase();
   const rows = people
     .filter((p) => !role || p.role === role)
     .filter((p) => !department || (p.department ?? null) === department)
     .filter((p) => !status || (status === 'disabled' ? p.disabled === true : p.disabled !== true))
+    .filter((p) => !batch || p.batch === batch)
     .filter((p) => !needle || `${p.name || ''} ${p.email || ''} ${p.rollNo || ''}`.toLowerCase().includes(needle))
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
   const pageSize = Math.min(Math.max(Number(size) || 50, 1), MAX_LIST);

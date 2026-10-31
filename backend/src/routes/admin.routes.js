@@ -34,6 +34,8 @@ router.post('/people/:id/reset-link', mailing, c.sendResetLink);
 router.post('/people/:id/disabled', c.setDisabled);
 router.post('/people/:id/role', c.changeRole);
 router.post('/people/:id/department', c.changeDepartment);
+router.post('/people/:id/admission-year', c.setAdmissionYear);
+router.post('/students/fill-batches', heavy, c.fillBatches);
 
 router.get('/settings', c.getSettings);
 router.put('/settings', c.saveSettings);

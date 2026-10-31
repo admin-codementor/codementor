@@ -16,7 +16,7 @@ import { AutoAwesomeOutlinedIcon, RefreshIcon } from "@/components/ui/icons";
 import { radius, typeScale } from "@/theme/tokens";
 
 interface Insight { title: string; detail: string; action: string; priority: "high" | "medium" | "low" }
-interface InsightsResult { headline: string; insights: Insight[]; generated_at: string }
+interface InsightsResult { headline: string; insights: Insight[]; generated_at: string; source?: "ai" | "rules"; ai_note?: string }
 
 const PRIORITY = {
   high: { label: "High", bg: "errorContainer", fg: "onErrorContainer" },
@@ -36,7 +36,7 @@ export function DepartmentInsights({ section, year }: { section: string; year: s
 
   return (
     <SectionCard
-      title="AI insights"
+      title="Insights"
       icon={<AutoAwesomeOutlinedIcon fontSize="small" />}
       action={
         m.data ? (
@@ -58,6 +58,11 @@ export function DepartmentInsights({ section, year }: { section: string; year: s
         </Alert>
       ) : m.data ? (
         <Stack spacing={2}>
+          {m.data.source === "rules" && (
+            <Alert severity="info">
+              AI summary unavailable{m.data.ai_note ? `: ${m.data.ai_note}` : "."} This summary is written by fixed rules from the same numbers, so it can only say what the numbers say. Try again later for the AI version.
+            </Alert>
+          )}
           {m.data.headline && <Typography variant="subtitle1" fontWeight={600}>{m.data.headline}</Typography>}
           {m.data.insights.length === 0 && (
             <Typography variant="body2" color="text.secondary">Nothing to report for this view yet.</Typography>

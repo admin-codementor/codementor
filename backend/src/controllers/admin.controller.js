@@ -23,6 +23,7 @@ exports.listPeople = handle((req, actor) => admin.listPeople(actor, {
   role: req.query.role ? String(req.query.role).slice(0, 20) : undefined,
   department: req.query.department ? String(req.query.department).slice(0, 60) : undefined,
   status: req.query.status === 'disabled' || req.query.status === 'active' ? req.query.status : undefined,
+  batch: /^\d{4}-\d{4}$/.test(String(req.query.batch ?? '')) ? String(req.query.batch) : undefined,
   q: req.query.q, page: req.query.page, size: req.query.size,
 }));
 exports.getPerson = handle((req, actor) => admin.getPerson(actor, req.params.id));
@@ -62,6 +63,17 @@ exports.listReports = handle((req, actor) => admin.listReports(actor, req.query.
 exports.setReportStatus = handle(async (req, actor) => {
   const r = await admin.setReportStatus(actor, req.params.id, req.body?.status);
   audit(req, 'report.status', `${req.params.id}: ${r.status}`);
+  return r;
+});
+
+exports.setAdmissionYear = handle(async (req, actor) => {
+  const r = await admin.setAdmissionYear(actor, req.params.id, req.body?.admission_year);
+  audit(req, 'student.batch', `${r.name}: ${r.batch}`);
+  return r;
+});
+exports.fillBatches = handle(async (req, actor) => {
+  const r = await admin.fillBatches(actor);
+  audit(req, 'students.fill_batches', `${r.filled} filled, ${r.skipped} skipped`);
   return r;
 });
 
