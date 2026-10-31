@@ -17,9 +17,9 @@ const aiLimiter = createLimiter({
 // Every AI endpoint is exam-locked (finding F26). The history route is included
 // deliberately: replaying an earlier conversation during an exam is the same leak
 // as starting a new one.
-router.post('/tutor', authMiddleware.protect, aiAccess, aiLimiter, blockDuringExam, aiController.askTutor);
+router.post('/tutor', authMiddleware.protect, aiLimiter, aiAccess, blockDuringExam, aiController.askTutor);
 router.get('/tutor/:problemId', authMiddleware.protect, blockDuringExam, aiController.getHistory);
-router.post('/explain-error', authMiddleware.protect, aiAccess, aiLimiter, blockDuringExam, aiController.explainError);
-router.post('/review-code', authMiddleware.protect, aiAccess, aiLimiter, blockDuringExam, aiController.reviewCode);
+router.post('/explain-error', authMiddleware.protect, aiLimiter, aiAccess, blockDuringExam, aiController.explainError);
+router.post('/review-code', authMiddleware.protect, aiLimiter, aiAccess, blockDuringExam, aiController.reviewCode);
 
 module.exports = router;

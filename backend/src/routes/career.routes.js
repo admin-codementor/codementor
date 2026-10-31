@@ -19,7 +19,7 @@ router.use(protect, authorize('student'));
 
 router.get('/me', career.getMine);
 router.post('/resume', career.checkResume);
-router.post('/interview/next', aiAccess, interviewLimiter, blockDuringExam, career.nextQuestion);
-router.post('/interview/finish', aiAccess, interviewLimiter, blockDuringExam, career.finishInterview);
+router.post('/interview/next', interviewLimiter, aiAccess, blockDuringExam, career.nextQuestion);
+router.post('/interview/finish', interviewLimiter, aiAccess, blockDuringExam, career.finishInterview);
 
 module.exports = router;
