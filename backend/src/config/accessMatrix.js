@@ -73,6 +73,7 @@ const rules = [
   { path: '/api/faculty/platform-scores/refresh', roles: ['hod', 'admin'], note: 're-reads linked coding profiles' },
   { path: '/api/faculty/department-export', roles: ['hod', 'admin'], note: 'the audited department export; a HOD only their own department' },
   { path: '/api/faculty/department-export/fields', roles: ['hod', 'admin'] },
+  { path: '/api/faculty/practice-analytics', roles: ['hod', 'admin'], note: 'department practice analytics; a HOD only their own department' },
   { path: '/api/faculty/batches', roles: ['hod', 'admin'], note: 'the batches present in the department, for the pickers' },
   { path: '/api/faculty/platform-unverified', roles: ['hod', 'admin'], note: 'typed platform numbers waiting to be checked' },
   { path: '/api/faculty/platform-verify', roles: ['hod', 'admin'], note: 'verify or reject one typed number; a HOD only for their own department' },

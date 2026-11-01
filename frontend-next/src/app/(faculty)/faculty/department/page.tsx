@@ -33,9 +33,11 @@ import { PortfolioTab } from "@/components/faculty/PortfolioTab";
 import { PlacementTab } from "@/components/faculty/PlacementTab";
 import { AttentionWidget, useInsights } from "@/components/faculty/dashboard/Widgets";
 import { RemindDialog } from "@/components/faculty/RemindDialog";
+import { useBatches } from "@/components/faculty/DepartmentExportDialog";
 import { DepartmentExportButton } from "@/components/faculty/DepartmentExportDialog";
 import { AlumniTab } from "@/components/faculty/AlumniTab";
 import { LabsTab } from "@/components/faculty/LabsTab";
+import { PracticeTab } from "@/components/faculty/PracticeTab";
 import { radius } from "@/theme/tokens";
 import {
   CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, LocalFireDepartmentOutlinedIcon,
@@ -57,7 +59,7 @@ interface DeptData {
   };
 }
 
-type DeptTab = "overview" | "weekly" | "rankings" | "coding" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni" | "labs";
+type DeptTab = "overview" | "weekly" | "rankings" | "coding" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni" | "labs" | "practice";
 type Baseline = "view" | "year" | "institution";
 const BASELINES: { value: Baseline; label: string }[] = [
   { value: "view", label: "This view" },
@@ -92,13 +94,15 @@ export default function DepartmentDashboardPage() {
   const [section, setSection] = React.useState("");
   const [year, setYear] = React.useState("");
   const [mentor, setMentor] = React.useState("");
+  const [batch, setBatch] = React.useState("");
+  const batches = useBatches();
   const [percentile, setPercentile] = React.useState<Baseline>("view");
   const [tab, setTab] = React.useState<DeptTab>("overview");
 
   const query = useQuery<DeptData>({
-    queryKey: ["faculty", "department", section, year, mentor, percentile],
+    queryKey: ["faculty", "department", section, year, mentor, percentile, batch],
     queryFn: async () => (await api.get("/api/faculty/department", {
-      params: { ...(section ? { section } : {}), ...(year ? { year } : {}), ...(mentor ? { mentor } : {}), ...(percentile !== "view" ? { percentile } : {}) },
+      params: { ...(section ? { section } : {}), ...(year ? { year } : {}), ...(mentor ? { mentor } : {}), ...(batch ? { batch } : {}), ...(percentile !== "view" ? { percentile } : {}) },
     })).data.data,
     staleTime: 60_000,
   });
@@ -109,7 +113,7 @@ export default function DepartmentDashboardPage() {
       <PageHeader
         title="Department dashboard"
         subtitle={d ? `${d.scope.department ?? "All departments"} · ${d.totals.students} students in this view` : undefined}
-        actions={d ? <DepartmentExportButton section={section} year={year} /> : undefined}
+        actions={d ? <DepartmentExportButton section={section} year={year} batch={batch} /> : undefined}
       />
 
       <Stack direction={{ xs: "column", sm: "row" }} spacing={2} sx={{ mb: 3 }}>
@@ -124,6 +128,12 @@ export default function DepartmentDashboardPage() {
         >
           <MenuItem value="">All years</MenuItem>
           {(d?.scope.years ?? []).map((y) => <MenuItem key={y} value={String(y)}>Year {y}</MenuItem>)}
+        </TextField>
+        <TextField
+          select size="small" label="Batch" value={batch} onChange={(e) => setBatch(e.target.value)} sx={{ minWidth: 180 }}
+        >
+          <MenuItem value="">All batches</MenuItem>
+          {(batches.data ?? []).map((b) => <MenuItem key={b.name} value={b.name}>{b.name} ({b.count})</MenuItem>)}
         </TextField>
         <TextField
           select size="small" label="Mentor" value={mentor} onChange={(e) => setMentor(e.target.value)} sx={{ minWidth: 200 }}
@@ -169,6 +179,7 @@ export default function DepartmentDashboardPage() {
             <Tab value="overview" label="Overview" />
             <Tab value="weekly" label="Weekly progress" />
             <Tab value="rankings" label="Rankings" />
+            <Tab value="practice" label="Practice" />
             <Tab value="coding" label="Coding score" />
             <Tab value="departments" label="Departments" />
             <Tab value="activity" label="Activity" />
@@ -181,6 +192,7 @@ export default function DepartmentDashboardPage() {
 
           {tab === "weekly" && <WeeklyProgressTable students={d.students} />}
           {tab === "rankings" && <RankingsTable students={d.students} />}
+          {tab === "practice" && <PracticeTab section={section} year={year} batch={batch} />}
           {tab === "coding" && <CodingScoreTab section={section} year={year} />}
           {tab === "departments" && <DepartmentLeaderboard />}
           {tab === "activity" && <DepartmentActivity />}

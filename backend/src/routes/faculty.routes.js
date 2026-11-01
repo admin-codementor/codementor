@@ -68,6 +68,7 @@ router.get('/department/activity', authorize('hod', 'admin'), facultyController.
 const exportLimiter = createLimiter({ windowMs: 10 * 60 * 1000, max: 12, prefix: 'department-export', keyGenerator: (req) => `user:${req.user?.id || req.ip}`, message: 'Too many exports in a short time. Wait a few minutes.' });
 router.get('/department-export/fields', authorize('hod', 'admin'), require('../controllers/departmentExport.controller').fields);
 router.post('/department-export', authorize('hod', 'admin'), exportLimiter, require('../controllers/departmentExport.controller').exportCsv);
+router.get('/practice-analytics', authorize('hod', 'admin'), require('../controllers/departmentExport.controller').practice);
 router.get('/batches', authorize('hod', 'admin'), require('../controllers/departmentExport.controller').batches);
 router.get('/department-leaderboard', authorize('hod', 'admin'), facultyController.getDepartmentLeaderboard);
 // Department-wide comparisons: for a HOD or an Admin (a faculty member sees their own classes through /analytics/cohort and the dashboard).
