@@ -6,14 +6,15 @@ const submissionRepo = require('../repositories/submissionRepository');
 const { scopeDept } = require('../middleware/role.middleware');
 const { buildDepartmentAnalytics } = require('../utils/departmentAnalytics');
 const { activeStudents } = require('../utils/students');
+const { batchOf } = require('../utils/batch');
 
 const TTL_SECONDS = 120;
 // Bump when the response shape or aggregation changes (the cache outlives deploys).
-const VERSION = 5;
+const VERSION = 6;
 
 const BASELINES = ['view', 'year', 'institution'];
 
-async function compute({ dept, section, year, mentor, baseline }) {
+async function compute({ dept, section, year, mentor, baseline, batch }) {
   const [studentsMap, submissions, staffMap] = await Promise.all([
     userRepo.getMapByRole('student'),
     submissionRepo.listAllForAnalytics(),
@@ -26,6 +27,7 @@ async function compute({ dept, section, year, mentor, baseline }) {
     // `year` arrives as a string from the query; compare loosely rather than
     // trusting both sides to be the same type.
     .filter((s) => !year || String(s.year ?? '') === String(year))
+    .filter((s) => !batch || batchOf(s, Date.now()).label === batch)
     // `mentor` is a mentor id, or "none" for students nobody mentors yet.
     .filter((s) => !mentor || (mentor === 'none' ? !s.mentorId : s.mentorId === mentor))
     .map((s) => ({
@@ -72,6 +74,7 @@ async function compute({ dept, section, year, mentor, baseline }) {
       sections: [...new Set(inDept.map((s) => s.section).filter(Boolean))].sort(),
       years: [...new Set(inDept.map((s) => s.year).filter((y) => y != null))].sort((a, b) => a - b),
       mentor: mentor || null,
+      batch: batch || null,
       percentile: baseline,
       // Everyone who currently mentors someone here, for the filter menu.
       mentors: [...new Set(inDept.map((s) => s.mentorId).filter(Boolean))]
@@ -86,11 +89,11 @@ async function compute({ dept, section, year, mentor, baseline }) {
  * @param {object} req  Express request — department comes from the token, never the query,
  *                      so an HOD cannot read another department by editing the URL.
  */
-exports.getDepartmentAnalytics = async (req, { section, year, mentor, percentile } = {}) => {
+exports.getDepartmentAnalytics = async (req, { section, year, mentor, percentile, batch } = {}) => {
   const dept = scopeDept(req);
   const baseline = BASELINES.includes(percentile) ? percentile : 'view';
   // Mentor assignments change the roster, so they bump a version rather than waiting out the TTL.
   const mv = await getVersion('mentors');
-  const key = `analytics:dept:v${VERSION}:m${mv}:${dept ?? 'all'}:${section || 'all'}:${year || 'all'}:${mentor || 'all'}:${baseline}`;
-  return cached(key, TTL_SECONDS, () => compute({ dept, section, year, mentor, baseline }));
+  const key = `analytics:dept:v${VERSION}:m${mv}:${dept ?? 'all'}:${section || 'all'}:${year || 'all'}:${mentor || 'all'}:${baseline}:${batch || 'all'}`;
+  return cached(key, TTL_SECONDS, () => compute({ dept, section, year, mentor, baseline, batch }));
 };

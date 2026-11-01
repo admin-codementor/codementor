@@ -2,6 +2,7 @@
 // whole college. Every export is written to the audit log with who, which fields and how many students.
 const userRepo = require('../repositories/userRepository');
 const departmentAnalyticsService = require('../services/departmentAnalyticsService');
+const practiceAnalyticsService = require('../services/practiceAnalyticsService');
 const platformScoreService = require('../services/platformScoreService');
 const { scopeDept } = require('../middleware/role.middleware');
 const { logAction } = require('../middleware/audit');
@@ -42,6 +43,21 @@ exports.exportCsv = async (req, res) => {
   } catch (e) {
     console.error('department export error:', String(e?.message || e).slice(0, 160));
     res.status(500).json({ success: false, error: 'The export could not be made. Please try again.' });
+  }
+};
+
+// @route GET /api/faculty/practice-analytics?days=&section=&year=&batch=
+exports.practice = async (req, res) => {
+  try {
+    const q = req.query || {};
+    const year = /^\d$/.test(String(q.year ?? '')) ? String(q.year) : null;
+    const section = /^[A-Za-z0-9]{1,4}$/.test(String(q.section ?? '')) ? String(q.section) : null;
+    const batch = /^\d{4}-\d{4}$/.test(String(q.batch ?? '')) ? String(q.batch) : null;
+    const data = await practiceAnalyticsService.getPracticeAnalytics(req, { days: q.days, section, year, batch });
+    res.json({ success: true, data });
+  } catch (e) {
+    console.error('practice analytics error:', String(e?.message || e).slice(0, 160));
+    res.status(500).json({ success: false, error: 'Could not load practice analytics. Please try again.' });
   }
 };
 
