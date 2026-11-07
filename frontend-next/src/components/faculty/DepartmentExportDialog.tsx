@@ -29,11 +29,11 @@ export const useBatches = () => useQuery<Batch[]>({ queryKey: ["faculty", "batch
  * The department export. The fields come from a fixed list, the students are the ones in the view (and an optional batch), and every export is
  * written to the audit log with who made it, the fields and how many students.
  */
-export function DepartmentExportButton({ section, year }: { section: string; year: string }) {
+export function DepartmentExportButton({ section, year, batch: viewBatch = "" }: { section: string; year: string; batch?: string }) {
   const showToast = useToast();
   const [open, setOpen] = React.useState(false);
   const [picked, setPicked] = React.useState<string[]>(["name", "rollNo", "batch", "section", "practiceState", "codingScore"]);
-  const [batch, setBatch] = React.useState("");
+  const [batch, setBatch] = React.useState(viewBatch);
   const fields = useQuery<Field[]>({ queryKey: ["faculty", "export-fields"], queryFn: async () => (await api.get("/api/faculty/department-export/fields")).data.data, staleTime: 60 * 60_000, enabled: open });
   const batches = useBatches();
   const [message, setMessage] = React.useState("");
@@ -59,7 +59,7 @@ export function DepartmentExportButton({ section, year }: { section: string; yea
 
   return (
     <>
-      <Button variant="outlined" startIcon={<DownloadOutlinedIcon />} onClick={() => { setOpen(true); setMessage(""); }}>Export</Button>
+      <Button variant="outlined" startIcon={<DownloadOutlinedIcon />} onClick={() => { setOpen(true); setMessage(""); setBatch(viewBatch); }}>Export</Button>
       <Dialog open={open} onClose={download.isPending ? undefined : () => setOpen(false)} fullWidth maxWidth="sm" aria-labelledby="dept-export-title">
         <DialogTitle id="dept-export-title">Export students</DialogTitle>
         <DialogContent dividers>

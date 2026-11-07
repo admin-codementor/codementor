@@ -37,6 +37,7 @@ import { MEDAL, headRow, type DeptStudent } from "./DepartmentTables";
 interface MentorRow {
   id: string; name: string; mentees: number; solved_per_mentee: number;
   active_pct: number; needs_attention_pct: number; rank: number | null;
+  response?: { threads: number; waiting: number; waiting_over_48h: number; longest_wait_hours: number | null };
 }
 interface MentorBoard { period: "monthly" | "overall"; mentors: MentorRow[]; unassigned_students: number; total_students: number }
 type Period = "monthly" | "overall";
@@ -195,7 +196,7 @@ export function MentorsTab() {
           />
         ) : (
           <TableContainer sx={{ overflowX: "auto" }}>
-            <Table size="small" aria-label="Mentor leaderboard" sx={{ minWidth: 680 }}>
+            <Table size="small" aria-label="Mentor leaderboard" sx={{ minWidth: 780 }}>
               <TableHead>
                 <TableRow sx={headRow}>
                   <TableCell>Rank</TableCell>
@@ -204,6 +205,7 @@ export function MentorsTab() {
                   <TableCell align="right">{period === "monthly" ? "Solved (30 days) per mentee" : "Solved per mentee"}</TableCell>
                   <TableCell align="right">Active (7 days)</TableCell>
                   <TableCell align="right">Needs attention</TableCell>
+                  <TableCell align="right">Waiting for a reply</TableCell>
                   <TableCell />
                 </TableRow>
               </TableHead>
@@ -224,6 +226,13 @@ export function MentorsTab() {
                       <TableCell align="right">{m.mentees ? m.solved_per_mentee : "—"}</TableCell>
                       <TableCell align="right">{m.mentees ? `${m.active_pct}%` : "—"}</TableCell>
                       <TableCell align="right">{m.mentees ? `${m.needs_attention_pct}%` : "—"}</TableCell>
+                      <TableCell align="right">
+                        {m.response && m.response.waiting > 0 ? (
+                          <Typography variant="body2" color={m.response.waiting_over_48h > 0 ? "error" : "text.primary"}>
+                            {m.response.waiting}{m.response.waiting_over_48h > 0 ? ` (${m.response.waiting_over_48h} over 2 days)` : ""}
+                          </Typography>
+                        ) : <Typography variant="body2" color="text.secondary">{m.response && m.response.threads > 0 ? "None" : "—"}</Typography>}
+                      </TableCell>
                       <TableCell align="right">
                         <Button size="small" onClick={() => setAssign({ mentor: m.id })} disabled={!roster.data}>Assign students</Button>
                       </TableCell>

@@ -23,7 +23,7 @@ import { ExportButton, KpiRow, KpiTile, toCsv } from "@/components/analytics";
 import { EmptyState } from "@/components/ui/States";
 import { SearchField } from "@/components/ui/SearchField";
 import { SegmentedButtons } from "@/components/ui/SegmentedButtons";
-import { CheckCircleOutlineIcon, GroupsOutlinedIcon, WarningAmberIcon } from "@/components/ui/icons";
+import { CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, WarningAmberIcon } from "@/components/ui/icons";
 import { typeScale } from "@/theme/tokens";
 import { Head, Pager, bodyRow, headRow, useTable } from "./DepartmentTables";
 
@@ -33,7 +33,7 @@ interface ActivityRow {
 }
 interface Activity {
   kind: "students" | "faculty"; days: number;
-  totals: { people: number; active: number; at_risk: number };
+  totals: { people: number; active: number; at_risk: number; seen_last_5_min: number };
   rows: ActivityRow[];
 }
 
@@ -105,6 +105,7 @@ export function DepartmentActivity() {
           <KpiRow min={170}>
             <KpiTile icon={<GroupsOutlinedIcon />} label={kind === "students" ? "Students" : "Staff"} value={d.totals.people} />
             <KpiTile icon={<CheckCircleOutlineIcon />} accent="success" label={`Active (${d.days} days)`} value={d.totals.active} total={d.totals.people} />
+            <KpiTile icon={<InsightsOutlinedIcon />} accent="tertiary" label="Seen in last 5 min" value={d.totals.seen_last_5_min} help="A login or a submission in the last 5 minutes. This is not live presence: someone reading a page without submitting is not counted." />
             <KpiTile icon={<WarningAmberIcon />} accent="error" label="Not active" value={d.totals.at_risk} total={d.totals.people} help={`No login or submission in the last ${d.days} days`} />
           </KpiRow>
 

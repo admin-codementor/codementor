@@ -50,7 +50,9 @@ function buildActivity({ people, submissions = [], days, now = Date.now() }) {
     || a.name.localeCompare(b.name));
 
   const active = rows.filter((r) => r.status === 'active').length;
-  return { days: window, totals: { people: rows.length, active, at_risk: rows.length - active }, rows };
+  // Not real presence (there is none): people whose last login or submission was in the last 5 minutes.
+  const seenNow = rows.filter((r) => r.last_seen && now - Date.parse(r.last_seen) <= 5 * 60 * 1000).length;
+  return { days: window, totals: { people: rows.length, active, at_risk: rows.length - active, seen_last_5_min: seenNow }, rows };
 }
 
 module.exports = { buildActivity, ALLOWED_DAYS };

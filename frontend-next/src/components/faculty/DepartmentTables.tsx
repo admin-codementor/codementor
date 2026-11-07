@@ -26,7 +26,7 @@ import { typeScale } from "@/theme/tokens";
 export interface DeptStudent {
   id: string; name: string; roll_no: string | null; section: string | null; year: number | null;
   subs: number; solved: number; ac_rate: number; active_days: number;
-  state: string; last_active: string | null; mentor_id: string | null; mentor_name: string | null;
+  batch?: string | null; state: string; last_active: string | null; mentor_id: string | null; mentor_name: string | null;
   flag: string; reasons: string[]; percentile: number; badge: string;
   week: { solved: number; solved_change: number | null; subs: number; subs_change: number | null; active_days: number };
 }

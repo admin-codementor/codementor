@@ -2198,7 +2198,8 @@ exports.getDepartmentAnalytics = async (req, res) => {
     const year = String(req.query.year || '').trim().slice(0, 10) || null;
     const mentor = String(req.query.mentor || '').trim().slice(0, 80) || null;
     const percentile = String(req.query.percentile || '').trim();
-    const data = await departmentAnalyticsService.getDepartmentAnalytics(req, { section, year, mentor, percentile });
+    const batch = /^\d{4}-\d{4}$/.test(String(req.query.batch || '')) ? String(req.query.batch) : null;
+    const data = await departmentAnalyticsService.getDepartmentAnalytics(req, { section, year, mentor, percentile, batch });
     res.json({ success: true, data });
   } catch (error) {
     console.error('Department analytics error:', error);

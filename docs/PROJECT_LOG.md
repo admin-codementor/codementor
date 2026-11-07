@@ -5,6 +5,15 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-11-01 (Sun), S8 HOD completion, part B: Practice tab, batch filter everywhere, "seen in the last 5 minutes"
+**Did (backend):** `utils/practiceAnalytics.js` (pure) builds the department's practice figures for one period (today to all time): tiles with change against the period before, practice over time, difficulty mix against the bank, a weekday-by-hour heat map in India time, languages, the 50 most-tried problems, topic coverage (all time), by-batch table, and plain-rule "what to look at". `GET /api/faculty/practice-analytics?days=&section=&year=&batch=` (HOD and Admin, department from the token, kept 90 s). Batch is also a filter on `/api/faculty/department`, the Practice tab and the export dialog. Activity totals gain `seen_last_5_min`.
+**Did (frontend):** department page gets a Batch select and a **Practice** tab; Activity gets a "Seen in last 5 min" tile that says plainly it is a login or submission, not live presence.
+**Tests:** 29 for the builder, 8 over HTTP (who may read, department from the token, filters, junk filters ignored), 4 for the activity count. Whole suite 1333 passing, lint and route audit clean.
+**Left out on purpose (no data to support them):** company readiness, coding sheets, code-size effort. **Not built yet:** course analytics rolled up by section, a HOD People page, message response time for mentors (the mentor board already shows mentees, active share and needs-attention share). Not checked in a browser with a signed-in HOD, and not run against real Firestore.
+**Branch:** `feat/s8-hod-b`
+
+---
+
 ## 2026-11-01 (Sun), S8 HOD completion, part A: one set of words, honest AI summary, coding score for all seven platforms, batch, audited export
 **Asked and decided:** add a batch field; all seven platforms on the coding-profiles page count (the four the server cannot read are typed by the student, marked not verified, counted at half weight until a HOD or Admin verifies); names and roll numbers shown straight away on the needs-attention list; HOD and Admin may export; a rules-based summary whenever AI is off or failing.
 **Did (backend):**
