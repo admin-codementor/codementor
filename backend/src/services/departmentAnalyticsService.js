@@ -10,7 +10,7 @@ const { batchOf } = require('../utils/batch');
 
 const TTL_SECONDS = 120;
 // Bump when the response shape or aggregation changes (the cache outlives deploys).
-const VERSION = 6;
+const VERSION = 7;
 
 const BASELINES = ['view', 'year', 'institution'];
 
@@ -57,9 +57,11 @@ async function compute({ dept, section, year, mentor, baseline, batch }) {
   }
   const result = buildDepartmentAnalytics({ students, submissions, now: Date.now(), baseline: pool });
   const mentorOf = new Map(students.map((s) => [s.id, s.mentorId]));
+  const nowMs = Date.now();
+  const batchByStudent = new Map([...studentsMap.values()].map((s) => [s.id, batchOf(s, nowMs).label]));
   result.students = result.students.map((r) => {
     const mid = mentorOf.get(r.id) || null;
-    return { ...r, mentor_id: mid, mentor_name: mid ? (staffMap.get(mid)?.name ?? null) : null };
+    return { ...r, batch: batchByStudent.get(r.id) ?? null, mentor_id: mid, mentor_name: mid ? (staffMap.get(mid)?.name ?? null) : null };
   });
 
   // Filter options always describe the WHOLE department, not the current

@@ -7,6 +7,8 @@ const { users, add, install, reset } = require('../fakes/adminFakeDb');
 const userRepo = require('../../src/repositories/userRepository');
 const submissionRepo = require('../../src/repositories/submissionRepository');
 const problemRepo = require('../../src/repositories/problemRepository');
+const courseRepo = require('../../src/repositories/courseRepository');
+const messageRepo = require('../../src/repositories/messageRepository');
 const adminService = require('../../src/services/adminService');
 const accountGate = require('../../src/middleware/accountGate');
 
@@ -30,6 +32,10 @@ module.exports = async function (s) {
     { userId: 'stuB', problemId: 'p1', verdict: 'Accepted', submittedAt: t, language: 71 },
   ] });
   Object.assign(problemRepo, { listCatalog: async () => [{ id: 'p1', title: 'Sum', difficulty: 'easy', tags: ['loops'] }, { id: 'p2', title: 'Sort', difficulty: 'medium', tags: ['arrays'] }] });
+  Object.assign(problemRepo, { getMapByIds: async () => new Map([['p1', { status: 'published' }], ['p2', { status: 'published' }]]) });
+  Object.assign(courseRepo, { listAll: async () => [{ id: 'c1', title: 'Python' }], getModules: async () => [{ id: 'u1', title: 'Basics', problemIds: ['p1', 'p2'] }] });
+  Object.assign(messageRepo, { listForUser: async (id) => (id === 'hodC' ? [{ id: 't', participants: ['hodC', 'stuA'], lastMessageBy: 'stuA', lastMessageAtMs: Date.now() - 50 * 3600000 }] : []) });
+  users.get('stuA').mentorId = 'hodC';
   accountGate.reset(); adminService.clearPeople();
   const { app } = loadAppWithMounts();
   const server = app.listen(0, '127.0.0.1');
@@ -52,6 +58,14 @@ module.exports = async function (s) {
     s.check('section, year and batch narrow the view', (await call('/api/faculty/practice-analytics?section=B', 'hodC')).data.tiles.students === 1 && (await call('/api/faculty/practice-analytics?year=4', 'hodC')).data.tiles.students === 1 && (await call('/api/faculty/practice-analytics?batch=2023-2027', 'hodC')).data.tiles.students === 1);
     s.check('nonsense filters are ignored rather than failing, and an unknown period is 7 days', (await call('/api/faculty/practice-analytics?section=%3Cx%3E&year=99&batch=abc&days=abc', 'hodC')).data.period_days === 7);
     s.check('the department dashboard takes the batch too', (await call('/api/faculty/department?batch=2022-2026', 'hodC')).data.totals.students === 1);
+    const cb = await call('/api/faculty/courses-by-class', 'hodC');
+    s.check('course progress by class: a HOD gets their own department only, with the classes', cb.status === 200 && cb.data.classes.map((c) => `${c.label}:${c.students}`).join() === 'Year 3 · B:1,Year 4 · A:1' && cb.data.courses[0].overall.students === 2);
+    s.check('course progress by class is for HOD and Admin only', (await call('/api/faculty/courses-by-class', 'stuA')).status === 403 && (await call('/api/faculty/courses-by-class', 'f1')).status === 403 && (await call('/api/faculty/courses-by-class', 'adm1')).data.courses[0].overall.students === 3);
+    const board = await call('/api/faculty/mentors', 'hodC');
+    const me = board.data?.mentors?.find((m) => m.id === 'hodC');
+    s.check('the mentor board says who is waiting for an answer and for how long, from the thread records', board.status === 200 && me.response.waiting === 1 && me.response.waiting_over_48h === 1 && me.response.longest_wait_hours >= 50);
+    const people = await call('/api/faculty/department', 'hodC');
+    s.check('every student row carries the batch for the People page', people.data.students.every((r) => /^\d{4}-\d{4}$/.test(r.batch)));
   } finally {
     server.close();
   }

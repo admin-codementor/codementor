@@ -3,6 +3,7 @@
 const userRepo = require('../repositories/userRepository');
 const departmentAnalyticsService = require('../services/departmentAnalyticsService');
 const practiceAnalyticsService = require('../services/practiceAnalyticsService');
+const courseAnalyticsService = require('../services/courseAnalyticsService');
 const platformScoreService = require('../services/platformScoreService');
 const { scopeDept } = require('../middleware/role.middleware');
 const { logAction } = require('../middleware/audit');
@@ -58,6 +59,16 @@ exports.practice = async (req, res) => {
   } catch (e) {
     console.error('practice analytics error:', String(e?.message || e).slice(0, 160));
     res.status(500).json({ success: false, error: 'Could not load practice analytics. Please try again.' });
+  }
+};
+
+// @route GET /api/faculty/courses-by-class   every course with progress per class, for the viewer's department
+exports.coursesByClass = async (req, res) => {
+  try {
+    res.json({ success: true, data: await courseAnalyticsService.getBySection(req) });
+  } catch (e) {
+    console.error('courses by class error:', String(e?.message || e).slice(0, 160));
+    res.status(500).json({ success: false, error: 'Could not load course progress by class.' });
   }
 };
 

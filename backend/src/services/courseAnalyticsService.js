@@ -15,6 +15,8 @@ const analytics = require('./analyticsService');
 const { buildCourseAnalytics } = require('../utils/courseAnalytics');
 const { resolveCourse, tally, studentProgress, summarise } = require('../utils/courseProgress');
 const { activeStudents } = require('../utils/students');
+const { buildCourseBySection } = require('../utils/courseBySection');
+const { scopeDept } = require('../middleware/role.middleware');
 
 const TTL_SECONDS = 120;
 // Bump when the response shape or aggregation changes (the cache outlives deploys).
@@ -131,6 +133,22 @@ exports.getCompletionSummary = async (req) => {
   scope.facultyId = req.user.id;
   const cv = await getVersion('courses');
   return cached(`analytics:course-summary:v2:c${cv}:${analytics.scopeKey(scope)}`, TTL_SECONDS, () => computeSummary(scope));
+};
+
+async function computeBySection(dept) {
+  const [courses, studentsMap, submissions] = await Promise.all([courseRepo.listAll(), userRepo.getMapByRole('student'), submissionRepo.listAllForAnalytics()]);
+  const students = activeStudents([...studentsMap.values()]).filter((s) => dept === null || (s.department || null) === dept).map((s) => ({ id: s.id, year: s.year ?? null, section: s.section || null }));
+  const modulesByCourse = await Promise.all(courses.map((c) => courseRepo.getModules(c.id)));
+  const problemsById = await problemRepo.getMapByIds([...new Set(modulesByCourse.flatMap((ms) => ms.flatMap((m) => m.problemIds || [])))]);
+  const resolved = courses.map((c, i) => ({ id: c.id, title: c.title || 'Untitled course', ...resolveCourse(modulesByCourse[i], problemsById) }));
+  return { ...buildCourseBySection({ courses: resolved.filter((c) => c.problems.size > 0), students, submissions }), scope: { department: dept } };
+}
+
+/** Every course with progress per class (year and section), for a HOD (own department) or Admin. */
+exports.getBySection = async (req) => {
+  const dept = scopeDept(req);
+  const cv = await getVersion('courses');
+  return cached(`analytics:course-by-section:v1:c${cv}:${dept ?? 'all'}`, TTL_SECONDS, () => computeBySection(dept));
 };
 
 exports.scopedStudents = scopedStudents;

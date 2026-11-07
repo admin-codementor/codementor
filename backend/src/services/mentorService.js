@@ -5,11 +5,13 @@ const { cached, getVersion, bumpVersion } = require('../utils/cache');
 const userRepo = require('../repositories/userRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const { scopeDept } = require('../middleware/role.middleware');
+const messageRepo = require('../repositories/messageRepository');
+const { buildMentorResponse } = require('../utils/mentorResponse');
 const { buildMentorBoard, checkAssignment, PERIODS, MAX_ASSIGN } = require('../utils/mentors');
 const { activeStudents } = require('../utils/students');
 
 const TTL_SECONDS = 120;
-const VERSION = 1;
+const VERSION = 2;
 /** Bumped on every assignment so cached dashboards pick up the change immediately. */
 const VERSION_NAME = 'mentors';
 
@@ -36,7 +38,12 @@ exports.getBoard = async (req, period) => {
       students: students.map((s) => ({ id: s.id, mentorId: s.mentorId || null })),
       submissions, period: per, now: Date.now(),
     });
-    return { ...board, scope: { department: dept } };
+    // Waiting messages come from the thread records only (who spoke last, and when); no message text is read.
+    const now = Date.now();
+    const threads = (await Promise.all(mentors.map((m) => messageRepo.listForUser(m.id).catch(() => [])))).flat();
+    const response = buildMentorResponse({ mentors: mentors.map((m) => ({ id: m.id })), students: students.map((s) => ({ id: s.id, mentorId: s.mentorId || null })), threads, now });
+    const empty = { threads: 0, waiting: 0, waiting_over_48h: 0, longest_wait_hours: null };
+    return { ...board, mentors: board.mentors.map((m) => ({ ...m, response: response.get(m.id) || empty })), scope: { department: dept } };
   });
 };
 

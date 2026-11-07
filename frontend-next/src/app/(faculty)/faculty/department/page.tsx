@@ -38,6 +38,8 @@ import { DepartmentExportButton } from "@/components/faculty/DepartmentExportDia
 import { AlumniTab } from "@/components/faculty/AlumniTab";
 import { LabsTab } from "@/components/faculty/LabsTab";
 import { PracticeTab } from "@/components/faculty/PracticeTab";
+import { CoursesByClassTab } from "@/components/faculty/CoursesByClassTab";
+import { PeopleTab } from "@/components/faculty/PeopleTab";
 import { radius } from "@/theme/tokens";
 import {
   CheckCircleOutlineIcon, GroupsOutlinedIcon, InsightsOutlinedIcon, LocalFireDepartmentOutlinedIcon,
@@ -59,7 +61,7 @@ interface DeptData {
   };
 }
 
-type DeptTab = "overview" | "weekly" | "rankings" | "coding" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni" | "labs" | "practice";
+type DeptTab = "overview" | "weekly" | "rankings" | "coding" | "departments" | "activity" | "mentors" | "portfolio" | "placement" | "alumni" | "labs" | "practice" | "courses" | "people";
 type Baseline = "view" | "year" | "institution";
 const BASELINES: { value: Baseline; label: string }[] = [
   { value: "view", label: "This view" },
@@ -177,9 +179,11 @@ export default function DepartmentDashboardPage() {
             sx={{ borderBottom: "1px solid", borderColor: "outlineVariant", mb: 3 }}
           >
             <Tab value="overview" label="Overview" />
+            <Tab value="people" label="People" />
             <Tab value="weekly" label="Weekly progress" />
             <Tab value="rankings" label="Rankings" />
             <Tab value="practice" label="Practice" />
+            <Tab value="courses" label="Courses" />
             <Tab value="coding" label="Coding score" />
             <Tab value="departments" label="Departments" />
             <Tab value="activity" label="Activity" />
@@ -192,6 +196,8 @@ export default function DepartmentDashboardPage() {
 
           {tab === "weekly" && <WeeklyProgressTable students={d.students} />}
           {tab === "rankings" && <RankingsTable students={d.students} />}
+          {tab === "people" && <PeopleTab students={d.students} />}
+          {tab === "courses" && <CoursesByClassTab />}
           {tab === "practice" && <PracticeTab section={section} year={year} batch={batch} />}
           {tab === "coding" && <CodingScoreTab section={section} year={year} />}
           {tab === "departments" && <DepartmentLeaderboard />}
