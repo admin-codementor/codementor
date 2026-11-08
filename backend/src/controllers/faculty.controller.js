@@ -444,6 +444,7 @@ exports.updateProblem = async (req, res) => {
     if (Number.isInteger(checker_language_id) && checker_language_id > 0) partial.checkerLanguageId = checker_language_id;
 
     await problemRepo.update(id, partial);
+    await bumpVersion('courses'); // the course screens show a problem's title, difficulty and tags
 
     // Test cases used to be silently ignored here, so a problem's tests could
     // never be corrected after creation. `test_cases` is treated as the complete

@@ -33,6 +33,12 @@ async function recordSolves(userId, problemIds) {
   });
 }
 
+/** One student's record, or null. */
+async function get(userId) {
+  const d = await col().doc(userId).get();
+  return d.exists ? d.data() : null;
+}
+
 /** { userId: solvedCount } for every student that has a record. Only the counter is downloaded, not the id list. */
 async function listCounts() {
   const snap = await col().select('solvedCount').get();
@@ -50,4 +56,4 @@ async function markBackfilled(info = {}) {
   await flagRef().set({ done: true, at: FieldValue.serverTimestamp(), ...info }, { merge: true });
 }
 
-module.exports = { recordSolve, recordSolves, listCounts, isBackfilled, markBackfilled };
+module.exports = { recordSolve, recordSolves, get, listCounts, isBackfilled, markBackfilled };
