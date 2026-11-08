@@ -6,6 +6,7 @@ const { scopeDept, canSeeDepartment, canManageResource, canManageOwnedBy } = req
 const { cached, bumpVersion } = require('../utils/cache');
 const rankingService = require('../services/rankingService');
 const studentAggregateService = require('../services/studentAggregateService');
+const courseCatalog = require('../services/courseCatalogService');
 
 // Every student, as a Map of id -> slim profile (name, roll no, department, section, year). Shared and cached for about a minute,
 // so a cohort table no longer downloads all 3000 student documents per request.
@@ -1882,9 +1883,13 @@ async function buildStudentProfile(id, student) {
   const courses = [];
   // Active time per course from the timer (zero for courses worked on before it existed).
   const courseSeconds = new Map((await problemTimeRepo.listCourseTimesByUser(student.id)).map((t) => [t.courseId, t.seconds || 0]));
-  const publishedCourses = allCourses.filter((c) => c.isPublished);
-  const modulesByCourse = await Promise.all(publishedCourses.map((c) => courseRepo.getModules(c.id)));
-  const courseProblems = await problemRepo.getMapByIds([...new Set(modulesByCourse.flatMap((ms) => ms.flatMap((m) => m.problemIds || [])))]);
+  // The modules and the slim problems come from the shared course catalogue (the same one students see), not from reading every
+  // module and about 700 problem documents again for each student profile that is built.
+  const catalog = await courseCatalog.getCatalog();
+  const publishedIds = new Set(allCourses.filter((c) => c.isPublished).map((c) => c.id));
+  const publishedCourses = catalog.courses.filter((c) => publishedIds.has(c.id));
+  const modulesByCourse = publishedCourses.map((c) => c.modules);
+  const courseProblems = courseCatalog.problemMap(catalog);
   publishedCourses.forEach((c, i) => {
     const { units: resolvedUnits, problems: required } = resolveCourse(modulesByCourse[i], courseProblems);
     if (required.size === 0) return;

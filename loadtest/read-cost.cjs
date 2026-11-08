@@ -158,6 +158,7 @@ function scenarios() {
     coursePage: (i) => run(C.getCourseById, { ...student(i), params: { id: 'python' } }),
     cohorts: () => run(F.getCohorts, { ...hod, query: { dimension: 'section' } }),
     cohortStudents: () => run(F.getCohortStudents, { ...hod, query: { dimension: 'department', value: 'CSE', page: '1', limit: '20' } }),
+    studentDetail: (i) => run(F.getStudentDetail, { ...hod, params: { id: `s${String((i * 5) % STUDENTS).padStart(5, '0')}` } }),
     classAnalytics: () => run(F.getClassAnalytics, hod),
     cohortTopics: () => run(F.getCohortTopics, { ...hod, query: { dim: 'department' } }),
   };
