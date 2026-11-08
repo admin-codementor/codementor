@@ -1030,9 +1030,9 @@ exports.getClassAnalytics = async (req, res) => {
     // Single full-collection read — every aggregate below is derived from
     // this one array in application code (Firestore has no server-side
     // GROUP BY). See submissionRepository.js header for the scale caveat.
-    // The result is the same for every faculty member, so it is built at most once every two minutes and shared. It also no
+    // The result is the same for every faculty member, so it is built at most once every ten minutes and shared (it scans every submission). It also no
     // longer downloads source code (`listAll`) or whole problem documents: only the fields below.
-    const payload = await cached('analytics:class-overview:v1', 120, async () => {
+    const payload = await cached('analytics:class-overview:v1', 600, async () => {
     const allSubs = await submissionRepo.listAllForAnalytics();
     const allProblemIds = [...new Set(allSubs.map(s => s.problemId))];
     const problemsMap = await problemRepo.getSlimMapByIds(allProblemIds);
@@ -1989,8 +1989,8 @@ exports.getCohortTopics = async (req, res) => {
     // Roster + cohort dimension from Firestore; submissions from Postgres,
     // tags hydrated from Firestore, aggregated by cohort here since neither
     // dimension lives in SQL anymore.
-    // Same for every faculty member: built at most once every two minutes per dimension, from the light fields only.
-    const payload = await cached(`analytics:cohort-topics:v1:${dim}`, 120, async () => {
+    // Same for every faculty member: built at most once every ten minutes per dimension (it scans every submission), light fields only.
+    const payload = await cached(`analytics:cohort-topics:v1:${dim}`, 600, async () => {
     const studentsMap = await studentDirectory();
     const studentIds = new Set(studentsMap.keys());
     const subs = (await submissionRepo.listAllForAnalytics()).filter(s => studentIds.has(s.userId));
