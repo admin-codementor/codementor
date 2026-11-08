@@ -24,6 +24,8 @@ import { ResponsivePie } from "@nivo/pie";
 import { useNivoTheme, useChartColors } from "@/components/ui/nivo";
 import { Reveal } from "@/components/ui/motion";
 import api from "@/lib/api";
+import { useQueryClient } from "@tanstack/react-query";
+import { fetchDashboardCore } from "@/lib/queries/student";
 import { getUser } from "@/lib/auth";
 import { changeFirebasePassword } from "@/lib/firebase";
 import { PageHeader } from "@/components/ui/PageHeader";
@@ -178,16 +180,15 @@ function ProfileInner() {
   const [pwForm, setPwForm] = React.useState({ current: "", next: "", confirm: "" });
   const [pwLoading, setPwLoading] = React.useState(false);
   const [pwMsg, setPwMsg] = React.useState<{ text: string; ok: boolean } | null>(null);
+  const queryClient = useQueryClient();
 
   React.useEffect(() => {
     const u = getUser();
     setUserState(u);
     setNameVal(u?.name ?? "");
 
-    api
-      .get("/api/student/dashboard")
-      .then((r) => {
-        const d = r.data?.data;
+    fetchDashboardCore(queryClient)
+      .then((d) => {
         if (d) {
           setStats(d.stats ?? DEFAULT_STATS);
           setTopics(d.topics ?? []);
@@ -219,7 +220,7 @@ function ProfileInner() {
         if (r.data?.success) setSkills(r.data.data);
       })
       .catch(() => {});
-  }, []);
+  }, [queryClient]);
 
   React.useEffect(() => {
     api
