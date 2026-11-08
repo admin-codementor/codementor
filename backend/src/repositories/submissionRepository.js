@@ -78,9 +78,15 @@ async function listByUserLight(userId) {
   return snap.docs.map((d) => ({ id: d.id, ...d.data() }));
 }
 
+// Just who/what/verdict, for counting. Used by the per-student totals until the solved records are backfilled, and by the backfill itself.
+async function listAllForCounting() {
+  const snap = await col().select('userId', 'problemId', 'verdict').get();
+  return snap.docs.map((d) => d.data());
+}
+
 async function listAll() {
   const snap = await col().get();
   return snap.docs.map(toSubmission);
 }
 
-module.exports = { create, getById, listByUser, listByUserLight, listAcceptedForRanking, listByProblem, listByProblemForPerformance, listByProblemForStats, listByUserAndProblem, listAll, listAllForAnalytics };
+module.exports = { create, getById, listByUser, listByUserLight, listAcceptedForRanking, listAllForCounting, listByProblem, listByProblemForPerformance, listByProblemForStats, listByUserAndProblem, listAll, listAllForAnalytics };

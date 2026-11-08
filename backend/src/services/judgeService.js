@@ -396,11 +396,9 @@ async function finalize(jobId, job, acc, testCasesLength) {
 
   if (user_id && !sampleOnly) {
     await updateTopicMastery(user_id, problem_id, acc.finalVerdict.description === 'Accepted', false);
-    // Keep the student's running "problems solved" record up to date (it feeds the ranking). A failure here must never
-    // fail the submission; the nightly/backfill re-check repairs any miss.
-    if (acc.finalVerdict.description === 'Accepted') {
-      try { await studentStatsRepo.recordSolve(user_id, problem_id); } catch (e) { console.error('Solved-count update failed:', e.message); }
-    }
+    // Keep the student's running record (attempts, accepted, distinct solved) up to date; it feeds the ranking and the faculty
+    // tables. A failure here must never fail the submission; re-running the backfill repairs any miss.
+    try { await studentStatsRepo.recordAttempt(user_id, problem_id, acc.finalVerdict.description === 'Accepted'); } catch (e) { console.error('Student record update failed:', e.message); }
   }
 
   // Reconcile a coding-section submission back into the exam attempt it was

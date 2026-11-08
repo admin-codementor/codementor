@@ -34,6 +34,7 @@ function buildBoardFromCounts(studentsMap, counts, handleByUser = new Map(), now
   for (const [id, p] of studentsMap) {
     students[id] = {
       name: p.name || '',
+      rollNo: p.rollNo || null,
       department: p.department || null,
       section: p.section || null,
       year: p.year ?? null,

@@ -26,7 +26,10 @@ async function build() {
   ]);
   // Fast path: one small record per student. Used only once the one-time build from existing submissions has finished
   // (scripts/backfill-student-stats.js), so a half-filled set of records can never give a wrong rank.
-  if (backfilled) return buildBoardFromCounts(studentsMap, await studentStatsRepo.listCounts(), handles);
+  if (backfilled) {
+    const agg = await studentStatsRepo.listAggregates();
+    return buildBoardFromCounts(studentsMap, Object.fromEntries(Object.entries(agg).map(([id, a]) => [id, a.solved])), handles);
+  }
   // Before that: read every Accepted submission (slow, but correct).
   return buildBoard(studentsMap, await submissionRepo.listAcceptedForRanking(), handles);
 }

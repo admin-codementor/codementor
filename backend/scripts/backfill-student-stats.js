@@ -3,13 +3,14 @@
 //   node scripts/backfill-student-stats.js            LOOK ONLY: reads, counts, prints a summary, writes nothing
 //   node scripts/backfill-student-stats.js --apply    writes the records, then switches the ranking to use them
 //
-// READS: every Accepted submission once (two fields each) plus the student list. On Firestore that is one read per Accepted
+// READS: every submission once (three fields each, never the source code) plus the student list. On Firestore that is one read per
 // submission, so run it on the Blaze plan or against a copy of the data, NOT on the free daily quota with many thousands of
 // submissions. The look-only run costs the same reads as the real one.
 //
 // Order that is safe while the site is live:
 //   1. deploy the code that keeps the records up to date (judgeService),
-//   2. run this with --apply (it only ever ADDS solved problems, so a student solving a problem meanwhile is never lost),
+//   2. run this with --apply when no exam is live (solved problems only ever ADD, so none is lost; an attempt that lands between
+//      the read and the write can be missed in the attempt counters),
 //   3. the ranking switches to the records by itself once this finishes.
 // Re-running is safe and repairs any record that fell behind. Use --no-flag to re-check without touching the switch.
 const path = require('path');
@@ -23,17 +24,19 @@ async function main() {
   const userRepo = require('../src/repositories/userRepository');
   const statsRepo = require('../src/repositories/studentStatsRepository');
 
-  const [studentsMap, accepted] = await Promise.all([userRepo.getMapByRole('student'), submissionRepo.listAcceptedForRanking()]);
+  const [studentsMap, rows] = await Promise.all([userRepo.getMapByRole('student'), submissionRepo.listAllForCounting()]);
   const perUser = new Map();
-  for (const r of accepted) {
-    if (!r.userId || !r.problemId || !studentsMap.has(r.userId)) continue;
-    if (!perUser.has(r.userId)) perUser.set(r.userId, new Set());
-    perUser.get(r.userId).add(r.problemId);
+  for (const r of rows) {
+    if (!r.userId || !studentsMap.has(r.userId)) continue;
+    let e = perUser.get(r.userId);
+    if (!e) { e = { total: 0, accepted: 0, problemIds: new Set() }; perUser.set(r.userId, e); }
+    e.total += 1;
+    if (r.verdict === 'Accepted') { e.accepted += 1; if (r.problemId) e.problemIds.add(r.problemId); }
   }
-  const totalSolves = [...perUser.values()].reduce((n, s) => n + s.size, 0);
+  const totalSolves = [...perUser.values()].reduce((n, e) => n + e.problemIds.size, 0);
   console.log(`Students: ${studentsMap.size}`);
-  console.log(`Accepted submissions read: ${accepted.length}`);
-  console.log(`Students with at least one solved problem: ${perUser.size}`);
+  console.log(`Submissions read: ${rows.length}`);
+  console.log(`Students with at least one submission: ${perUser.size}`);
   console.log(`Distinct solved problems in total: ${totalSolves}`);
 
   if (!apply) {
@@ -42,14 +45,14 @@ async function main() {
   }
 
   let done = 0;
-  for (const [userId, set] of perUser) {
-    await statsRepo.recordSolves(userId, [...set]);
+  for (const [userId, e] of perUser) {
+    await statsRepo.recordBackfill(userId, { total: e.total, accepted: e.accepted, problemIds: [...e.problemIds] });
     if (++done % 100 === 0) console.log(`  ${done} / ${perUser.size} records written`);
   }
   console.log(`Wrote ${done} records.`);
   if (touchFlag) {
     await statsRepo.markBackfilled({ students: perUser.size, solves: totalSolves });
-    console.log('Ranking will now use the records (within about a minute).');
+    console.log('Rankings and faculty tables will now use the records (within about two minutes).');
   }
   process.exit(0);
 }

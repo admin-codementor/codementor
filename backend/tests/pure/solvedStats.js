@@ -35,3 +35,40 @@ module.exports = function (s) {
   s.check('the table from records equals the table from the old scan', JSON.stringify(fromScan) === JSON.stringify(fromRecords), JSON.stringify(fromRecords.solved));
   s.check('zero counts and non-students stay out of the table', fromRecords.solved.c === undefined && fromRecords.solved.zz === undefined);
 };
+
+// ── Attempt counters, backfill merge, and the slow-way aggregate ──
+module.exports = (function (inner) {
+  const { applyAttempt, mergeBackfill, aggregateRows } = require('../../src/utils/solvedStats');
+  return function (s) {
+    inner(s);
+
+    let doc = null;
+    ({ next: doc } = applyAttempt(doc, { problemId: 'p1', accepted: false }));
+    s.check('a failed attempt counts as an attempt only', doc.totalSubmissions === 1 && doc.acceptedSubmissions === 0 && doc.solvedCount === 0);
+    const r2 = applyAttempt(doc, { problemId: 'p1', accepted: true });
+    doc = r2.next;
+    s.check('the first Accepted adds a solved problem and is flagged new', r2.isNew === true && doc.solvedCount === 1 && doc.totalSubmissions === 2 && doc.acceptedSubmissions === 1);
+    const r3 = applyAttempt(doc, { problemId: 'p1', accepted: true });
+    s.check('a second Accepted on the same problem counts as accepted but not as a new solve', r3.isNew === false && r3.next.solvedCount === 1 && r3.next.acceptedSubmissions === 2 && r3.next.totalSubmissions === 3);
+    s.check('a failed attempt keeps the solved list', applyAttempt(r3.next, { problemId: 'p2', accepted: false }).next.solvedProblemIds.length === 1);
+
+    const merged = mergeBackfill({ totalSubmissions: 5, acceptedSubmissions: 1, solvedProblemIds: ['p9'] }, { total: 40, accepted: 12, problemIds: ['p1', 'p2'] });
+    s.check('backfill keeps live solved problems and adds the scanned ones', merged.solvedCount === 3 && merged.solvedProblemIds.includes('p9'));
+    s.check('backfill counters take the larger value (never reset a live count)', merged.totalSubmissions === 40 && merged.acceptedSubmissions === 12);
+    s.check('backfill never lowers a live counter that is already ahead', mergeBackfill({ totalSubmissions: 50, acceptedSubmissions: 20 }, { total: 40, accepted: 12 }).totalSubmissions === 50);
+
+    const rows = [
+      { userId: 'a', problemId: 'p1', verdict: 'Wrong Answer' }, { userId: 'a', problemId: 'p1', verdict: 'Accepted' }, { userId: 'a', problemId: 'p1', verdict: 'Accepted' },
+      { userId: 'a', problemId: 'p2', verdict: 'Accepted' }, { userId: 'b', problemId: 'p1', verdict: 'Time Limit Exceeded' }, { problemId: 'p1', verdict: 'Accepted' },
+    ];
+    const agg = aggregateRows(rows);
+    s.check('the scan counts attempts, accepted and distinct solved per student', agg.a.total === 4 && agg.a.accepted === 3 && agg.a.solved === 2);
+    s.check('a student with only failed attempts shows 0 solved but 1 attempt', agg.b.total === 1 && agg.b.solved === 0);
+    s.check('rows without a student are ignored', Object.keys(agg).length === 2);
+
+    // The two ways of getting the numbers agree: replay the same rows through applyAttempt.
+    let replay = null;
+    for (const r of rows.filter((x) => x.userId === 'a')) ({ next: replay } = applyAttempt(replay, { problemId: r.problemId, accepted: r.verdict === 'Accepted' }));
+    s.check('replaying attempts one by one gives the same numbers as the scan', replay.totalSubmissions === agg.a.total && replay.acceptedSubmissions === agg.a.accepted && replay.solvedCount === agg.a.solved);
+  };
+}(module.exports));
