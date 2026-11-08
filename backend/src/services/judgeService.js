@@ -22,6 +22,7 @@ const { toB64, fromB64 } = require('../utils/judge0Encoding');
 const { submitCheckerBatch, pollCheckerBatch } = require('../utils/checkerRunner');
 const problemRepo = require('../repositories/problemRepository');
 const topicMasteryRepo = require('../repositories/topicMasteryRepository');
+const studentStatsRepo = require('../repositories/studentStatsRepository');
 const examScoring = require('../utils/examScoring');
 const examAttempt = require('../utils/examAttempt');
 const { outputsMatch } = require('../utils/outputCompare');
@@ -395,6 +396,11 @@ async function finalize(jobId, job, acc, testCasesLength) {
 
   if (user_id && !sampleOnly) {
     await updateTopicMastery(user_id, problem_id, acc.finalVerdict.description === 'Accepted', false);
+    // Keep the student's running "problems solved" record up to date (it feeds the ranking). A failure here must never
+    // fail the submission; the nightly/backfill re-check repairs any miss.
+    if (acc.finalVerdict.description === 'Accepted') {
+      try { await studentStatsRepo.recordSolve(user_id, problem_id); } catch (e) { console.error('Solved-count update failed:', e.message); }
+    }
   }
 
   // Reconcile a coding-section submission back into the exam attempt it was

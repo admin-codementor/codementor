@@ -17,8 +17,18 @@ function buildBoard(studentsMap, acceptedRows, handleByUser = new Map(), now = D
     if (!set) { set = new Set(); sets.set(r.userId, set); }
     set.add(r.problemId);
   }
+  const counts = {};
+  for (const [id, set] of sets) counts[id] = set.size;
+  return buildBoardFromCounts(studentsMap, counts, handleByUser, now);
+}
+
+/**
+ * The same table from ready-made counts ({ userId: distinct problems solved }), as kept in the per-student records.
+ * Counts for ids that are not students are dropped; zero counts are left out (a missing entry reads as 0).
+ */
+function buildBoardFromCounts(studentsMap, counts, handleByUser = new Map(), now = Date.now()) {
   const solved = {};
-  for (const [id, set] of sets) if (studentsMap.has(id)) solved[id] = set.size;
+  for (const [id, n] of Object.entries(counts || {})) if (studentsMap.has(id) && n > 0) solved[id] = n;
 
   const students = {};
   for (const [id, p] of studentsMap) {
@@ -35,4 +45,4 @@ function buildBoard(studentsMap, acceptedRows, handleByUser = new Map(), now = D
   return { solved, students, builtAt: now };
 }
 
-module.exports = { buildBoard };
+module.exports = { buildBoard, buildBoardFromCounts };

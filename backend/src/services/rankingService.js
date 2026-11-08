@@ -9,7 +9,8 @@ const { cached } = require('../utils/cache');
 const userRepo = require('../repositories/userRepository');
 const submissionRepo = require('../repositories/submissionRepository');
 const publicHandleRepo = require('../repositories/publicHandleRepository');
-const { buildBoard } = require('../utils/rankingBoard');
+const studentStatsRepo = require('../repositories/studentStatsRepository');
+const { buildBoard, buildBoardFromCounts } = require('../utils/rankingBoard');
 
 const REDIS_TTL = 60;      // seconds, shared by every API copy
 const MEMO_MS = 10 * 1000; // per process, so a busy minute does not parse the table for every request
@@ -18,12 +19,16 @@ let memo = null;     // { at, value }
 let inflight = null; // one build at a time per process: 1000 people at the minute mark must not start 1000 scans
 
 async function build() {
-  const [studentsMap, accepted, handles] = await Promise.all([
+  const [studentsMap, handles, backfilled] = await Promise.all([
     userRepo.getMapByRole('student'),
-    submissionRepo.listAcceptedForRanking(),
     publicHandleRepo.mapByUser(),
+    studentStatsRepo.isBackfilled().catch(() => false),
   ]);
-  return buildBoard(studentsMap, accepted, handles);
+  // Fast path: one small record per student. Used only once the one-time build from existing submissions has finished
+  // (scripts/backfill-student-stats.js), so a half-filled set of records can never give a wrong rank.
+  if (backfilled) return buildBoardFromCounts(studentsMap, await studentStatsRepo.listCounts(), handles);
+  // Before that: read every Accepted submission (slow, but correct).
+  return buildBoard(studentsMap, await submissionRepo.listAcceptedForRanking(), handles);
 }
 
 async function getBoard() {
