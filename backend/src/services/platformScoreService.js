@@ -1,6 +1,6 @@
 // Coding scores for the viewer's students: gathers linked profiles, CodeMentor solves and the college thresholds, and hands
 // them to the pure scorer in utils/platformScore.js.
-const { cached } = require('../utils/cache');
+const { cached, getVersion } = require('../utils/cache');
 const userRepo = require('../repositories/userRepository');
 const codingProfileRepo = require('../repositories/codingProfileRepository');
 const submissionRepo = require('../repositories/submissionRepository');
@@ -72,12 +72,17 @@ async function compute({ scope, year, section }) {
 exports.getScores = async (req, { year, section } = {}) => {
   const scope = await analytics.resolveAnalyticsScope(req);
   scope.facultyId = req.user.id;
-  const key = `platform-scores:v${VERSION}:${analytics.scopeKey(scope)}:${year || 'all'}:${section || 'all'}`;
+  // The version is bumped when thresholds change or a typed number is verified (platformScore.controller), so those show at once.
+  const ver = await getVersion('platform');
+  const key = `platform-scores:v${VERSION}.${ver}:${analytics.scopeKey(scope)}:${year || 'all'}:${section || 'all'}`;
   return cached(key, TTL, () => compute({ scope, year, section }));
 };
 
 /** Every student's score, for the Training & Placement export. Cached like the staff table. */
-exports.collegeScores = () => cached(`platform-scores:v${VERSION}:college`, TTL, () => compute({ scope: { ownClasses: false, dept: null, memberIds: null } }));
+exports.collegeScores = async () => {
+  const ver = await getVersion('platform');
+  return cached(`platform-scores:v${VERSION}.${ver}:college`, TTL, () => compute({ scope: { ownClasses: false, dept: null, memberIds: null } }));
+};
 
 /**
  * Typed numbers waiting for a HOD or Admin to check them against the student's profile. A HOD sees only their own department's students.
