@@ -58,9 +58,27 @@ sudo ufw enable
 ```
 Nothing else is open: Redis, Judge0 and the API replicas are only reachable inside Docker.
 
+## 7. One-time backfill (after the app is running, never while an exam is live)
+The fast dashboard, leaderboard and faculty tables read one small record per student. Until this has run once they use the old slow scan, so nothing is broken, just slower.
+Needs Firestore billing (Blaze) switched on: it reads every submission once.
+```bash
+docker compose -f deploy/server/docker-compose.yml exec backend node scripts/backfill-student-stats.js          # look only, writes nothing
+docker compose -f deploy/server/docker-compose.yml exec backend node scripts/backfill-student-stats.js --apply  # writes the records
+```
+Read what the first command prints before running the second.
+
+## 8. Updating later
+Do not update while an exam is running (open exam pages must claim their session again).
+```bash
+git pull origin main
+docker compose -f deploy/server/docker-compose.yml up -d --build
+docker compose -f deploy/server/docker-compose.yml restart nginx
+```
+To go back: `git checkout <earlier commit>` and run the same two compose commands.
+
 ## Known risks in this draft
 - **Redis gateway (`srh`)**: a third-party image that makes local Redis look like Upstash. Must be tested with the rate limiter and cache before relying on it. Fallback: switch the backend to a normal Redis client (small code change).
 - **Judge0 worker counts (8 + 8) and queue 2000** are estimates from the research. We confirm with the load test, not by guessing.
 - **nginx reads the replica addresses at start**: after scaling the API up or down, restart nginx.
-- **Firestore free plan** stops at 50,000 reads a day. Fine for Monday's copy and testing; not for a real exam.
-- `deploy/update.sh` and the old `deploy/Caddyfile` still describe the single-container setup and need updating for this stack.
+- **Firestore free plan** stops at 50,000 reads a day. Fine for the first copy and testing; not for a real exam.
+- `deploy/update.sh` and the old `deploy/Caddyfile` still describe the single-container setup. They do not work with this stack: use section 8 here instead.
