@@ -46,16 +46,19 @@ async function getByEmail(email) {
 async function create(id, data) {
   const col = collectionFor(data.role);
   await db.collection(col).doc(id).set({ ...data, createdAt: FieldValue.serverTimestamp() });
+  invalidateLists();
   return getById(id, data.role);
 }
 
 async function update(id, role, partial) {
   await db.collection(collectionFor(role)).doc(id).set(partial, { merge: true });
+  invalidateLists();
 }
 
 /** Ends every existing session of this user at its next refresh (see utils/tokens.js). */
 async function bumpTokenVersion(id, role) {
   await db.collection(collectionFor(role)).doc(id).set({ tokenVersion: FieldValue.increment(1) }, { merge: true });
+  invalidateLists();
 }
 
 /** Ids of every account an Admin has disabled, from both collections. */
@@ -64,9 +67,31 @@ async function listDisabledIds() {
   return snaps.flatMap((s) => s.docs.map((d) => d.id));
 }
 
-async function listByRole(role) {
-  const snap = await db.collection(collectionFor(role)).get();
+// Listing a whole collection costs one read per account (3000 students), and about forty screens do it on every request just to show
+// names. So each list is kept in this process for a few seconds and shared by everyone who asks meanwhile; one read happens per
+// collection per window, not per request. Writes through this repository clear it at once; another API copy may lag by up to the
+// window. Sign-in and access checks never use these lists (they read one account by id), so a disabled or changed account is
+// still seen immediately. Each caller gets its own copy of every account, so changing a returned object cannot change the cache.
+// USER_LIST_MEMO_MS=0 turns this off.
+const LIST_MEMO_MS = (() => { const n = Number(process.env.USER_LIST_MEMO_MS); return Number.isFinite(n) && process.env.USER_LIST_MEMO_MS !== undefined && process.env.USER_LIST_MEMO_MS !== '' ? n : 15000; })();
+const listMemo = new Map(); // collection -> { at, promise }
+const invalidateLists = () => listMemo.clear();
+
+async function fetchCollection(col) {
+  const snap = await db.collection(col).get();
   return snap.docs.map(toUser);
+}
+
+async function listByRole(role) {
+  const col = collectionFor(role);
+  if (LIST_MEMO_MS <= 0) return fetchCollection(col);
+  let entry = listMemo.get(col);
+  if (!entry || Date.now() - entry.at > LIST_MEMO_MS) {
+    entry = { at: Date.now(), promise: fetchCollection(col) };
+    listMemo.set(col, entry);
+    entry.promise.catch(() => { if (listMemo.get(col) === entry) listMemo.delete(col); });
+  }
+  return (await entry.promise).map((u) => ({ ...u }));
 }
 
 // Map(id -> user) for hydrating Postgres aggregate query results in application code.
@@ -92,4 +117,5 @@ module.exports = {
   getMapByRole,
   bumpTokenVersion,
   getAllUsersMap,
+  invalidateLists, // tests, and anything that writes accounts without going through this file
 };

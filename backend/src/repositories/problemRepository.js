@@ -27,6 +27,15 @@ async function getMapByIds(ids) {
   return new Map(docs.filter((d) => d.exists).map((d) => [d.id, { id: d.id, ...d.data() }]));
 }
 
+// Same as getMapByIds, but only the fields the course screens show. The statement, lesson, editorial and reference solution are the
+// big parts of a problem and are not downloaded. (Firestore still bills one read per document.)
+async function getSlimMapByIds(ids) {
+  const unique = [...new Set(ids)].filter(Boolean);
+  if (unique.length === 0) return new Map();
+  const docs = await db.getAll(...unique.map((id) => col().doc(id)), { fieldMask: ['title', 'difficulty', 'tags', 'status'] });
+  return new Map(docs.filter((d) => d.exists).map((d) => [d.id, { id: d.id, ...d.data() }]));
+}
+
 // Ordered by the explicit `_order` field, falling back to createdAt for rows
 // written before it existed. Ordering on createdAt alone was unstable: test cases
 // are written in a single batch, so every doc shares one serverTimestamp and the
@@ -142,6 +151,6 @@ async function listCatalog() {
 }
 
 module.exports = {
-  getAll, listCatalog, getById, getMapByIds, getTestCases, getPublicTestCases,
+  getAll, listCatalog, getById, getMapByIds, getSlimMapByIds, getTestCases, getPublicTestCases,
   create, upsert, update, remove, replaceTestCases, addTestCases,
 };

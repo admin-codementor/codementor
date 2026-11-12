@@ -1,6 +1,7 @@
 const courseRepo = require('../repositories/courseRepository');
-const problemRepo = require('../repositories/problemRepository');
 const submissionRepo = require('../repositories/submissionRepository');
+const courseCatalog = require('../services/courseCatalogService');
+const solvedService = require('../services/solvedService');
 const { resolveCourse, percentOf } = require('../utils/courseProgress');
 const { resolveResume } = require('../utils/courseResume');
 const problemTimeRepo = require('../repositories/problemTimeRepository');
@@ -40,8 +41,10 @@ function moduleProgress(problemIds, solvedSet, dueAt, now = Date.now()) {
 exports.getCourses = async (req, res) => {
   try {
     const userId = req.user.id;
-    const [courses, mySubs] = await Promise.all([courseRepo.listPublished(), submissionRepo.listByUser(userId)]);
-    const mySolvedIds = new Set(mySubs.filter(s => s.verdict === 'Accepted').map(s => s.problemId));
+    // The catalogue (courses, modules, slim problems) is shared by everyone and rebuilt at most every couple of minutes; this
+    // student's own solved set is one small read. Neither scans the other students' data or every problem document.
+    const [catalog, mySolvedIds] = await Promise.all([courseCatalog.getCatalog(), solvedService.solvedSetFor(userId)]);
+    const courses = catalog.courses;
 
     const now = Date.now();
     // Catalogue-wide totals, deduplicated across courses. The page used to add
@@ -52,8 +55,8 @@ exports.getCourses = async (req, res) => {
     const everySolvedId = new Set();
 
     // Same definition faculty see: only existing, published problems count, each once per course.
-    const modulesByCourse = await Promise.all(courses.map((c) => courseRepo.getModules(c.id)));
-    const problemsById = await problemRepo.getMapByIds([...new Set(modulesByCourse.flatMap((ms) => ms.flatMap((m) => m.problemIds || [])))]);
+    const modulesByCourse = courses.map((c) => c.modules);
+    const problemsById = courseCatalog.problemMap(catalog);
 
     const data = courses.map((c, i) => {
       const { units, problems } = resolveCourse(modulesByCourse[i], problemsById);
@@ -112,20 +115,27 @@ exports.getCourseById = async (req, res) => {
     const userId = req.user.id;
     const { id } = req.params;
 
-    const course = await courseRepo.getById(id);
-    if (!course || !course.isPublished) {
-      return res.status(404).json({ success: false, error: 'Course not found' });
+    let catalog = await courseCatalog.getCatalog();
+    let course = catalog.courses.find((c) => c.id === id);
+    if (!course) {
+      // Not in the shared catalogue: either it does not exist / is not published, or it was published in the last couple of
+      // minutes. One cheap read tells which, so a made-up id never forces a rebuild.
+      const direct = await courseRepo.getById(id);
+      if (!direct || !direct.isPublished) return res.status(404).json({ success: false, error: 'Course not found' });
+      catalog = await courseCatalog.getCatalog({ fresh: true });
+      course = catalog.courses.find((c) => c.id === id);
+      if (!course) return res.status(404).json({ success: false, error: 'Course not found' });
     }
 
-    const rawModules = await courseRepo.getModules(id);
-    const problemsMap = await problemRepo.getMapByIds([...new Set(rawModules.flatMap(m => m.problemIds || []))]);
+    const rawModules = course.modules;
+    const problemsMap = courseCatalog.problemMap(catalog);
     // Existing, published problems only: a draft cannot be opened and a deleted one is gone. The module rows and the
     // course header both read from this one list, so they cannot disagree.
     const { units: modules, problems: required } = resolveCourse(rawModules, problemsMap);
     const allProblemIds = [...required];
 
     const idSet = new Set(allProblemIds);
-    const mySubs = await submissionRepo.listByUser(userId);
+    const mySubs = await submissionRepo.listByUserLight(userId); // no source code: only verdict, problem and time are used here
     const solvedSet = new Set(mySubs.filter(s => s.verdict === 'Accepted' && idSet.has(s.problemId)).map(s => s.problemId));
 
     // Where to continue: the last unsolved problem the student worked on (a visit counts, via the time record),

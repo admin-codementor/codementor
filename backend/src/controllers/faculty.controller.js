@@ -4,6 +4,16 @@ const { generateVerifiedTestCases } = require('../services/testCaseGenerator');
 const { logAction } = require('../middleware/audit');
 const { scopeDept, canSeeDepartment, canManageResource, canManageOwnedBy } = require('../middleware/role.middleware');
 const { cached, bumpVersion } = require('../utils/cache');
+const rankingService = require('../services/rankingService');
+const studentAggregateService = require('../services/studentAggregateService');
+const courseCatalog = require('../services/courseCatalogService');
+
+// Every student, as a Map of id -> slim profile (name, roll no, department, section, year). Shared and cached for about a minute,
+// so a cohort table no longer downloads all 3000 student documents per request.
+async function studentDirectory() {
+  const board = await rankingService.getBoard();
+  return new Map(Object.entries(board.students).map(([id, st]) => [id, { id, ...st }]));
+}
 const { computeStrengthsWeaknesses } = require('../utils/topicScores');
 const { flagFor, weeklyActivity, funnelFromStats } = require('../utils/studentState');
 const examRepo = require('../repositories/examRepository');
@@ -444,6 +454,7 @@ exports.updateProblem = async (req, res) => {
     if (Number.isInteger(checker_language_id) && checker_language_id > 0) partial.checkerLanguageId = checker_language_id;
 
     await problemRepo.update(id, partial);
+    await bumpVersion('courses'); // the course screens show a problem's title, difficulty and tags
 
     // Test cases used to be silently ignored here, so a problem's tests could
     // never be corrected after creation. `test_cases` is treated as the complete
@@ -1020,9 +1031,12 @@ exports.getClassAnalytics = async (req, res) => {
     // Single full-collection read — every aggregate below is derived from
     // this one array in application code (Firestore has no server-side
     // GROUP BY). See submissionRepository.js header for the scale caveat.
-    const allSubs = await submissionRepo.listAll();
+    // The result is the same for every faculty member, so it is built at most once every ten minutes and shared (it scans every submission). It also no
+    // longer downloads source code (`listAll`) or whole problem documents: only the fields below.
+    const payload = await cached('analytics:class-overview:v1', 600, async () => {
+    const allSubs = await submissionRepo.listAllForAnalytics();
     const allProblemIds = [...new Set(allSubs.map(s => s.problemId))];
-    const problemsMap = await problemRepo.getMapByIds(allProblemIds);
+    const problemsMap = await problemRepo.getSlimMapByIds(allProblemIds);
     const subMillis = (s) => s.submittedAt?.toMillis?.() ?? new Date(s.submittedAt).getTime();
     const subDate = (s) => s.submittedAt?.toDate?.() ?? new Date(s.submittedAt);
 
@@ -1187,24 +1201,23 @@ exports.getClassAnalytics = async (req, res) => {
       insights.push({ tone: 'warning', text: `${zeroSolved} student${zeroSolved === 1 ? ' has' : 's have'} not solved a single problem yet.` });
     }
 
-    res.json({
-      success: true,
-      data: {
-        topicWeakness,
-        submissionsTimeline,
-        difficultyDistribution,
-        verdictDistribution,
-        topStudents,
-        topicMastery,
-        byDepartment,
-        bySection,
-        weeklyTrend,
-        solvedDistribution,
-        submissionHeatmap,
-        languageDistribution,
-        insights
-      }
+    return {
+      topicWeakness,
+      submissionsTimeline,
+      difficultyDistribution,
+      verdictDistribution,
+      topStudents,
+      topicMastery,
+      byDepartment,
+      bySection,
+      weeklyTrend,
+      solvedDistribution,
+      submissionHeatmap,
+      languageDistribution,
+      insights,
+    };
     });
+    res.json({ success: true, data: payload });
   } catch (error) {
     console.error('Class Analytics Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch analytics' });
@@ -1578,7 +1591,7 @@ exports.getCohorts = async (req, res) => {
     const dim = COHORT_DIMS[req.query.dimension] || 'department';
     const dept = scopeDept(req); // null = admin (all); else restrict to own dept
 
-    const studentsMap = await userRepo.getMapByRole('student');
+    const studentsMap = await studentDirectory();
     let students = [...studentsMap.values()];
     if (dept !== null) students = students.filter(s => (s.department || null) === dept);
     const ids = students.map(s => s.id);
@@ -1586,14 +1599,8 @@ exports.getCohorts = async (req, res) => {
     const key = `analytics:cohorts:${dept ?? 'all'}:${dim}`;
     const data = await cached(key, 120, async () => {
       if (ids.length === 0) return [];
-      const idSet = new Set(ids);
-      const allSubs = (await submissionRepo.listAll()).filter(s => idSet.has(s.userId));
-      const perStudent = new Map(ids.map(id => [id, { solved: new Set(), subs: 0, ac: 0 }]));
-      for (const s of allSubs) {
-        const stat = perStudent.get(s.userId);
-        stat.subs += 1;
-        if (s.verdict === 'Accepted') { stat.ac += 1; stat.solved.add(s.problemId); }
-      }
+      const agg = await studentAggregateService.getAggregates();
+      const perStudent = new Map(ids.map((id) => { const a = studentAggregateService.statOf(agg, id); return [id, { solved: { size: a.solved }, subs: a.total, ac: a.accepted }]; }));
 
       // Group by cohort (department/section/year) using the Firestore-sourced
       // dimension — Postgres no longer knows about this column.
@@ -1640,21 +1647,15 @@ exports.getCohortStudents = async (req, res) => {
       return res.status(403).json({ success: false, error: 'Outside your department scope.' });
     }
 
-    const studentsMap = await userRepo.getMapByRole('student');
+    const studentsMap = await studentDirectory();
     let students = [...studentsMap.values()].filter(s => cohortValue(s, dim) === String(value));
     if (dept !== null) students = students.filter(s => (s.department || null) === dept);
 
     const total = students.length;
     const ids = students.map(s => s.id);
-    const idSet = new Set(ids);
 
-    const allSubs = ids.length ? (await submissionRepo.listAll()).filter(s => idSet.has(s.userId)) : [];
-    const statsMap = new Map(ids.map(id => [id, { solved: new Set(), subs: 0, ac: 0 }]));
-    for (const s of allSubs) {
-      const stat = statsMap.get(s.userId);
-      stat.subs += 1;
-      if (s.verdict === 'Accepted') { stat.ac += 1; stat.solved.add(s.problemId); }
-    }
+    const agg = await studentAggregateService.getAggregates();
+    const statsMap = new Map(ids.map((id) => { const a = studentAggregateService.statOf(agg, id); return [id, { solved: { size: a.solved }, subs: a.total, ac: a.accepted }]; }));
 
     const merged = students
       .map(s => {
@@ -1882,9 +1883,13 @@ async function buildStudentProfile(id, student) {
   const courses = [];
   // Active time per course from the timer (zero for courses worked on before it existed).
   const courseSeconds = new Map((await problemTimeRepo.listCourseTimesByUser(student.id)).map((t) => [t.courseId, t.seconds || 0]));
-  const publishedCourses = allCourses.filter((c) => c.isPublished);
-  const modulesByCourse = await Promise.all(publishedCourses.map((c) => courseRepo.getModules(c.id)));
-  const courseProblems = await problemRepo.getMapByIds([...new Set(modulesByCourse.flatMap((ms) => ms.flatMap((m) => m.problemIds || [])))]);
+  // The modules and the slim problems come from the shared course catalogue (the same one students see), not from reading every
+  // module and about 700 problem documents again for each student profile that is built.
+  const catalog = await courseCatalog.getCatalog();
+  const publishedIds = new Set(allCourses.filter((c) => c.isPublished).map((c) => c.id));
+  const publishedCourses = catalog.courses.filter((c) => publishedIds.has(c.id));
+  const modulesByCourse = publishedCourses.map((c) => c.modules);
+  const courseProblems = courseCatalog.problemMap(catalog);
   publishedCourses.forEach((c, i) => {
     const { units: resolvedUnits, problems: required } = resolveCourse(modulesByCourse[i], courseProblems);
     if (required.size === 0) return;
@@ -1989,10 +1994,12 @@ exports.getCohortTopics = async (req, res) => {
     // Roster + cohort dimension from Firestore; submissions from Postgres,
     // tags hydrated from Firestore, aggregated by cohort here since neither
     // dimension lives in SQL anymore.
-    const studentsMap = await userRepo.getMapByRole('student');
+    // Same for every faculty member: built at most once every ten minutes per dimension (it scans every submission), light fields only.
+    const payload = await cached(`analytics:cohort-topics:v1:${dim}`, 600, async () => {
+    const studentsMap = await studentDirectory();
     const studentIds = new Set(studentsMap.keys());
-    const subs = (await submissionRepo.listAll()).filter(s => studentIds.has(s.userId));
-    const cohortTopicsProblemsMap = await problemRepo.getMapByIds(subs.map(s => s.problemId));
+    const subs = (await submissionRepo.listAllForAnalytics()).filter(s => studentIds.has(s.userId));
+    const cohortTopicsProblemsMap = await problemRepo.getSlimMapByIds(subs.map(s => s.problemId));
 
     // Pick the most-attempted topics (radar axes) and the most-active cohorts (series).
     const topicTotals = {};
@@ -2024,7 +2031,9 @@ exports.getCohortTopics = async (req, res) => {
       return row;
     });
 
-    res.json({ success: true, data: { dim, cohorts: topCohorts, topics } });
+    return { dim, cohorts: topCohorts, topics };
+    });
+    res.json({ success: true, data: payload });
   } catch (error) {
     console.error('Cohort Topics Error:', error);
     res.status(500).json({ success: false, error: 'Failed to fetch cohort topics' });

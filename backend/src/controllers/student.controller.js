@@ -13,8 +13,8 @@ const reopenRepo = require('../repositories/reopenRequestRepository');
 const courseRepoForReopen = require('../repositories/courseRepository');
 const { validateRequest } = require('../utils/reopen');
 const submissionRepo = require('../repositories/submissionRepository');
+const rankingService = require('../services/rankingService');
 const mistakeNoteRepo = require('../repositories/mistakeNoteRepository');
-const publicHandleRepo = require('../repositories/publicHandleRepository');
 
 // Assignments a given student is actually assigned.
 //
@@ -78,7 +78,7 @@ const toISO = (value) => {
 exports.getDashboardData = async (req, res) => {
   try {
     const userId = req.user.id;
-    const mySubs = await submissionRepo.listByUser(userId);
+    const mySubs = await submissionRepo.listByUserLight(userId);
 
     // 1. Total Submissions & AC Rate
     const totalSubs = mySubs.length;
@@ -113,29 +113,25 @@ exports.getDashboardData = async (req, res) => {
     // tells a student nothing they can act on, "#7 of 61" does. Both are
     // returned so the UI can show the useful one and still explain the other.
     //
-    // listAllForAnalytics() rather than listAll(): ranking only needs userId,
-    // problemId and verdict, while listAll() also downloads every student's
-    // source code on every dashboard load. Same numbers, a fraction of the read.
-    const studentsMap = await userRepo.getMapByRole('student');
-    const allSubs = await submissionRepo.listAllForAnalytics();
-    const solvedCountByUser = {};
-    for (const s of allSubs) {
-      if (s.verdict !== 'Accepted') continue;
-      if (!solvedCountByUser[s.userId]) solvedCountByUser[s.userId] = new Set();
-      solvedCountByUser[s.userId].add(s.problemId);
-    }
+    // The ranking comes from rankingService: one shared table for everybody, rebuilt at most about once a minute from Accepted
+    // submissions only. It used to scan every submission of every student on EVERY dashboard load.
+    const board = await rankingService.getBoard();
+    const students = board.students;
+    // Your own count is exact (it comes from your own list above), so a problem you just solved counts at once;
+    // everyone else's count may be up to a minute old.
+    const solvedOf = (id) => (id === userId ? problemsSolved : board.solved[id] || 0);
 
     // Same ranking rule as the leaderboard (utils/ranking.js): ties share a rank and a student with nothing solved yet is
     // unranked (rank 0). Graduated students are not part of the ranking.
     const rankWithin = (ids) => {
-      const ordered = rankRows(ids.map((id) => ({ id, name: studentsMap.get(id)?.name || '', solved: solvedCountByUser[id]?.size || 0 })), (r) => r.solved);
+      const ordered = rankRows(ids.map((id) => ({ id, name: students[id]?.name || '', solved: solvedOf(id) })), (r) => r.solved);
       return { rank: ordered.find((r) => r.id === userId)?.rank ?? 0, outOf: ordered.length };
     };
 
-    const allIds = [...studentsMap.keys()].filter((id) => isActive(studentsMap.get(id)));
-    const myProfileForRank = studentsMap.get(userId) || {};
+    const allIds = Object.keys(students).filter((id) => isActive(students[id]));
+    const myProfileForRank = students[userId] || {};
     const classIds = myProfileForRank.department && myProfileForRank.section
-      ? allIds.filter((id) => sameClass(myProfileForRank, studentsMap.get(id) || {}))
+      ? allIds.filter((id) => sameClass(myProfileForRank, students[id] || {}))
       : [];
 
     const overall = rankWithin(allIds);
@@ -372,8 +368,9 @@ exports.getRecommendations = async (req, res) => {
 exports.getLeaderboard = async (req, res) => {
   try {
     const scope = ['class', 'department', 'college'].includes(req.query.scope) ? req.query.scope : 'college';
-    const studentsMap = await userRepo.getMapByRole('student');
-    const me = studentsMap.get(req.user.id) || {};
+    const board = await rankingService.getBoard();
+    const students = board.students;
+    const me = students[req.user.id] || {};
 
     const inScope = (profile) => {
       if (!isActive(profile)) return false; // alumni are not ranked
@@ -384,43 +381,24 @@ exports.getLeaderboard = async (req, res) => {
       return sameClass(me, profile);
     };
 
-    const scopedIds = [...studentsMap.keys()].filter((id) => inScope(studentsMap.get(id) || {}));
+    const scopedIds = Object.keys(students).filter((id) => inScope(students[id] || {}));
     if (scopedIds.length === 0) {
       return res.json({ success: true, data: { scope, total: 0, top: [], me: null } });
     }
 
-    // Field-masked: ranking needs userId/problemId/verdict, never source code.
-    const allSubs = await submissionRepo.listAllForAnalytics();
-    const idSet = new Set(scopedIds);
-    const statsByUser = new Map(scopedIds.map((id) => [id, { solved: new Set(), total: 0 }]));
-    for (const s of allSubs) {
-      if (!idSet.has(s.userId)) continue;
-      const stat = statsByUser.get(s.userId);
-      stat.total += 1;
-      if (s.verdict === 'Accepted') stat.solved.add(s.problemId);
-    }
-
-    // Public handles for the students on this board who have published one, so a
-    // name can link to its profile (D10). One query rather than one per row, and
-    // a student who has not published simply has no link.
-    const handleByUser = await publicHandleRepo.mapByUser();
-
-    const boardRows = scopedIds
-      .map((id) => {
-        const profile = studentsMap.get(id) || {};
-        const stat = statsByUser.get(id);
-        const handle = profile.publicProfile?.published ? handleByUser.get(id) ?? null : null;
-        return {
-          id,
-          name: profile.name || 'Unknown',
-          publicHandle: handle,
-          rating: profile.rating != null ? parseInt(profile.rating, 10) : 1200,
-          department: profile.department || null,
-          section: profile.section || null,
-          solvedCount: stat.solved.size,
-          totalSubmissions: stat.total,
-        };
-      });
+    // Counts come from the shared ranking table (Accepted submissions only). Failed attempts are not counted or shown.
+    const boardRows = scopedIds.map((id) => {
+      const profile = students[id] || {};
+      return {
+        id,
+        name: profile.name || 'Unknown',
+        publicHandle: profile.publicHandle ?? null,
+        rating: profile.rating != null ? parseInt(profile.rating, 10) : 1200,
+        department: profile.department || null,
+        section: profile.section || null,
+        solvedCount: board.solved[id] || 0, // up to a minute old
+      };
+    });
     const ranked = rankRows(boardRows, (r) => r.solvedCount).map((r) => ({ ...r, score: r.solvedCount * 10 }));
 
     const myRow = ranked.find((r) => r.id === req.user.id) || null;
