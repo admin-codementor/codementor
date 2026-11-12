@@ -5,6 +5,17 @@ Persona work order: Student → Faculty → HOD → T&P → Admin → Super Admi
 
 ---
 
+## 2026-11-12 (Thu), Server move prep: fast reads, stale-data fixes, server stack, exam load tests
+**Why:** the app moves to the college server (16 cores, 32 GB, no GPU, about 3000 students) on 2026-11-13. Plan: `docs/SERVER_MOVE_AND_FEATURES_PLAN.md`.
+**Did (reads):** the dashboard, leaderboard, course list, faculty cohort tables and the student profile no longer read every account or every submission. One small record per student (`studentStats/{userId}`: solved problems, attempts, accepted) is updated when a submission is judged; the ranking table, the course catalogue and the faculty class analytics are built once and shared (Redis, 10 s memo, one build per key per process). Until `backend/scripts/backfill-student-stats.js --apply` has been run once (needs Firestore Blaze; not while an exam is live) the readers fall back to the old scan, so nothing breaks.
+**Did (stale data):** the cached platform scores follow the platform version; the problem page and the profile refresh the dashboard, courses and problems after a real Accepted.
+**Did (server):** `deploy/server/` has nginx, 4 API copies, 2 website copies, local Redis and a sized Judge0, with a step-by-step README. Written but not run: there is no Docker on the dev PC.
+**Tests:** whole backend suite 1401 passing, lint clean, frontend type check clean. Exam load tests (1000 students, in-memory database, 30 ms simulated delay): sustained, last-minutes rush and reconnect storm all passed with no lost answers. Not checked against real Firestore, Judge0 or several API copies.
+**Not done:** the backfill; about 15 other faculty and exam handlers still read widely; the attempts and acceptance-rate figures on the student dashboard (decision open).
+**Branch:** `release/nov13` (combines `fix/cache-staleness`, `perf/rank-cache`, `feat/server-stack`)
+
+---
+
 ## 2026-11-01 (Sun), S8 HOD completion, part B: Practice tab, batch filter everywhere, "seen in the last 5 minutes"
 **Did (backend):** `utils/practiceAnalytics.js` (pure) builds the department's practice figures for one period (today to all time): tiles with change against the period before, practice over time, difficulty mix against the bank, a weekday-by-hour heat map in India time, languages, the 50 most-tried problems, topic coverage (all time), by-batch table, and plain-rule "what to look at". `GET /api/faculty/practice-analytics?days=&section=&year=&batch=` (HOD and Admin, department from the token, kept 90 s). Batch is also a filter on `/api/faculty/department`, the Practice tab and the export dialog. Activity totals gain `seen_last_5_min`.
 **Did (frontend):** department page gets a Batch select and a **Practice** tab; Activity gets a "Seen in last 5 min" tile that says plainly it is a login or submission, not live presence.

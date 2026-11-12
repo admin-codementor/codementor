@@ -1,13 +1,23 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import api from "@/lib/api";
 import type { DashboardData, Assignment, RecommendedProblem, CourseSummary } from "@/lib/types";
 
 export const queryKeys = {
   dashboard: ["student", "dashboard"] as const,
   courses: ["courses"] as const,
+  dashboardCore: ["student", "dashboard", "core"] as const,
 };
+
+/** The dashboard call alone, shared through the cache so the dashboard and profile pages never fetch it twice. */
+export function fetchDashboardCore(queryClient: QueryClient): Promise<DashboardData> {
+  return queryClient.fetchQuery({
+    queryKey: queryKeys.dashboardCore,
+    staleTime: 30_000,
+    queryFn: async () => (await api.get<{ success: boolean; data: DashboardData }>("/api/student/dashboard")).data.data,
+  });
+}
 
 export interface DashboardPageData {
   dashboard: DashboardData;
@@ -20,18 +30,19 @@ export interface DashboardPageData {
  * load-bearing (its rejection is a real error), the other three degrade to
  * an empty array on failure rather than blocking the page. */
 export function useDashboardQuery() {
+  const queryClient = useQueryClient();
   return useQuery<DashboardPageData>({
     queryKey: queryKeys.dashboard,
     queryFn: async () => {
       const [dashRes, assignRes, recRes, coursesRes] = await Promise.allSettled([
-        api.get<{ success: boolean; data: DashboardData }>("/api/student/dashboard"),
+        fetchDashboardCore(queryClient),
         api.get<{ success: boolean; data: Assignment[] }>("/api/student/assignments"),
         api.get<{ success: boolean; data: RecommendedProblem[] }>("/api/student/recommendations"),
         api.get<{ success: boolean; data: CourseSummary[] }>("/api/courses"),
       ]);
       if (dashRes.status === "rejected") throw dashRes.reason;
       return {
-        dashboard: dashRes.value.data.data,
+        dashboard: dashRes.value,
         assignments: assignRes.status === "fulfilled" ? assignRes.value.data.data ?? [] : [],
         recommendations: recRes.status === "fulfilled" ? recRes.value.data.data ?? [] : [],
         courses: coursesRes.status === "fulfilled" ? coursesRes.value.data.data ?? [] : [],

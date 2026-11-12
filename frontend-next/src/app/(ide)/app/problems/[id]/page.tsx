@@ -4,6 +4,7 @@ import * as React from "react";
 import NextLink from "next/link";
 import dynamic from "next/dynamic";
 import { useParams, useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import Box from "@mui/material/Box";
@@ -1158,6 +1159,7 @@ export default function ProblemSolvingPage() {
   };
 
   // ── Verdict handler (invoked once polling resolves) ──
+  const queryClient = useQueryClient();
   const handleVerdict = React.useCallback((payload: VerdictPayload) => {
     pendingRef.current = false;
     setVerdict(payload);
@@ -1181,13 +1183,15 @@ export default function ProblemSolvingPage() {
       // Celebrate + stop the timer (Peak-End Rule).
       setSolved(true);
       fireConfetti();
+      // A real Accepted changes the dashboard, solved list, course progress and problem list: refresh them now, not after their 30 s cache.
+      for (const key of [["student"], ["courses"], ["problems"]]) queryClient.invalidateQueries({ queryKey: key });
     } else if (r && !r.custom_run && r.verdict?.description && r.verdict.description !== "Accepted") {
       // Nudge the AI tutor toward debugging when a run or submission fails.
       // A sample-only Run has no submission_id to key off, so fall back to a
       // timestamp — this only needs to change on every failure, not be stable.
       setTutorContext(`${r.submission_id ?? Date.now()}:${r.verdict.id}`);
     }
-  }, [panelTab, loadHistory]);
+  }, [panelTab, loadHistory, queryClient]);
 
   // ── Execute (Run against samples, Submit for real, or a custom-input Terminal run) ──
   const execute = React.useCallback(

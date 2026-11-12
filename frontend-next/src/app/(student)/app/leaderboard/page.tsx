@@ -56,7 +56,6 @@ interface LeaderboardEntry {
   section?: string | null;
   score: number;
   solvedCount: number;
-  totalSubmissions: number;
 }
 
 // Metallic medal accents for the top-3 podium. Gold maps to the theme's warning
@@ -282,7 +281,7 @@ export default function LeaderboardPage() {
                     <YouChip />
                   </Stack>
                   <Typography variant="caption" color="onPrimaryContainer" sx={{ fontFamily: "ui-monospace, monospace", opacity: 0.85 }}>
-                    {me.solvedCount} solved · {me.totalSubmissions} submissions
+                    {me.solvedCount} solved
                   </Typography>
                 </Box>
                 <Box sx={{ textAlign: "right" }}>
@@ -338,7 +337,6 @@ export default function LeaderboardPage() {
                     <TableCell align="right" sx={{ width: 120 }}>Rating</TableCell>
                     <TableCell align="right" sx={{ width: 90 }}>Solved</TableCell>
                     <TableCell align="right" sx={{ width: 100 }}>Score</TableCell>
-                    <TableCell align="right" sx={{ width: 120, display: { xs: "none", md: "table-cell" } }}>Submissions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -441,9 +439,6 @@ export default function LeaderboardPage() {
                           </TableCell>
                           <TableCell align="right" sx={{ fontFamily: "ui-monospace, monospace", fontWeight: 600, color: "primary.main" }}>
                             {u.score.toLocaleString()}
-                          </TableCell>
-                          <TableCell align="right" sx={{ fontFamily: "ui-monospace, monospace", color: "text.secondary", display: { xs: "none", md: "table-cell" } }}>
-                            {u.totalSubmissions}
                           </TableCell>
                         </TableRow>
                       );

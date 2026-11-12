@@ -8,6 +8,11 @@ const { redis } = require('../config/redis');
  *
  *   const data = await cached(`cohorts:${dept}:${dim}`, 120, () => runQuery());
  */
+// One build per key at a time in this process: when a cache entry is missing (a cold start, or the minute it expires) and a hundred
+// requests arrive together, they all wait for ONE computation instead of starting a hundred. Measured on the read-cost harness:
+// ten simultaneous requests for the class analytics used to cost ten full scans.
+const inflight = new Map();
+
 exports.cached = async (key, ttlSeconds, fn) => {
   try {
     const hit = await redis.get(key);
@@ -15,13 +20,20 @@ exports.cached = async (key, ttlSeconds, fn) => {
   } catch {
     /* cache miss / Upstash unavailable — fall through to compute */
   }
-  const value = await fn();
-  try {
-    await redis.set(key, value, { ex: ttlSeconds });
-  } catch {
-    /* best-effort cache write */
+  let pending = inflight.get(key);
+  if (!pending) {
+    pending = (async () => {
+      const value = await fn();
+      try {
+        await redis.set(key, value, { ex: ttlSeconds });
+      } catch {
+        /* best-effort cache write */
+      }
+      return value;
+    })().finally(() => inflight.delete(key));
+    inflight.set(key, pending);
   }
-  return value;
+  return pending;
 };
 
 /**
